@@ -1,0 +1,16 @@
+-- Admin User Creation SQL
+-- Database: C:\Users\TheElitesSolutions\AppData\Roaming\my-nextron-app\mr5-pos.db
+-- Generated: 10/10/2025, 9:24:55 PM
+
+-- Check if admin exists:
+SELECT * FROM users WHERE username = 'admin';
+
+-- If admin does NOT exist, run this:
+INSERT INTO users (id, username, email, password, role, firstName, lastName, isActive, createdAt, updatedAt)
+VALUES ('mgl6f0dflmpa8np56', 'admin', 'admin@mr5pos.com', '$2b$10$h./zfQaS9arrhc28/xYqOOExQQ1HCkWUL80k9MCpDWhlVo0OenTjy', 'ADMIN', 'Admin', 'User', 1, '2025-10-10T18:24:55.203Z', '2025-10-10T18:24:55.203Z');
+
+-- If admin EXISTS, run this to update password:
+UPDATE users SET password = '$2b$10$h./zfQaS9arrhc28/xYqOOExQQ1HCkWUL80k9MCpDWhlVo0OenTjy', updatedAt = datetime('now') WHERE username = 'admin';
+
+-- Verify:
+SELECT id, username, email, role, firstName, lastName, isActive FROM users WHERE username = 'admin';

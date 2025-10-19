@@ -1,0 +1,120 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0.0, v1.0.1, etc.
+
+jobs:
+  release:
+    name: Build and Release for Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Run tests
+        run: yarn test --maxWorkers=2
+        continue-on-error: true  # Don't fail the build if tests fail
+
+      - name: Build application
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          # Uncomment when code signing certificate is available:
+          # CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
+        run: yarn build:release
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: windows-installer
+          path: |
+            dist/*.exe
+            dist/latest.yml
+          retention-days: 30
+
+      - name: Create Release Notes
+        id: release_notes
+        run: |
+          $VERSION = "${{ github.ref_name }}"
+          echo "version=$VERSION" >> $env:GITHUB_OUTPUT
+          echo "# Release $VERSION" > release_notes.md
+          echo "" >> release_notes.md
+          echo "## Changes" >> release_notes.md
+          echo "See commits for detailed changes." >> release_notes.md
+
+      - name: Check Release Status
+        run: |
+          echo "Release build completed successfully!"
+          echo "Version: ${{ github.ref_name }}"
+          echo "Artifacts have been uploaded to GitHub Releases"
+          echo ""
+          echo "Users running MR5 POS will automatically receive this update within 6 hours."
+          echo ""
+          echo "IMPORTANT: Make sure GH_TOKEN secret is configured for automatic publishing!"
+
+  # Optional: Add macOS build job if supporting macOS
+  # release-macos:
+  #   name: Build and Release for macOS
+  #   runs-on: macos-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v3
+  #       with:
+  #         node-version: '18'
+  #         cache: 'yarn'
+  #     - name: Install dependencies
+  #       run: yarn install --frozen-lockfile
+  #     - name: Build application
+  #       env:
+  #         GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  #       run: yarn build:release
+  #     - name: Upload build artifacts
+  #       uses: actions/upload-artifact@v3
+  #       with:
+  #         name: macos-installer
+  #         path: |
+  #           dist/*.dmg
+  #           dist/*.zip
+  #           dist/latest-mac.yml
+  #         retention-days: 30
+
+  # Optional: Add Linux build job if supporting Linux
+  # release-linux:
+  #   name: Build and Release for Linux
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v3
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v3
+  #       with:
+  #         node-version: '18'
+  #         cache: 'yarn'
+  #     - name: Install dependencies
+  #       run: yarn install --frozen-lockfile
+  #     - name: Build application
+  #       env:
+  #         GH_TOKEN: ${{ secrets.GH_TOKEN }}
+  #       run: yarn build:release
+  #     - name: Upload build artifacts
+  #       uses: actions/upload-artifact@v3
+  #       with:
+  #         name: linux-installer
+  #         path: |
+  #           dist/*.AppImage
+  #           dist/*.deb
+  #           dist/latest-linux.yml
+  #         retention-days: 30

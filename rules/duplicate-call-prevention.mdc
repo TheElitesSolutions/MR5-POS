@@ -1,0 +1,134 @@
+---
+description:
+  Guidelines to prevent duplicate function, IPC, and database calls in the Electron + Nextron + TypeScript project
+  using better-sqlite3. Ensures performance, data integrity, and consistent behavior in the desktop app.
+globs:
+  - src/** 
+  - main/**
+  - renderer/**
+  - shared/**
+alwaysApply: true
+---
+
+
+<DuplicateCallPrevention>
+  <Purpose>
+    <Summary>
+      Preventing duplicate calls ensures:
+      - Database integrity (no double inserts or updates)
+      - UI stability (no repeated actions)
+      - Performance efficiency (avoiding redundant computation)
+    </Summary>
+  </Purpose>
+
+  <CoreRules>
+    <Rule id="1">
+      <Description>Identify all functions that modify the database or perform critical actions.</Description>
+      <Implementation>Mark them clearly in comments or with a TypeScript decorator like @CriticalAction.</Implementation>
+    </Rule>
+    <Rule id="2">
+      <Description>Wrap IPC calls in the renderer with request deduplication.</Description>
+      <Example>
+        <![CDATA[
+        let pendingRequests = new Set<string>();
+
+        function safeSend(channel: string, payload: any) {
+          if (pendingRequests.has(channel)) return; // skip duplicate
+          pendingRequests.add(channel);
+          ipcRenderer.invoke(channel, payload).finally(() => pendingRequests.delete(channel));
+        }
+        ]]>
+      </Example>
+    </Rule>
+    <Rule id="3">
+      <Description>For database inserts/updates, use unique constraints or checks in SQL.</Description>
+      <Example>
+        <![CDATA[
+        db.prepare('INSERT OR IGNORE INTO users (email, name) VALUES (?, ?)').run(email, name);
+        ]]>
+      </Example>
+    </Rule>
+    <Rule id="4">
+      <Description>Throttle high-frequency functions or events using debounce or throttle.</Description>
+      <Implementation>Use lodash.debounce or lodash.throttle for UI events like button clicks.</Implementation>
+    </Rule>
+    <Rule id="5">
+      <Description>Track promises for async operations and prevent parallel execution of the same task.</Description>
+      <Example>
+        <![CDATA[
+        let activeFetch: Promise<any> | null = null;
+        async function fetchData() {
+          if (activeFetch) return await activeFetch;
+          activeFetch = doFetch();
+          try { return await activeFetch; } finally { activeFetch = null; }
+        }
+        ]]>
+      </Example>
+    </Rule>
+    <Rule id="6">
+      <Description>Use flags for long-running operations to prevent re-triggering.</Description>
+      <Example>
+        <![CDATA[
+        let isProcessing = false;
+        async function handleAction() {
+          if (isProcessing) return;
+          isProcessing = true;
+          await doSomething();
+          isProcessing = false;
+        }
+        ]]>
+      </Example>
+    </Rule>
+    <Rule id="7">
+      <Description>Validate all inputs and state before executing functions to prevent duplicate logic paths.</Description>
+      <Implementation>Check if the operation is already reflected in the UI or database.</Implementation>
+    </Rule>
+  </CoreRules>
+
+  <IPCRecommendations>
+    <Rule id="IPC1">
+      <Description>Use unique channel names per logical action.</Description>
+      <Reason>Avoid accidentally triggering multiple listeners on the same channel.</Reason>
+    </Rule>
+    <Rule id="IPC2">
+      <Description>Always remove IPC listeners on component unmount or window close.</Description>
+      <Implementation>
+        <![CDATA[
+        ipcRenderer.removeAllListeners('channel-name');
+        ]]>
+      </Implementation>
+    </Rule>
+    <Rule id="IPC3">
+      <Description>Use ipcRenderer.invoke / ipcMain.handle for request/response pattern instead of on/send.</Description>
+      <Reason>Automatically avoids multiple listeners and duplicate responses.</Reason>
+    </Rule>
+  </IPCRecommendations>
+
+  <DatabaseRecommendations>
+    <Rule id="DB1">
+      <Description>Use transactions for bulk inserts/updates and ensure atomicity.</Description>
+      <Reason>Prevents partially duplicated operations if interrupted.</Reason>
+    </Rule>
+    <Rule id="DB2">
+      <Description>Use `INSERT OR REPLACE` or `INSERT OR IGNORE` to avoid duplicate records.</Description>
+    </Rule>
+    <Rule id="DB3">
+      <Description>For queries that can be called multiple times, cache results in memory.</Description>
+      <Implementation>Use a Map or store last result with a timestamp to avoid repeated DB calls.</Implementation>
+    </Rule>
+  </DatabaseRecommendations>
+
+  <TestingChecklist>
+    <Check>Test that rapid repeated UI actions do not create duplicate database entries.</Check>
+    <Check>Simulate multiple concurrent IPC calls and ensure only one executes the critical action.</Check>
+    <Check>Validate uniqueness constraints in the SQLite database after high-frequency operations.</Check>
+    <Check>Confirm debounced or throttled functions behave correctly under stress.</Check>
+  </TestingChecklist>
+
+  <FinalRecommendations>
+    <Tip>Document all critical functions that must not be called twice in comments or code annotations.</Tip>
+    <Tip>Regularly review IPC and database access points to identify potential duplicates.</Tip>
+    <Tip>Use TypeScript types to enforce correct function usage patterns.</Tip>
+    <Tip>Include automated tests for duplicate prevention as part of CI/CD pipeline.</Tip>
+  </FinalRecommendations>
+</DuplicateCallPrevention>

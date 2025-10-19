@@ -1,0 +1,1783 @@
+'use client';
+
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { usePOSStore } from '@/stores/posStore';
+import { useToast } from '@/hooks/use-toast';
+import { getIngredientNameSafe } from '@/utils/ingredientUtils';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
+  Plus,
+  Minus,
+  ShoppingCart,
+  Check,
+  X,
+  Trash2,
+  Clock,
+  User,
+  Phone,
+  MapPin,
+  ChefHat,
+  FileText,
+} from 'lucide-react';
+import { /* Customization, */ MenuItem, OrderItem } from '@/types';
+import {
+  getOrderItemUnitPrice,
+  getOrderItemTotalPrice,
+  formatPrice,
+} from '@/utils/priceUtils';
+import { useAuthStore } from '@/stores/authStore';
+import { orderAPI } from '@/lib/ipc-api';
+import { useSharedStockData } from '@/context/StockDataContext';
+import { useSimpleOrderTracking } from '@/hooks/useSimpleOrderTracking';
+import { useOrderActionQueue } from '@/hooks/useOrderActionQueue';
+import { orderLogger } from '@/utils/logger';
+
+interface TakeoutOrderPanelProps {
+  pendingCustomization?: {
+    selectedItem: MenuItem;
+    itemQuantity: number;
+    ingredientAdjustments: Record<string, boolean>;
+    specialNotes: string;
+  } | null;
+}
+
+/**
+ * TakeoutOrderPanel - Follows dine-in OrderPanel patterns
+ * Manages takeout/delivery order lifecycle similar to table-based orders
+ */
+const TakeoutOrderPanel = ({
+  pendingCustomization,
+}: TakeoutOrderPanelProps) => {
+  const {
+    currentOrder,
+    removeOrderItem,
+    updateOrderItem,
+    addOrderItem,
+    isLoading,
+    switchToMenu,
+    switchToTables,
+    orderType,
+    viewMode,
+    clearError,
+    refreshOrders, // Add refreshOrders to refresh the orders list
+  } = usePOSStore();
+
+  // Data from shared context - prevents duplicate API calls
+  const { stockItems, error: stockError } = useSharedStockData();
+
+  const { toast } = useToast();
+  const [localDeliveryFee, setLocalDeliveryFee] = useState('');
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+
+  // ✅ Race Condition Prevention: Action queue system
+  const { enqueueAction, isProcessing, queueLength } = useOrderActionQueue({
+    orderId: currentOrder?.id,
+  });
+
+  // ✅ SIMPLE: Net change tracking system - replaces complex multi-layer tracking
+  const {
+    trackNewItem,
+    trackQuantityChange,
+    trackItemRemoval,
+    clearTracking,
+    hasChanges,
+    changeCount,
+    changesSummary,
+    newItemsCount,
+    updatedItemsCount,
+    removedItemsCount,
+  } = useSimpleOrderTracking(currentOrder?.id);
+
+  // Refs to track order ID and delivery fee to prevent fee reset
+  const orderIdRef = useRef<string | null>(null);
+  const previousDeliveryFeeRef = useRef<number>(0);
+  const userEnteredFeeRef = useRef<boolean>(false);
+
+  // Get delivery fee from current order or default to 0
+  const currentDeliveryFee = currentOrder?.deliveryFee || 0;
+
+  // Calculate order total including delivery fee for display
+  const orderTotal = useMemo(() => {
+    if (!currentOrder) return 0;
+
+    // Get subtotal from items using our price utility function
+    const itemsTotal = (currentOrder.items || []).reduce((sum, item) => {
+      // Get the proper item price using our utility
+      const totalPrice = getOrderItemTotalPrice(item);
+
+      return sum + totalPrice;
+    }, 0);
+
+    // For delivery fee, prioritize user input over server value
+    // Parse as floating point with 2 decimal places for accuracy
+    const effectiveDeliveryFee =
+      userEnteredFeeRef.current && localDeliveryFee
+        ? parseFloat(parseFloat(localDeliveryFee).toFixed(2)) || 0
+        : parseFloat(currentDeliveryFee.toFixed(2)) || 0;
+
+    // Log calculation details to ensure correct values
+    orderLogger.debug('Order total calculation', {
+      itemsTotal: itemsTotal.toFixed(2),
+      effectiveDeliveryFee: effectiveDeliveryFee.toFixed(2),
+      calculatedTotal: (itemsTotal + effectiveDeliveryFee).toFixed(2),
+    });
+
+    // No tax calculation - total is just items + delivery fee
+    // Final total: subtotal + delivery fee (no tax)
+    return itemsTotal + effectiveDeliveryFee;
+  }, [currentOrder, currentDeliveryFee, localDeliveryFee]);
+
+  // Order changes are automatically reset by useOrderTracking when order changes
+
+  // Item tracking is now handled by the comprehensive tracking system
+
+  // Show stock error if any
+  useEffect(() => {
+    if (stockError) {
+      toast({
+        title: 'Stock Error',
+        description: stockError,
+        variant: 'destructive',
+      });
+    }
+  }, [stockError, toast]);
+
+  // Initialize local delivery fee when order changes but preserve user input
+  useEffect(() => {
+    if (currentOrder && currentOrder.id) {
+      // Only set the fee from the order if it's a newly loaded order or changed from backend
+      // Check if this is the first time we're setting the fee for this order ID
+      const orderIdChanged =
+        !orderIdRef.current || orderIdRef.current !== currentOrder.id;
+      const deliveryFeeChanged =
+        previousDeliveryFeeRef.current !== currentDeliveryFee;
+
+      if (orderIdChanged || deliveryFeeChanged) {
+        // If user hasn't manually entered a fee or order changed, update from backend
+        if (!userEnteredFeeRef.current || orderIdChanged) {
+          // Show an empty input if the fee is 0, otherwise show the actual value
+          if (currentDeliveryFee === 0) {
+            setLocalDeliveryFee('');
+          } else {
+            setLocalDeliveryFee(currentDeliveryFee.toFixed(2));
+          }
+        }
+
+        // Remember the order ID and fee to detect changes
+        orderIdRef.current = currentOrder.id;
+        previousDeliveryFeeRef.current = currentDeliveryFee;
+      }
+    }
+  }, [currentOrder, currentDeliveryFee]);
+
+  // Handle delivery fee changes with simplified validation
+  const handleDeliveryFeeChange = (value: string) => {
+    // Simple regex: Allow numbers and one decimal point with up to 2 decimal places
+    const regex = /^(\d*\.?\d{0,2}|\.\d{1,2})$/;
+    if (regex.test(value) || value === '') {
+      setLocalDeliveryFee(value);
+      // Mark that user has manually entered a fee
+      userEnteredFeeRef.current = true;
+    }
+  };
+
+  const handleDeliveryFeeSubmit = async () => {
+    if (!currentOrder) return;
+
+    // Validate fee is non-negative and properly formatted
+    // Use parseFloat with 2 decimal places for consistent fee handling
+    const feeValue = parseFloat(parseFloat(localDeliveryFee || '0').toFixed(2));
+
+    // Ensure fee is non-negative (additional validation)
+    if (feeValue < 0) {
+      toast({
+        title: 'Invalid Fee',
+        description: 'Delivery fee cannot be negative',
+        variant: 'destructive',
+      });
+      setLocalDeliveryFee(currentDeliveryFee.toFixed(2));
+      return;
+    }
+
+    // Limit to reasonable maximum (e.g., $500)
+    if (feeValue > 500) {
+      toast({
+        title: 'Invalid Fee',
+        description: 'Delivery fee exceeds maximum allowed amount',
+        variant: 'destructive',
+      });
+      setLocalDeliveryFee(currentDeliveryFee.toFixed(2));
+      return;
+    }
+
+    // No need to toggle editing state in the simplified input
+
+    try {
+      // Calculate the new total amount with the updated delivery fee
+      const itemsTotal = (currentOrder.items || []).reduce((sum, item) => {
+        return sum + getOrderItemTotalPrice(item);
+      }, 0);
+
+      // Calculate the new total (items + delivery fee)
+      const newTotalAmount = itemsTotal + feeValue;
+
+      orderLogger.debug('Updating order with new delivery fee', {
+        orderId: currentOrder.id,
+        deliveryFee: feeValue.toFixed(2),
+        newTotal: newTotalAmount.toFixed(2),
+      });
+
+      // Update delivery fee via backend API
+      const response = await orderAPI.update({
+        id: currentOrder.id,
+        updates: {
+          deliveryFee: feeValue,
+          // Just update the delivery fee in the database
+          // The total will be calculated on the server side
+        },
+        userId: useAuthStore.getState().user?.id || 'owner',
+      });
+
+      if (response.success) {
+        // Force refresh the order to get the updated total
+        const orderResp = await orderAPI.getById(currentOrder.id);
+        if (orderResp.success && orderResp.data) {
+          // Update the order in the POS store to reflect the updated total
+          usePOSStore.setState((state: any) => ({
+            ...state,
+            currentOrder: {
+              ...state.currentOrder,
+              deliveryFee: feeValue,
+              total: newTotalAmount,
+              totalAmount: newTotalAmount,
+            },
+          }));
+
+          // Update our reference to track the new fee value
+          previousDeliveryFeeRef.current = feeValue;
+        }
+
+        toast({
+          title: 'Delivery Fee Updated',
+          description: `Delivery fee set to $${feeValue.toFixed(2)}`,
+        });
+      } else {
+        throw new Error(response.error || 'Failed to update delivery fee');
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      orderLogger.error('Delivery fee update failed:', errorMessage);
+
+      toast({
+        title: 'Error',
+        description: `Failed to update delivery fee: ${errorMessage}`,
+        variant: 'destructive',
+      });
+
+      // Reset to current value on error
+      setLocalDeliveryFee(currentDeliveryFee.toFixed(2));
+    } finally {
+    }
+  };
+
+  // Handle quantity changes (enhanced with tracking)
+  const handleQuantityChange = async (
+    orderItemId: string,
+    newQuantity: number,
+    itemName: string
+  ) => {
+    if (newQuantity <= 0) {
+      await handleRemoveItem(orderItemId, itemName);
+      return;
+    }
+
+    // Find the current quantity before updating
+    const currentItem = currentOrder?.items?.find(
+      item => item.id === orderItemId
+    );
+    if (!currentItem) return;
+
+    const oldQuantity = currentItem.quantity || 0;
+
+    // Don't do anything if quantity didn't change
+    if (oldQuantity === newQuantity) return;
+
+    try {
+      await updateOrderItem(orderItemId, newQuantity);
+
+      // ✅ SIMPLE: Track this quantity change using simple tracking system
+      trackQuantityChange(
+        orderItemId,
+        itemName,
+        currentItem.menuItemId || '',
+        oldQuantity,
+        newQuantity
+      );
+
+      toast({
+        title: 'Quantity Updated',
+        description: `${itemName} quantity changed to ${newQuantity}`,
+      });
+    } catch (error) {
+      orderLogger.error('Failed to update quantity:', error);
+      toast({
+        title: 'Update Failed',
+        description: 'Failed to update item quantity. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Handle item removal (enhanced with tracking)
+  const handleRemoveItem = async (orderItemId: string, itemName: string) => {
+    try {
+      // Find the current item before removing it to track its quantity
+      const itemToRemove = currentOrder?.items?.find(
+        item => item.id === orderItemId
+      );
+      const quantity = itemToRemove?.quantity || 0;
+
+      await removeOrderItem(orderItemId);
+
+      // ✅ SIMPLE: Track the removed item using simple tracking system
+      trackItemRemoval(
+        orderItemId,
+        itemName,
+        itemToRemove?.menuItemId || '',
+        quantity
+      );
+
+      // Immediately print removal notification to kitchen
+      try {
+        const printerAPI = await import('@/lib/printer-api');
+        const user = useAuthStore.getState().user;
+
+        if (user?.id && currentOrder) {
+          const printers = await printerAPI.PrinterAPI.getPrinters();
+          const defaultPrinter = printers.find(p => p.isDefault) || printers[0];
+
+          if (defaultPrinter) {
+            // Print removal ticket using cancelledItems parameter
+            const result = await printerAPI.PrinterAPI.printKitchenOrder(
+              currentOrder.id,
+              defaultPrinter.name,
+              1,
+              user.id,
+              false, // Not using onlyUnprinted flag
+              [{ id: orderItemId, name: itemName, quantity }], // Pass as cancelled item
+              [], // No specific updated items
+              [] // No change information needed for removals
+            );
+
+            if (result.success) {
+              orderLogger.debug('Printed removal notification to kitchen', {
+                item: itemName,
+              });
+            }
+          }
+        }
+      } catch (printError) {
+        orderLogger.error('Failed to print removal notification:', printError);
+        // Don't block the removal workflow if printing fails
+      }
+
+      toast({
+        title: 'Item Removed',
+        description: `${itemName} has been removed from the order and kitchen notified`,
+      });
+    } catch (error) {
+      orderLogger.error('Failed to remove item:', error);
+      toast({
+        title: 'Removal Failed',
+        description: 'Failed to remove item. Please try again.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Handle order status transitions with proper workflow
+  const handleUpdateOrderStatus = async (newStatus: 'READY' | 'COMPLETED') => {
+    if (!currentOrder) return;
+
+    try {
+      // Use orderAPI to update status directly
+      const response = await orderAPI.updateStatus({
+        id: currentOrder.id,
+        status: newStatus as any,
+      });
+
+      if (!response.success) {
+        throw new Error(
+          response.error || `Failed to update order to ${newStatus}`
+        );
+      }
+
+      // Update the local state to immediately reflect the status change
+      const updatedOrder = {
+        ...currentOrder,
+        status: newStatus,
+      };
+
+      // Update both the current order and the order in the global order list
+      usePOSStore.getState().updateOrderInStore(updatedOrder);
+
+      // For COMPLETED status, handle automatic invoice printing and order removal
+      if (newStatus === 'COMPLETED') {
+        try {
+          const printerAPI = await import('@/lib/printer-api');
+          const user = useAuthStore.getState().user;
+
+          if (user?.id) {
+            // Get default printer or use a specific one
+            const printers = await printerAPI.PrinterAPI.getPrinters();
+            const defaultPrinter =
+              printers.find(p => p.isDefault) || printers[0];
+
+            if (defaultPrinter) {
+              const result = await printerAPI.PrinterAPI.printInvoice(
+                currentOrder.id,
+                defaultPrinter.name,
+                1,
+                user.id
+              );
+
+              if (result.success) {
+                orderLogger.debug('Invoice auto-printed for completed order');
+              } else {
+                orderLogger.warn('Failed to auto-print invoice:', result.error);
+              }
+            }
+          }
+        } catch (printError) {
+          orderLogger.warn('Invoice printing error:', printError);
+          // Printing failure shouldn't affect order completion
+        }
+
+        // Remove the completed order from the store and clear the panel
+        const orderId = currentOrder.id;
+        usePOSStore.getState().removeOrderFromStore(orderId);
+
+        // Force refresh orders list to update the grid
+        setTimeout(() => {
+          refreshOrders();
+        }, 300);
+      } else {
+        // For READY status, fetch the updated order
+        const orderResp = await orderAPI.getById(currentOrder.id);
+        if (orderResp.success && orderResp.data) {
+          // Update the order in the POS store
+          usePOSStore.getState().updateOrderInStore(orderResp.data as any);
+        }
+      }
+
+      // Success message based on the new status
+      toast({
+        title: newStatus === 'READY' ? 'Order Ready' : 'Order Completed',
+        description:
+          newStatus === 'READY'
+            ? `${orderType.toLowerCase()} order is ready for ${orderType === 'TAKEOUT' ? 'pickup' : 'delivery'}`
+            : `${orderType.toLowerCase()} order has been completed successfully`,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      orderLogger.error(
+        `Failed to update order status to ${newStatus}:`,
+        errorMessage
+      );
+
+      toast({
+        title: 'Status Update Failed',
+        description: errorMessage,
+        variant: 'destructive',
+      });
+    } finally {
+    }
+  };
+
+  // Handle order completion - wrapper for backward compatibility
+  const handleCompleteOrder = () => handleUpdateOrderStatus('COMPLETED');
+
+  // Handle marking order as ready
+  const handleMarkReady = () => handleUpdateOrderStatus('READY');
+
+  // Handle order cancellation
+  const handleCancelOrder = async () => {
+    if (!currentOrder?.id) return;
+
+    try {
+      const orderId = currentOrder.id; // Save order ID before it gets cleared
+      orderLogger.debug('Cancelling order', { orderId });
+
+      // Get the current user ID from authStore to properly log who cancelled the order
+      const userId = useAuthStore.getState().user?.id || 'system';
+
+      // IMPORTANT: First, explicitly remove the order from the global store
+      // This will update the UI immediately regardless of backend success
+      usePOSStore.getState().removeOrderFromStore(orderId);
+
+      // Direct API call to change the status in the database to 'cancelled'
+      const result = await orderAPI.cancel({
+        id: orderId,
+        userId: userId,
+        reason: 'Order cancelled by user',
+      });
+
+      orderLogger.debug('Order cancellation result', {
+        success: result.success,
+      });
+
+      // Clear local state using the store's method
+      usePOSStore.setState(state => ({
+        ...state,
+        currentOrder: null,
+        activeOrder: null,
+        selectedTable: null,
+      }));
+
+      // Force switch back to tables view to clear the panel
+      switchToTables();
+
+      // Force a refresh to ensure lists are updated
+      setTimeout(() => {
+        refreshOrders();
+      }, 500);
+
+      toast({
+        title: 'Order Cancelled',
+        description: `${orderType.toLowerCase()} order has been cancelled`,
+      });
+    } catch (error) {
+      orderLogger.error('Failed to cancel order:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to cancel order',
+        variant: 'destructive',
+      });
+
+      // In case of error, refresh to ensure UI is consistent
+      refreshOrders();
+    } finally {
+    }
+  };
+
+  // Handle adding customized items - SINGLE unified implementation
+  useEffect(() => {
+    // Skip if no customization data or no active order
+    if (
+      !pendingCustomization ||
+      !pendingCustomization.selectedItem ||
+      !pendingCustomization.selectedItem.id ||
+      !currentOrder ||
+      !currentOrder.id
+    ) {
+      return;
+    }
+
+    // Function to process item addition
+    const processItemAddition = async () => {
+      try {
+        // Log start of processing
+        orderLogger.debug('TakeoutOrderPanel processItemAddition called', {
+          item: pendingCustomization.selectedItem.name,
+          orderId: currentOrder.id,
+        });
+
+        // Safely extract all required values with fallbacks
+        const selectedItem = pendingCustomization.selectedItem;
+        const itemQuantity = pendingCustomization.itemQuantity || 1;
+        const ingredientAdjustments =
+          pendingCustomization.ingredientAdjustments || {};
+        const specialNotes = pendingCustomization.specialNotes || '';
+
+        // Create customizations array from ingredient adjustments
+        const customizations: {
+          type: string;
+          name: string;
+          priceAdjustment: number;
+        }[] = [];
+
+        // Process ingredient adjustments
+        if (
+          ingredientAdjustments &&
+          typeof ingredientAdjustments === 'object'
+        ) {
+          Object.entries(ingredientAdjustments).forEach(
+            ([ingredientId, isRemoved]) => {
+              if (isRemoved) {
+                // Get ingredient name for display
+                // Since ingredientId is now a string ID, we need to find the ingredient object
+                const ingredient = selectedItem.ingredients.find(
+                  ing => ing.id === ingredientId
+                );
+                const ingredientName = ingredient
+                  ? ingredient.name // ✅ Use the name directly from ingredient object
+                  : getIngredientNameSafe(ingredientId, stockItems); // ✅ Fallback to ID lookup
+
+                // Create modified notes string for proper display (don't modify specialNotes directly as it's a const)
+                let notesWithIngredient = specialNotes;
+                if (!notesWithIngredient.includes(`No ${ingredientName}`)) {
+                  notesWithIngredient =
+                    (notesWithIngredient ? notesWithIngredient + ', ' : '') +
+                    `No ${ingredientName}`;
+                }
+
+                customizations.push({
+                  type: 'remove_ingredient',
+                  name: ingredientName || ingredientId, // Use name if available, fallback to ID
+                  priceAdjustment: 0,
+                });
+              }
+            }
+          );
+        }
+
+        // Get the final notes string with ingredient customizations
+        let finalNotes = specialNotes;
+
+        // Add ingredient removal info to notes if needed
+        Object.entries(ingredientAdjustments || {}).forEach(
+          ([ingredientId, isRemoved]) => {
+            if (isRemoved) {
+              // Get ingredient name from the object directly
+              const ingredient = selectedItem.ingredients.find(
+                ing => ing.id === ingredientId
+              );
+              const ingredientName = ingredient
+                ? ingredient.name // ✅ Use the name directly from ingredient object
+                : getIngredientNameSafe(ingredientId, stockItems); // ✅ Fallback to ID lookup
+              if (!finalNotes.includes(`No ${ingredientName}`)) {
+                finalNotes =
+                  (finalNotes ? finalNotes + ', ' : '') +
+                  `No ${ingredientName}`;
+              }
+            }
+          }
+        );
+
+        // Use store's addOrderItem function which handles proper state updates
+        const response = await addOrderItem(
+          selectedItem.id,
+          itemQuantity,
+          customizations,
+          finalNotes
+        );
+
+        // CRITICAL FIX: Use the actual item returned by the backend addItem API
+        if (response && (response as any).__actualAddedItem) {
+          const actualItem = (response as any).__actualAddedItem;
+
+          orderLogger.debug('Using actual returned item for tracking', {
+            itemId: actualItem.id,
+            menuItemId: actualItem.menuItemId,
+          });
+
+          // Always refresh the order to get the most current state
+          orderLogger.debug('Refreshing order to get current state');
+          try {
+            const orderAPI = await import('@/lib/ipc-api');
+            const orderResp = await orderAPI.orderAPI.getById(currentOrder.id);
+            if (orderResp.success && orderResp.data) {
+              const refreshedOrder = orderResp.data;
+              orderLogger.debug('Order refreshed successfully', {
+                itemCount: refreshedOrder.items?.length,
+              });
+
+              // Find the ACTUAL item in the refreshed order
+              orderLogger.debug('Searching for matching item', {
+                menuItemId: actualItem.menuItemId,
+                quantity: actualItem.quantity,
+              });
+
+              // Strategy 1: Find by menuItemId and quantity (existing logic)
+              let matchingItem = refreshedOrder.items?.find(
+                (item: any) =>
+                  item.menuItemId === actualItem.menuItemId &&
+                  item.quantity === actualItem.quantity
+              ) as OrderItem | undefined;
+
+              // Strategy 2: If not found, find the LATEST item with the same menuItemId
+              if (!matchingItem) {
+                orderLogger.debug('Strategy 1 failed, trying Strategy 2');
+                const itemsWithSameMenuId = refreshedOrder.items?.filter(
+                  (item: any) => item.menuItemId === actualItem.menuItemId
+                );
+                if (itemsWithSameMenuId && itemsWithSameMenuId.length > 0) {
+                  matchingItem =
+                    itemsWithSameMenuId[itemsWithSameMenuId.length - 1] as OrderItem;
+                  orderLogger.debug('Found item using Strategy 2', {
+                    itemId: matchingItem.id,
+                  });
+                }
+              }
+
+              // Strategy 3: If still not found, find by selectedItem.id
+              if (!matchingItem) {
+                orderLogger.debug('Strategy 2 failed, trying Strategy 3');
+                matchingItem = refreshedOrder.items?.find(
+                  (item: any) => item.menuItemId === selectedItem.id
+                ) as OrderItem | undefined;
+                if (matchingItem) {
+                  orderLogger.debug('Found item using Strategy 3', {
+                    itemId: matchingItem.id,
+                  });
+                }
+              }
+
+              if (matchingItem) {
+                orderLogger.debug('Found matching item in refreshed order', {
+                  itemId: matchingItem.id,
+                });
+
+                // Track this item addition
+                trackNewItem(
+                  matchingItem.id,
+                  matchingItem.name ||
+                    matchingItem.menuItemName ||
+                    selectedItem.name,
+                  selectedItem.id,
+                  itemQuantity
+                );
+
+                orderLogger.debug('Successfully tracked refreshed item', {
+                  itemId: matchingItem.id,
+                });
+              } else {
+                orderLogger.warn(
+                  'Could not find matching item in refreshed order'
+                );
+                // ✅ SIMPLE: Fallback to tracking with actualItem using simple tracking
+                trackNewItem(
+                  actualItem.id,
+                  actualItem.name ||
+                    actualItem.menuItemName ||
+                    selectedItem.name,
+                  selectedItem.id,
+                  itemQuantity
+                );
+              }
+            }
+          } catch (refreshError) {
+            orderLogger.error('Failed to refresh order', refreshError);
+            // Fallback: Item addition was already tracked above
+          }
+        } else {
+          orderLogger.warn('No actualAddedItem in response - using fallback');
+          // FALLBACK: If no actualAddedItem, refresh order and track the latest addition
+          try {
+            const orderAPI = await import('@/lib/ipc-api');
+            const orderResp = await orderAPI.orderAPI.getById(currentOrder.id);
+            if (orderResp.success && orderResp.data && orderResp.data.items) {
+              const latestItem =
+                orderResp.data.items[orderResp.data.items.length - 1];
+              if (latestItem) {
+                orderLogger.debug('Using latest item from refreshed order', {
+                  itemId: latestItem.id,
+                });
+                // Latest item tracking already handled above
+              }
+            }
+          } catch (fallbackError) {
+            orderLogger.error('Fallback tracking failed', fallbackError);
+          }
+        }
+
+        // Success notification
+        toast({
+          title: 'Item Added',
+          description: `${selectedItem.name} added to order`,
+        });
+
+        orderLogger.debug('Item added successfully');
+      } catch (error) {
+        orderLogger.error('Failed to add item to order:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to add item to order',
+          variant: 'destructive',
+        });
+      }
+    };
+
+    // Execute the item addition
+    processItemAddition();
+  }, [
+    pendingCustomization?.selectedItem?.id,
+    currentOrder?.id,
+    addOrderItem,
+    toast,
+  ]); // Only depend on essential props to prevent re-rendering
+
+  // Clear errors on mount
+  useEffect(() => {
+    clearError();
+  }, [clearError]);
+
+  // No current order - show "create order" message
+  if (!currentOrder) {
+    return (
+      <div className='flex h-full items-center justify-center p-6'>
+        <div className='text-center'>
+          <ShoppingCart className='mx-auto mb-4 h-12 w-12 text-gray-400' />
+          <h3 className='mb-2 text-lg font-medium text-gray-900 dark:text-white'>
+            No Active Order
+          </h3>
+          <p className='text-gray-600 dark:text-gray-400'>
+            Create a {orderType.toLowerCase()} order to start adding items
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Active order view
+  return (
+    <div className='flex h-full flex-col'>
+      {/* Header */}
+      <div className='border-b border-gray-200 p-6 dark:border-gray-700'>
+        <div className='mb-2 flex items-center justify-between'>
+          <h2 className='text-xl font-semibold text-gray-900 dark:text-white'>
+            {orderType === 'TAKEOUT' ? 'Takeout' : 'Delivery'} Order
+          </h2>
+          <Badge variant='outline' className='text-xs'>
+            #{currentOrder.orderNumber || 'N/A'}
+          </Badge>
+        </div>
+
+        {/* Customer Info */}
+        <div className='space-y-1 text-sm text-gray-600 dark:text-gray-400'>
+          {currentOrder.customerName && (
+            <div className='flex items-center space-x-1'>
+              <User className='h-4 w-4' />
+              <span>{currentOrder.customerName}</span>
+            </div>
+          )}
+          {currentOrder.customerPhone && (
+            <div className='flex items-center space-x-1'>
+              <Phone className='h-4 w-4' />
+              <span>{currentOrder.customerPhone}</span>
+            </div>
+          )}
+          {currentOrder.deliveryAddress && (
+            <div className='flex items-center space-x-1'>
+              <MapPin className='h-4 w-4' />
+              <span className='truncate'>{currentOrder.deliveryAddress}</span>
+            </div>
+          )}
+        </div>
+
+        <div className='mt-2 flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400'>
+          <div className='flex items-center space-x-1'>
+            <Clock className='h-4 w-4' />
+            <span>
+              {currentOrder.createdAt
+                ? new Date(currentOrder.createdAt).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })
+                : 'N/A'}
+            </span>
+          </div>
+          <div className='flex items-center space-x-1'>
+            <ShoppingCart className='h-4 w-4' />
+            <span>{currentOrder.items?.length || 0} items</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Order Items */}
+      <div className='flex-1 overflow-y-auto p-6'>
+        {currentOrder.items && currentOrder.items.length > 0 ? (
+          <div className='space-y-3'>
+            {currentOrder.items.map(item => (
+              <Card key={item.id} className='p-4'>
+                <div className='space-y-3'>
+                  <div className='flex items-start justify-between'>
+                    <div className='flex-1'>
+                      <div className='space-y-1'>
+                        <h4 className='font-medium'>
+                          {item.menuItemName || item.name || 'Menu Item'}
+                        </h4>
+                        {/* Display removed ingredients */}
+                        {item.notes && item.notes.includes('remove:') && (
+                          <div className='text-xs text-red-600 dark:text-red-400'>
+                            {(() => {
+                              const removeMatch = item.notes.match(
+                                /remove:\s*(.+?)(\n|$)/
+                              );
+                              if (removeMatch && removeMatch[1]) {
+                                // Parse ingredient IDs and convert to names
+                                const ingredientIds = removeMatch[1]
+                                  .split(',')
+                                  .map(id => id.trim());
+                                const ingredientNames = ingredientIds
+                                  .map(id => {
+                                    // Use the ID lookup utility to get ingredient name from stock items
+                                    return getIngredientNameSafe(id, stockItems);
+                                  })
+                                  .filter(name => name.length > 0);
+                                return `No ${ingredientNames.join(', ')}`;
+                              }
+                              return null;
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                      <p className='text-sm text-gray-600 dark:text-gray-400'>
+                        {formatPrice(getOrderItemUnitPrice(item))} each
+                      </p>
+
+                      {/* Special kitchen notes */}
+                      {item.notes &&
+                        (() => {
+                          let specialNotes = item.notes;
+                          if (item.notes.includes('remove:')) {
+                            specialNotes = item.notes
+                              .replace(/remove:[^\n]+(\n|$)/, '')
+                              .trim();
+                          }
+
+                          if (specialNotes) {
+                            return (
+                              <div className='mt-2'>
+                                <p className='text-xs font-medium text-gray-700 dark:text-gray-300'>
+                                  Kitchen Notes:
+                                </p>
+                                <p className='mt-0.5 text-xs italic text-gray-500'>
+                                  {specialNotes}
+                                </p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+                    </div>
+                    <Button
+                      variant='ghost'
+                      size='sm'
+                      onClick={() =>
+                        handleRemoveItem(item.id, item.menuItemName || 'Item')
+                      }
+                      className='p-1 text-red-600 hover:text-red-700'
+                    >
+                      <Trash2 className='h-4 w-4' />
+                    </Button>
+                  </div>
+
+                  <div className='flex items-center justify-between'>
+                    <div className='flex items-center space-x-2'>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        onClick={() =>
+                          handleQuantityChange(
+                            item.id,
+                            (item.quantity || 1) - 1,
+                            item.menuItemName || 'Item'
+                          )
+                        }
+                        className='h-8 w-8 p-0'
+                      >
+                        <Minus className='h-3 w-3' />
+                      </Button>
+                      <span className='w-8 text-center text-sm font-medium'>
+                        {item.quantity || 1}
+                      </span>
+                      <Button
+                        size='sm'
+                        variant='outline'
+                        onClick={() =>
+                          handleQuantityChange(
+                            item.id,
+                            (item.quantity || 1) + 1,
+                            item.menuItemName || 'Item'
+                          )
+                        }
+                        className='h-8 w-8 p-0'
+                      >
+                        <Plus className='h-3 w-3' />
+                      </Button>
+                    </div>
+                    <span className='font-medium'>
+                      {formatPrice(getOrderItemTotalPrice(item))}
+                    </span>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className='py-8 text-center'>
+            <ShoppingCart className='mx-auto mb-3 h-12 w-12 text-gray-300' />
+            <p className='text-gray-500'>No items in order</p>
+            <Button onClick={switchToMenu} variant='outline' className='mt-4'>
+              <Plus className='mr-2 h-4 w-4' />
+              Add Items
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className='border-t border-gray-200 p-6 dark:border-gray-700'>
+        {/* Delivery Fee Section - Only for delivery orders */}
+        {orderType === 'DELIVERY' && (
+          <div className='mb-4 space-y-2'>
+            <div className='flex items-center justify-between'>
+              <div className='flex items-center'>
+                <MapPin className='mr-1 h-4 w-4 text-blue-600' />
+                <span className='text-sm font-medium'>Delivery Fee</span>
+              </div>
+              <div className='flex items-center space-x-2'>
+                <div className='flex items-center'>
+                  <span className='mr-1 text-sm font-medium'>$</span>
+                  <Input
+                    type='text'
+                    value={localDeliveryFee}
+                    onChange={e => handleDeliveryFeeChange(e.target.value)}
+                    onBlur={handleDeliveryFeeSubmit}
+                    onFocus={e => {
+                      // Select all text when focused for easier entry
+                      e.target.select();
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        handleDeliveryFeeSubmit();
+                      }
+                    }}
+                    className={`w-20 pl-1 text-right ${parseFloat(localDeliveryFee || '0') === 0 ? 'border-yellow-400 bg-yellow-50' : ''}`}
+                    placeholder='0.00'
+                  />
+                </div>
+                {isProcessing && (
+                  <div className='h-3 w-3 animate-spin rounded-full border-2 border-gray-500 border-t-transparent'></div>
+                )}
+              </div>
+            </div>
+            {/* Helper text for delivery fee */}
+            <div className='text-xs italic text-gray-500'>
+              Delivery fee will be automatically added to the total
+            </div>
+          </div>
+        )}
+
+        {/* Total with detailed breakdown */}
+        <div className='mb-4 flex flex-col gap-1 border-b border-t border-gray-200 py-3 dark:border-gray-700'>
+          {/* Items subtotal */}
+          <div className='flex items-center justify-between text-sm'>
+            <span className='text-gray-600 dark:text-gray-400'>
+              Items Subtotal:
+            </span>
+            <span>
+              $
+              {(currentOrder?.items || [])
+                .reduce((sum, item) => sum + getOrderItemTotalPrice(item), 0)
+                .toFixed(2)}
+            </span>
+          </div>
+
+          {/* Delivery fee line - only for delivery orders */}
+          {orderType === 'DELIVERY' && (
+            <div className='flex items-center justify-between text-sm'>
+              <span className='text-gray-600 dark:text-gray-400'>
+                Delivery Fee:
+              </span>
+              <span>
+                $
+                {(userEnteredFeeRef.current && localDeliveryFee
+                  ? parseFloat(localDeliveryFee) || 0
+                  : currentDeliveryFee
+                ).toFixed(2)}
+              </span>
+            </div>
+          )}
+
+          {/* Final total with larger font */}
+          <div className='mt-2 flex items-center justify-between text-lg font-semibold'>
+            <span>Total:</span>
+            <span className='text-xl'>${orderTotal.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {/* Action Buttons - Following OrderPanel pattern */}
+        <div className='space-y-2'>
+          {/* Add Item button - only show in tables view (enhanced with quantity update support) */}
+          {viewMode === 'tables' && (
+            <Button
+              onClick={
+                hasChanges
+                  ? async () => {
+                      try {
+
+                        // ✅ SIMPLE: Print only net changes using simple tracking system
+                        let printError = null;
+                        try {
+                          const printerAPI = await import('@/lib/printer-api');
+                          const user = useAuthStore.getState().user;
+
+                          if (user?.id && currentOrder && changesSummary) {
+                            const printers =
+                              await printerAPI.PrinterAPI.getPrinters();
+                            const defaultPrinter =
+                              printers.find(p => p.isDefault) || printers[0];
+
+                            if (defaultPrinter) {
+                              orderLogger.debug('Printing net changes', {
+                                newItems: newItemsCount,
+                                updates: updatedItemsCount,
+                                removals: removedItemsCount,
+                              });
+
+                              // Generate simple print data - EXCLUDE removals (already printed immediately)
+                              const newItems = changesSummary.filter(
+                                c => c.changeType === 'NEW'
+                              );
+                              const updates = changesSummary.filter(
+                                c => c.changeType === 'UPDATE'
+                              );
+
+                              // Filter out REMOVE items from changesSummary to prevent duplicate printing
+                              const filteredChangesSummary =
+                                changesSummary.filter(
+                                  c => c.changeType !== 'REMOVE'
+                                );
+
+                              // CRITICAL FIX: If only removals occurred, don't print anything
+                              // (removals were already printed immediately upon deletion)
+                              if (filteredChangesSummary.length === 0) {
+                                orderLogger.debug(
+                                  'Skip printing: Only removals occurred'
+                                );
+                                // Just clear tracking and exit - no printing needed
+                                clearTracking();
+                                switchToTables();
+                                return;
+                              }
+
+                              const result =
+                                await printerAPI.PrinterAPI.printKitchenOrder(
+                                  currentOrder.id,
+                                  defaultPrinter.name,
+                                  1,
+                                  user.id,
+                                  false, // Not using onlyUnprinted flag
+                                  [], // No cancelled items (already printed immediately upon removal)
+                                  [...newItems, ...updates].map(
+                                    item => item.itemId
+                                  ), // All changed items
+                                  filteredChangesSummary // Net change information (excluding removals)
+                                );
+
+                              if (result.success) {
+                                orderLogger.debug(
+                                  'Net changes printed successfully'
+                                );
+                                // Clear all tracking after successful printing
+                                clearTracking();
+
+                                // Navigate back to tables view
+                                switchToTables();
+                              }
+                            }
+                          }
+                        } catch (error) {
+                          printError = error;
+                          orderLogger.error(
+                            'Takeout simple print failed:',
+                            error
+                          );
+                          toast({
+                            title: 'Print Failed',
+                            description:
+                              'Failed to print to kitchen. You can try again.',
+                            variant: 'destructive',
+                          });
+                        }
+
+                        // Only show success toast if no print error occurred
+                        if (!printError) {
+                          toast({
+                            title: 'Order Changes Sent',
+                            description:
+                              'All changes have been sent to the kitchen successfully',
+                          });
+                        }
+                      } catch (error) {
+                        orderLogger.error(
+                          'Failed to process updated items:',
+                          error
+                        );
+                        toast({
+                          title: 'Error',
+                          description: 'Failed to process updated quantities',
+                          variant: 'destructive',
+                        });
+                      } finally {
+                      }
+                    }
+                  : () => switchToMenu()
+              }
+              variant={hasChanges ? 'default' : 'outline'}
+              className={`w-full ${hasChanges ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg hover:from-green-600 hover:to-emerald-700' : ''}`}
+              size='lg'
+              disabled={isLoading || isProcessing}
+            >
+              {hasChanges ? (
+                <>
+                  <Check className='mr-2 h-4 w-4' />
+                  {isProcessing ? 'Processing...' : 'Done Adding Items'}
+                </>
+              ) : (
+                <>
+                  <Plus className='mr-2 h-4 w-4' />
+                  Add Item
+                </>
+              )}
+            </Button>
+          )}
+
+          {/* Complete Order button - only show when in menu flow */}
+          {viewMode === 'menu' &&
+            currentOrder.items &&
+            currentOrder.items.length > 0 && (
+              <Button
+                onClick={async () => {
+                  try {
+
+                    // Automatically print newly added items for kitchen using enhanced tracking
+                    try {
+                      const printerAPI = await import('@/lib/printer-api');
+                      const user = useAuthStore.getState().user;
+
+                      if (user?.id && currentOrder) {
+                        const printers =
+                          await printerAPI.PrinterAPI.getPrinters();
+                        const defaultPrinter =
+                          printers.find(p => p.isDefault) || printers[0];
+
+                        if (defaultPrinter) {
+                          // Check if we have any changes to print using simple tracking
+                          if (hasChanges && changesSummary) {
+                            orderLogger.debug(
+                              'Printing net changes from menu view',
+                              {
+                                newItems: newItemsCount,
+                                updates: updatedItemsCount,
+                                removals: removedItemsCount,
+                              }
+                            );
+
+                            // Generate simple print data
+                            const newItems = changesSummary.filter(
+                              c => c.changeType === 'NEW'
+                            );
+                            const updates = changesSummary.filter(
+                              c => c.changeType === 'UPDATE'
+                            );
+                            const removals = changesSummary.filter(
+                              c => c.changeType === 'REMOVE'
+                            );
+
+                            const result =
+                              await printerAPI.PrinterAPI.printKitchenOrder(
+                                currentOrder.id,
+                                defaultPrinter.name,
+                                1,
+                                user.id,
+                                false, // Not using onlyUnprinted flag
+                                removals.map(item => item.itemId), // Cancelled items
+                                [...newItems, ...updates].map(
+                                  item => item.itemId
+                                ), // All changed items
+                                changesSummary // Net change information
+                              );
+
+                            if (result.success) {
+                              orderLogger.debug('Changes printed successfully');
+                              // Clear tracking after successful print
+                              clearTracking();
+                            } else {
+                              throw new Error(result.error || 'Print failed');
+                            }
+                          } else {
+                            orderLogger.debug('No automatic fallback printing');
+                            // Note: Users must use "Done Adding Items" button for kitchen notifications
+                          }
+                        }
+                      }
+                    } catch (printError) {
+                      orderLogger.error('Auto-print failed:', printError);
+                      // Don't block the workflow if printing fails
+                    }
+
+                    // Store the current order ID and delivery fee before navigating
+                    const currentOrderId = currentOrder.id;
+
+                    // Get the delivery fee either from user input or current order
+                    const userFee = parseFloat(localDeliveryFee) || 0;
+                    const savedDeliveryFee = userEnteredFeeRef.current
+                      ? userFee
+                      : currentDeliveryFee;
+
+                    // Always save the delivery fee when switching views or completing an order
+                    const currentOrderFromState =
+                      usePOSStore.getState().currentOrder;
+                    if (currentOrderFromState?.id === currentOrderId) {
+                      try {
+                        // Calculate the correct total with delivery fee
+                        const itemsTotal = (currentOrder.items || []).reduce(
+                          (sum, item) => {
+                            return sum + getOrderItemTotalPrice(item);
+                          },
+                          0
+                        );
+
+                        // Get the final delivery fee value
+                        const finalDeliveryFee = savedDeliveryFee;
+
+                        // Calculate the new total amount explicitly
+                        const newTotalAmount = itemsTotal + finalDeliveryFee;
+
+                        // IMPORTANT: Always update the order in the database to ensure fee persistence
+                        orderLogger.debug('Saving order with delivery fee', {
+                          deliveryFee: finalDeliveryFee,
+                          itemsTotal,
+                          total: newTotalAmount,
+                        });
+                        const updateResult = await orderAPI.update({
+                          id: currentOrderId,
+                          updates: {
+                            deliveryFee: finalDeliveryFee,
+                            // Let the backend recalculate the total
+                          },
+                          userId: useAuthStore.getState().user?.id || 'owner',
+                        });
+
+                        if (!updateResult.success) {
+                          throw new Error(
+                            updateResult.error || 'Failed to save delivery fee'
+                          );
+                        }
+
+                        orderLogger.debug('Successfully saved delivery fee');
+
+                        // Update local state as well for immediate UI reflection
+                        usePOSStore.setState((state: any) => ({
+                          ...state,
+                          currentOrder: {
+                            ...state.currentOrder,
+                            deliveryFee: finalDeliveryFee,
+                            total: newTotalAmount,
+                            totalAmount: newTotalAmount,
+                          },
+                        }));
+
+                        // Force refresh the order to ensure totals are updated correctly
+                        const orderResp =
+                          await orderAPI.getById(currentOrderId);
+                        if (orderResp.success && orderResp.data) {
+                          usePOSStore
+                            .getState()
+                            .updateOrderInStore(orderResp.data as any);
+                        }
+                      } catch (error) {
+                        orderLogger.error('Error saving delivery fee:', error);
+                        toast({
+                          title: 'Error',
+                          description:
+                            'Failed to save delivery fee and update total',
+                          variant: 'destructive',
+                        });
+                      }
+                    }
+
+                    // Switch back to tables view
+                    switchToTables();
+
+                    // CRITICAL FIX: Refresh orders to update order data with newly added items
+                    try {
+                      const { refreshOrders } = usePOSStore.getState();
+                      await refreshOrders();
+                      orderLogger.debug('Orders refreshed with updated data');
+                    } catch (refreshError) {
+                      orderLogger.error(
+                        'Failed to refresh orders:',
+                        refreshError
+                      );
+                      // Don't block the workflow for order refresh errors
+                    }
+
+                    // Clear comprehensive tracking state after successful operation
+                    clearTracking();
+                    orderLogger.debug(
+                      'Tracking state cleared after completion'
+                    );
+
+                    toast({
+                      title: 'Order Updated',
+                      description:
+                        'Items have been added to the order and sent to kitchen',
+                    });
+                  } catch (error) {
+                    orderLogger.error(
+                      'Failed to switch to tables view:',
+                      error
+                    );
+                    toast({
+                      title: 'Error',
+                      description: 'Failed to complete adding items',
+                      variant: 'destructive',
+                    });
+                  } finally {
+                  }
+                }}
+                className='w-full transform bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg transition-all duration-300 ease-in-out hover:scale-105 hover:from-green-600 hover:to-emerald-700'
+                size='lg'
+                disabled={isLoading || isProcessing}
+              >
+                <Check className='mr-2 h-4 w-4' />
+                {isProcessing ? 'Sending to Kitchen...' : 'Done Adding Items'}
+              </Button>
+            )}
+
+          {/* Print Buttons Container - Same as OrderPanel */}
+          {currentOrder.items && currentOrder.items.length > 0 && (
+            <div className='space-y-2'>
+              {/* Print Kitchen Order Button with Error Recovery */}
+              <Button
+                onClick={async () => {
+                  // Create a function for printing with retry capability
+                  const printWithRetry = async (maxRetries = 3) => {
+                    let attempts = 0;
+                    let success = false;
+                    let lastError: unknown = null;
+
+
+                    while (attempts < maxRetries && !success) {
+                      try {
+                        // Increment attempt counter
+                        attempts++;
+
+                        // Use PrinterAPI to print kitchen order
+                        const printerAPI = await import('@/lib/printer-api');
+                        const user = useAuthStore.getState().user;
+
+                        if (!user?.id) {
+                          toast({
+                            title: 'Error',
+                            description:
+                              'User authentication required for printing',
+                            variant: 'destructive',
+                          });
+                          return false;
+                        }
+
+                        // Get default printer or use a specific one
+                        const printers =
+                          await printerAPI.PrinterAPI.getPrinters();
+                        const defaultPrinter =
+                          printers.find(p => p.isDefault) || printers[0];
+
+                        if (!defaultPrinter) {
+                          toast({
+                            title: 'Error',
+                            description:
+                              'No printer found. Please configure a printer in settings.',
+                            variant: 'destructive',
+                          });
+                          return false;
+                        }
+
+                        const result =
+                          await printerAPI.PrinterAPI.printKitchenOrder(
+                            currentOrder.id,
+                            defaultPrinter.name,
+                            1,
+                            user.id,
+                            false, // Not just unprinted items - print everything
+                            [], // No cancelled items
+                            [], // No specific updated items - print all items
+                            [] // No specific changes - print all items
+                          );
+
+                        if (result.success) {
+                          success = true;
+                          toast({
+                            title: 'Kitchen Order Printed',
+                            description:
+                              'Order has been sent to the kitchen printer',
+                          });
+                          return true;
+                        } else {
+                          throw new Error(
+                            result.error || 'Failed to print kitchen order'
+                          );
+                        }
+                      } catch (error) {
+                        lastError = error;
+                        orderLogger.error(
+                          `Print attempt ${attempts} failed:`,
+                          error
+                        );
+
+                        // If not the last attempt, wait before retrying
+                        if (attempts < maxRetries) {
+                          const retryDelay = 1000 * Math.pow(2, attempts - 1); // Exponential backoff
+                          await new Promise(resolve =>
+                            setTimeout(resolve, retryDelay)
+                          );
+
+                          // Show retry toast
+                          toast({
+                            title: 'Retrying Print',
+                            description: `Attempt ${attempts + 1} of ${maxRetries}...`,
+                          });
+                        }
+                      }
+                    }
+
+                    // If all attempts failed
+                    if (!success) {
+                      toast({
+                        title: 'Print Failed',
+                        description:
+                          lastError instanceof Error
+                            ? lastError.message
+                            : 'Failed to print after multiple attempts',
+                        variant: 'destructive',
+                      });
+                    }
+
+                    return success;
+                  };
+
+                  try {
+                    await printWithRetry();
+                  } finally {
+                  }
+                }}
+                variant='outline'
+                className='w-full transform bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg transition-all duration-300 ease-in-out hover:scale-105 hover:from-amber-600 hover:to-orange-700'
+                size='lg'
+                disabled={isLoading || isProcessing}
+              >
+                <ChefHat className='mr-2 h-4 w-4' />
+                {isProcessing ? 'Printing...' : 'Print Kitchen Order'}
+              </Button>
+
+              {/* Print Invoice Button with Error Recovery */}
+              <Button
+                onClick={async () => {
+                  // Create a function for printing with retry capability
+                  const printWithRetry = async (maxRetries = 3) => {
+                    let attempts = 0;
+                    let success = false;
+                    let lastError: unknown = null;
+
+
+                    while (attempts < maxRetries && !success) {
+                      try {
+                        // Increment attempt counter
+                        attempts++;
+
+                        // Use PrinterAPI to print invoice
+                        const printerAPI = await import('@/lib/printer-api');
+                        const user = useAuthStore.getState().user;
+
+                        if (!user?.id) {
+                          toast({
+                            title: 'Error',
+                            description:
+                              'User authentication required for printing',
+                            variant: 'destructive',
+                          });
+                          return false;
+                        }
+
+                        // Get default printer or use a specific one
+                        const printers =
+                          await printerAPI.PrinterAPI.getPrinters();
+                        const defaultPrinter =
+                          printers.find(p => p.isDefault) || printers[0];
+
+                        if (!defaultPrinter) {
+                          toast({
+                            title: 'Error',
+                            description:
+                              'No printer found. Please configure a printer in settings.',
+                            variant: 'destructive',
+                          });
+                          return false;
+                        }
+
+                        const result = await printerAPI.PrinterAPI.printInvoice(
+                          currentOrder.id,
+                          defaultPrinter.name,
+                          1,
+                          user.id
+                        );
+
+                        if (result.success) {
+                          success = true;
+                          toast({
+                            title: 'Invoice Printed',
+                            description: 'Invoice has been sent to the printer',
+                          });
+                          return true;
+                        } else {
+                          throw new Error(
+                            result.error || 'Failed to print invoice'
+                          );
+                        }
+                      } catch (error) {
+                        lastError = error;
+                        orderLogger.error(
+                          `Invoice print attempt ${attempts} failed:`,
+                          error
+                        );
+
+                        // If not the last attempt, wait before retrying
+                        if (attempts < maxRetries) {
+                          const retryDelay = 1000 * Math.pow(2, attempts - 1); // Exponential backoff
+                          await new Promise(resolve =>
+                            setTimeout(resolve, retryDelay)
+                          );
+
+                          // Show retry toast
+                          toast({
+                            title: 'Retrying Invoice Print',
+                            description: `Attempt ${attempts + 1} of ${maxRetries}...`,
+                          });
+                        }
+                      }
+                    }
+
+                    // If all attempts failed
+                    if (!success) {
+                      toast({
+                        title: 'Invoice Print Failed',
+                        description:
+                          lastError instanceof Error
+                            ? lastError.message
+                            : 'Failed to print invoice after multiple attempts',
+                        variant: 'destructive',
+                      });
+                    }
+
+                    return success;
+                  };
+
+                  try {
+                    await printWithRetry();
+                  } finally {
+                  }
+                }}
+                variant='outline'
+                className='w-full transform bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg transition-all duration-300 ease-in-out hover:scale-105 hover:from-blue-600 hover:to-purple-700'
+                size='lg'
+                disabled={isLoading || isProcessing}
+              >
+                <FileText className='mr-2 h-4 w-4' />
+                {isProcessing ? 'Printing...' : 'Print Invoice'}
+              </Button>
+            </div>
+          )}
+
+          {/* Status-based action buttons with proper workflow */}
+          {viewMode === 'tables' &&
+            currentOrder.items &&
+            currentOrder.items.length > 0 && (
+              <>
+                {currentOrder.status === 'PENDING' && (
+                  <Button
+                    onClick={handleMarkReady}
+                    className='w-full transform bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg transition-all duration-300 ease-in-out hover:scale-105 hover:from-blue-600 hover:to-blue-700'
+                    size='lg'
+                    disabled={isLoading || isProcessing}
+                  >
+                    <Check className='mr-2 h-4 w-4' />
+                    {isProcessing ? 'Processing...' : 'Mark Ready for Pickup'}
+                  </Button>
+                )}
+
+                {currentOrder.status === 'READY' && (
+                  <Button
+                    onClick={handleCompleteOrder}
+                    className='w-full transform bg-gradient-to-r from-green-500 to-green-600 text-white shadow-lg transition-all duration-300 ease-in-out hover:scale-105 hover:from-green-600 hover:to-green-700'
+                    size='lg'
+                    disabled={isLoading || isProcessing}
+                  >
+                    <Check className='mr-2 h-4 w-4' />
+                    {isProcessing ? 'Completing...' : 'Complete Order'}
+                  </Button>
+                )}
+
+                {currentOrder.status === 'COMPLETED' && (
+                  <Button
+                    disabled={true}
+                    className='w-full cursor-not-allowed bg-gray-400'
+                    size='lg'
+                  >
+                    <Check className='mr-2 h-4 w-4' />
+                    Order Completed
+                  </Button>
+                )}
+              </>
+            )}
+
+          <Button
+            onClick={() => setShowDeleteConfirmation(true)}
+            variant='outline'
+            className='w-full'
+            size='lg'
+            disabled={isLoading || isProcessing}
+          >
+            <X className='mr-2 h-4 w-4' />
+            Cancel Order
+          </Button>
+
+          {/* Delete confirmation dialog */}
+          <AlertDialog
+            open={showDeleteConfirmation}
+            onOpenChange={setShowDeleteConfirmation}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Cancel Order Confirmation</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to cancel this {orderType.toLowerCase()}{' '}
+                  order? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>No, Keep Order</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleCancelOrder}
+                  className='bg-red-600 hover:bg-red-700 focus:ring-red-600'
+                >
+                  Yes, Cancel Order
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default TakeoutOrderPanel;

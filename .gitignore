@@ -1,0 +1,46 @@
+# dependencies
+node_modules
+
+# logs
+*.log
+
+# next.js
+.next
+next-env.d.ts
+
+# build
+/app
+dist
+
+# environment variables
+.env
+.env.local
+.env.*.local
+
+# temporary files
+temp-*
+NUL
+
+# TypeScript build info
+*.tsbuildinfo
+
+# test coverage
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.cursor
+
+# database files (development)
+*.db
+*.db-journal
+*.db-shm
+*.db-wal

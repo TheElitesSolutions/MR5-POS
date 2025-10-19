@@ -1,0 +1,100 @@
+---
+description:
+  Guidelines for AI assistant to use an existing project (mr5-POS) as the single source of truth,
+  while adapting its database schema, frontend, and backend logic to a new tech stack
+  (Electron + Nextron + TypeScript + better-sqlite3 + TailwindCSS). 
+  Filesystem MCP is used to access the old project.
+globs:
+  - src/**
+  - main/**
+  - renderer/**
+  - shared/**
+alwaysApply: true
+---
+<SourceOfTruthGuidelines>
+  <Purpose>
+    <Summary>
+      Ensure that the AI assistant:
+      - Treats mr5-POS as the authoritative reference.
+      - Extracts schema, business logic, and UI design faithfully.
+      - Adapts the logic to the new tech stack without altering the original source.
+      - Uses filesystem MCP for controlled access to the old project.
+    </Summary>
+  </Purpose>
+
+  <ProjectAccess>
+    <MCPUsage name="filesystem">
+      <TargetDirectory>C:/Users/TheElitesSolutions/Documents/Clients/mr5-POS</TargetDirectory>
+      <Rules>
+        <Rule>Only read files; do not modify or delete original mr5-POS project files.</Rule>
+        <Rule>Validate file paths to ensure access remains inside the mr5-POS directory.</Rule>
+        <Rule>Log all file reads and outputs for traceability.</Rule>
+      </Rules>
+      <Notes>
+        <Note>Use filesystem MCP to extract database schema, backend logic, and frontend components.</Note>
+      </Notes>
+    </MCPUsage>
+  </ProjectAccess>
+
+  <AdaptationRules>
+    <Rule id="1">
+      <Description>Database Schema</Description>
+      <Instructions>
+        <Instruction>Read the original schema from mr5-POS (tables, columns, constraints).</Instruction>
+        <Instruction>Map schema to better-sqlite3 + SQLite syntax and types.</Instruction>
+        <Instruction>Preserve relationships and constraints (primary/foreign keys, unique fields).</Instruction>
+      </Instructions>
+    </Rule>
+
+    <Rule id="2">
+      <Description>Backend Logic</Description>
+      <Instructions>
+        <Instruction>Analyze existing business logic (POS operations, stock management, sales).</Instruction>
+        <Instruction>Translate logic from old tech stack to TypeScript in the Nextron main process.</Instruction>
+        <Instruction>Ensure IPC handlers reflect original logic correctly and safely.</Instruction>
+        <Instruction>Maintain separation of concerns: main process handles DB + business logic, renderer handles UI.</Instruction>
+      </Instructions>
+    </Rule>
+
+    <Rule id="3">
+      <Description>Frontend Design</Description>
+      <Instructions>
+        <Instruction>Read UI structure and components from old project.</Instruction>
+        <Instruction>Recreate UI using TailwindCSS + React components in Nextron renderer.</Instruction>
+        <Instruction>Preserve usability, layout, and workflow from the old design.</Instruction>
+      </Instructions>
+    </Rule>
+
+    <Rule id="4">
+      <Description>Maintain Source of Truth</Description>
+      <Instructions>
+        <Instruction>Always verify extracted logic against the original mr5-POS before implementing changes.</Instruction>
+        <Instruction>Do not assume anything not present in mr5-POS; treat it as definitive.</Instruction>
+        <Instruction>Log every adaptation decision, including changes made for tech stack compatibility.</Instruction>
+      </Instructions>
+    </Rule>
+
+    <Rule id="5">
+      <Description>Testing and Validation</Description>
+      <Instructions>
+        <Instruction>After adaptation, run tests to confirm new system behaves identically to mr5-POS.</Instruction>
+        <Instruction>Compare DB operations, calculations, and UI flows with original project.</Instruction>
+        <Instruction>Report any deviations before deploying changes.</Instruction>
+      </Instructions>
+    </Rule>
+  </AdaptationRules>
+
+  <SafetyAndBestPractices>
+    <Rule>Never overwrite the original mr5-POS files.</Rule>
+    <Rule>Use a dedicated copy or workspace for adaptation outputs.</Rule>
+    <Rule>Maintain logs of all extracted files, decisions, and adaptation steps.</Rule>
+    <Rule>Validate all adapted database queries, API endpoints, and UI elements before deployment.</Rule>
+    <Rule>Use TypeScript type safety and linting to prevent logic errors during adaptation.</Rule>
+  </SafetyAndBestPractices>
+
+  <FinalRecommendations>
+    <Tip>Treat mr5-POS as the ultimate reference; nothing outside it should be assumed correct.</Tip>
+    <Tip>Only use filesystem MCP to read and extract information; all transformations occur in-memory or in a separate workspace.</Tip>
+    <Tip>Maintain a strict one-to-one mapping of critical features to prevent logic drift.</Tip>
+  </FinalRecommendations>
+</SourceOfTruthGuidelines>

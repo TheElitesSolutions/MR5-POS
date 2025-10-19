@@ -1,0 +1,221 @@
+---
+description: 
+
+  Development and build rules for an Electron + Nextron + TailwindCSS + TypeScript desktop application
+  using an embedded SQLite database powered by better-sqlite3. This document outlines coding standards,
+  database best practices, build instructions, packaging rules, and deployment notes to ensure a clean,
+  secure, and production-ready executable.
+globs:
+  - src/**
+  - main/**
+  - renderer/**
+  - shared/**
+  - assets/**
+  - tailwind.config.js
+  - electron-builder.yml
+  - package.json
+  - tsconfig.json
+alwaysApply: true
+---
+
+<DevelopmentGuide>
+  <StackOverview>
+    <Technology name="Electron" purpose="Provides the desktop runtime environment and main process"/>
+    <Technology name="Nextron" purpose="Combines Electron with Next.js for modern frontend development"/>
+    <Technology name="TailwindCSS" purpose="Utility-first CSS framework for styling React components"/>
+    <Technology name="TypeScript" purpose="Ensures type safety and maintainability across codebase"/>
+    <Technology name="better-sqlite3" purpose="High-performance embedded SQLite driver for Node.js"/>
+  </StackOverview>
+
+  <CoreRules>
+    <Rule id="1">
+      <Description>Separate main process (backend) from renderer process (frontend) entirely.</Description>
+      <Reason>Maintains security and prevents direct Node.js access from the UI layer.</Reason>
+    </Rule>
+    <Rule id="2">
+      <Description>All database operations must occur in the main process.</Description>
+      <Reason>Renderer has no filesystem or Node access; use IPC for communication.</Reason>
+    </Rule>
+    <Rule id="3">
+      <Description>Use Electron’s contextBridge API with contextIsolation enabled.</Description>
+      <Reason>Protects against remote code execution and ensures secure data flow.</Reason>
+    </Rule>
+    <Rule id="4">
+      <Description>Initialize better-sqlite3 once and reuse the same connection throughout the app.</Description>
+      <Reason>SQLite is file-based; multiple concurrent connections can cause locking issues.</Reason>
+    </Rule>
+    <Rule id="5">
+      <Description>Store the SQLite database in the Electron userData path.</Description>
+      <Reason>Ensures write permissions and avoids bundling database inside app.asar.</Reason>
+    </Rule>
+    <Rule id="6">
+      <Description>Use environment variables for configuration values.</Description>
+      <Implementation>Use dotenv in main process; avoid exposing secrets to renderer.</Implementation>
+    </Rule>
+    <Rule id="7">
+      <Description>Handle all IPC calls asynchronously and wrap database access in try/catch.</Description>
+      <Reason>Prevents UI freezing and improves crash resilience.</Reason>
+    </Rule>
+    <Rule id="8">
+      <Description>Always close database connections on app quit event.</Description>
+      <Implementation>Use db.close() inside app.on('before-quit').</Implementation>
+    </Rule>
+    <Rule id="9">
+      <Description>Disable nodeIntegration and remote module access in BrowserWindow.</Description>
+      <Reason>Prevents the renderer from executing arbitrary Node code.</Reason>
+    </Rule>
+    <Rule id="10">
+      <Description>Follow a strict folder structure for maintainability.</Description>
+      <Structure>
+        <![CDATA[
+        /src
+         ├─ main/
+         │   ├─ db/
+         │   │   └─ database.ts
+         │   ├─ ipc/
+         │   │   └─ handlers.ts
+         │   ├─ preload.ts
+         │   └─ main.ts
+         ├─ renderer/
+         │   ├─ pages/
+         │   ├─ components/
+         │   └─ store/
+         └─ shared/
+        ]]>
+      </Structure>
+    </Rule>
+  </CoreRules>
+
+  <DatabaseGuidelines>
+    <Rule id="DB1">
+      <Description>Initialize better-sqlite3 in a dedicated module.</Description>
+      <Example>
+        <![CDATA[
+        import Database from 'better-sqlite3';
+        import { app } from 'electron';
+        import path from 'path';
+
+        const dbPath = path.join(app.getPath('userData'), 'app.db');
+        export const db = new Database(dbPath);
+
+        db.prepare(`
+          CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE
+          )
+        `).run();
+        ]]>
+      </Example>
+    </Rule>
+    <Rule id="DB2">
+      <Description>Use prepared statements for queries.</Description>
+      <Example>
+        <![CDATA[
+        const insert = db.prepare('INSERT INTO users (name, email) VALUES (?, ?)');
+        insert.run('John Doe', 'john@example.com');
+
+        const select = db.prepare('SELECT * FROM users');
+        const rows = select.all();
+        ]]>
+      </Example>
+    </Rule>
+    <Rule id="DB3">
+      <Description>Never block the main thread with long-running queries.</Description>
+      <Recommendation>Use async IPC calls or offload heavy operations to a Worker thread.</Recommendation>
+    </Rule>
+    <Rule id="DB4">
+      <Description>Keep backups of user data if database corruption risk exists.</Description>
+      <Implementation>Copy DB file periodically to a backup directory under userData.</Implementation>
+    </Rule>
+  </DatabaseGuidelines>
+
+  <BuildInstructions>
+    <Step order="1">Ensure all TypeScript files compile correctly: run "tsc --noEmit" for type checking.</Step>
+    <Step order="2">Clean previous builds to avoid cache issues: delete .next and dist folders.</Step>
+    <Step order="3">Run "npm run build" to generate both Electron and Next.js production bundles.</Step>
+    <Step order="4">Verify preload.js is correctly built and exposed in BrowserWindow configuration.</Step>
+    <Step order="5">Use "nextron build" to package into executable installers for your platform.</Step>
+    <Step order="6">Test the final installer on a fresh system (no Node.js) to ensure it works independently.</Step>
+  </BuildInstructions>
+
+  <PackagingRules>
+    <Rule id="P1">
+      <Description>Use electron-builder to package and distribute the app.</Description>
+      <Example>
+        <![CDATA[
+        "build": {
+          "appId": "com.company.product",
+          "productName": "MyApp",
+          "files": [
+            "dist/**",
+            "node_modules/**",
+            "!**/*.map"
+          ],
+          "extraResources": [
+            {
+              "from": "assets/",
+              "to": "assets"
+            }
+          ]
+        }
+        ]]>
+      </Example>
+    </Rule>
+    <Rule id="P2">
+      <Description>Exclude unnecessary modules and dev dependencies from the packaged output.</Description>
+    </Rule>
+    <Rule id="P3">
+      <Description>Never store the database inside asar archive; keep it external.</Description>
+      <Implementation>Use app.getPath('userData') or app.getPath('documents') for DB storage.</Implementation>
+    </Rule>
+    <Rule id="P4">
+      <Description>Ensure icons, version metadata, and legal information are included in package config.</Description>
+    </Rule>
+  </PackagingRules>
+
+  <SecurityNotes>
+    <Note>Always use contextIsolation: true and nodeIntegration: false.</Note>
+    <Note>Do not expose direct database functions to the renderer.</Note>
+    <Note>Validate and sanitize all user-provided input before executing queries.</Note>
+    <Note>Use CSP headers if loading remote content within your Next.js renderer.</Note>
+  </SecurityNotes>
+
+  <PerformanceNotes>
+    <Note>better-sqlite3 is synchronous; avoid running large loops or inserts on the main thread.</Note>
+    <Note>Use transactions when inserting or updating multiple rows for better performance.</Note>
+    <Note>Minimize IPC traffic by batching data or using lightweight payloads.</Note>
+    <Note>Profile memory usage using electron-devtools during development.</Note>
+  </PerformanceNotes>
+
+  <UIUXGuidelines>
+    <Guideline>Use Tailwind’s responsive utilities for consistent cross-device layouts.</Guideline>
+    <Guideline>Enable dark mode using Tailwind’s "dark:" variants and store user preference in localStorage.</Guideline>
+    <Guideline>Keep UI interactions fast; never block the UI during IPC calls.</Guideline>
+    <Guideline>Design layouts using grid and flex utilities for better scaling.</Guideline>
+  </UIUXGuidelines>
+
+  <TestingChecklist>
+    <Check>Confirm that IPC communication works for both "get" and "insert" operations.</Check>
+    <Check>Verify that database file is created and readable in userData folder.</Check>
+    <Check>Ensure app behaves correctly when DB file is missing or corrupted.</Check>
+    <Check>Test that app builds successfully with nextron build and produces a functional installer.</Check>
+    <Check>Check UI rendering and dark mode consistency on Windows, macOS, and Linux.</Check>
+  </TestingChecklist>
+
+  <DeploymentNotes>
+    <Note>Sign executables for Windows and macOS to avoid untrusted app warnings.</Note>
+    <Note>Store configuration files in userData, not within the app directory.</Note>
+    <Note>Use auto-updater (electron-updater) only after testing stable update channels.</Note>
+    <Note>Backup user database before performing app updates or migrations.</Note>
+  </DeploymentNotes>
+
+  <FinalAdvice>
+    <Tip>Always handle database initialization errors gracefully (e.g., corrupted file recovery).</Tip>
+    <Tip>Document all IPC endpoints with their expected request and response structures.</Tip>
+    <Tip>Keep better-sqlite3 updated for latest SQLite engine improvements.</Tip>
+    <Tip>Test the final .exe or .dmg regularly during development, not just at the end.</Tip>
+    <Tip>Never assume file paths are identical across OS; use Electron’s app.getPath() API.</Tip>
+  </FinalAdvice>
+</DevelopmentGuide>
+

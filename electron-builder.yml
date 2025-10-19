@@ -1,0 +1,60 @@
+appId: com.mr5pos.app
+productName: MR5 POS
+copyright: Copyright © 2025 TheElites Solutions
+directories:
+  output: dist
+  buildResources: resources
+files:
+  - from: .
+    filter:
+      - package.json
+      - app
+      - main
+      - .env
+asarUnpack:
+  - node_modules/better-sqlite3/**/*
+  - node_modules/electron-pos-printer/**/*
+  - node_modules/bcryptjs/**/*
+  - "**/.env"
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: resources/icon.ico
+  requestedExecutionLevel: asInvoker
+mac:
+  target:
+    - dmg
+    - zip
+  icon: resources/icon.icns
+  category: public.app-category.business
+linux:
+  target:
+    - AppImage
+    - deb
+  icon: resources/icon.png
+  category: Office
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: MR5 POS
+  # Enable differential updates for smaller download sizes
+  differentialPackage: true
+# Auto-update configuration - GitHub Releases
+publish:
+  provider: github
+  owner: YourGitHubUsername  # TODO: Replace with your actual GitHub username
+  repo: MR5-POS-v2  # TODO: Confirm repository name
+  private: true  # Set to false if public repository
+  releaseType: release  # Only publish stable releases (not drafts or prereleases)
+# Code signing configuration (to be added when certificates are available)
+# win:
+#   certificateFile: "./certs/certificate.pfx"  # Path to your code signing certificate
+#   certificatePassword: "${CERTIFICATE_PASSWORD}"  # Use environment variable for password
+#   signingHashAlgorithms: ['sha256']
+#   # OR use certificate from Windows Certificate Store:
+#   # certificateSubjectName: "TheElites Solutions"

@@ -1,0 +1,343 @@
+// DEPRECATED - This file is no longer used in the application
+// It has been kept as a reference for potential future MongoDB integration
+// Original implementation follows:
+
+import { MongoClient, Db, Collection } from "mongodb";
+import { logger } from "./logger.js";
+import {
+  UserActivityLog,
+  SystemLog,
+  OrderLog,
+  SecurityLog,
+  EventLog,
+  ErrorLog,
+} from "./advancedLogger.js";
+
+let mongoClient: MongoClient | null = null;
+let mongoDB: Db | null = null;
+
+// Collection names
+export const COLLECTIONS = {
+  USER_ACTIVITIES: "user_activities",
+  SYSTEM_LOGS: "system_logs",
+  ORDER_LOGS: "order_logs",
+  EVENT_LOGS: "event_logs",
+  ERROR_LOGS: "error_logs",
+  SECURITY_LOGS: "security_logs",
+  AUTH_FAILURES: "auth_failures",
+} as const;
+
+export const connectMongoDB = async (): Promise<void> => {
+  try {
+    const mongoUri = process.env.MONGODB_URI;
+    if (!mongoUri) {
+      logger.warn(
+        "MONGODB_URI environment variable not set, skipping MongoDB connection"
+      );
+      return;
+    }
+
+    mongoClient = new MongoClient(mongoUri);
+    await mongoClient.connect();
+
+    // Extract database name from URI or use default
+    const dbName = mongoUri.split("/").pop()?.split("?")[0] || "mr5_logs";
+    mongoDB = mongoClient.db(dbName);
+
+    // Create indexes for better performance
+    await createIndexes();
+
+    logger.info(
+      `MongoDB connected successfully for logging to database: ${dbName}`
+    );
+  } catch (error) {
+    logger.error("MongoDB connection failed", String(error));
+    // Don't throw error - the app should work without MongoDB
+  }
+};
+
+export const disconnectMongoDB = async (): Promise<void> => {
+  if (mongoClient) {
+    await mongoClient.close();
+    mongoDB = null;
+    mongoClient = null;
+    logger.info("MongoDB disconnected");
+  }
+};
+
+// Create indexes for better performance
+const createIndexes = async (): Promise<void> => {
+  if (!mongoDB) return;
+
+  try {
+    // User activity logs - index by user and timestamp
+    await mongoDB
+      .collection(COLLECTIONS.USER_ACTIVITIES)
+      .createIndex({ userId: 1, timestamp: -1 });
+
+    // System logs - index by level and timestamp
+    await mongoDB
+      .collection(COLLECTIONS.SYSTEM_LOGS)
+      .createIndex({ level: 1, timestamp: -1 });
+
+    // Order logs - index by orderId and timestamp
+    await mongoDB
+      .collection(COLLECTIONS.ORDER_LOGS)
+      .createIndex({ orderId: 1, timestamp: -1 });
+
+    // Event logs - index by eventType and timestamp
+    await mongoDB
+      .collection(COLLECTIONS.EVENT_LOGS)
+      .createIndex({ eventType: 1, timestamp: -1 });
+
+    // Error logs - index by errorType and timestamp
+    await mongoDB
+      .collection(COLLECTIONS.ERROR_LOGS)
+      .createIndex({ errorType: 1, timestamp: -1 });
+
+    // Security logs - index by actionType and timestamp
+    await mongoDB
+      .collection(COLLECTIONS.SECURITY_LOGS)
+      .createIndex({ actionType: 1, timestamp: -1 });
+
+    // Auth failures - index by username and timestamp
+    await mongoDB
+      .collection(COLLECTIONS.AUTH_FAILURES)
+      .createIndex({ username: 1, timestamp: -1 });
+
+    logger.info("MongoDB indexes created successfully");
+  } catch (error) {
+    logger.error("Failed to create MongoDB indexes", String(error));
+  }
+};
+
+// Collection accessor functions
+export const getUserActivitiesCollection = (): Collection<UserActivityLog> => {
+  if (!mongoDB) {
+    throw new Error("MongoDB not connected");
+  }
+  return mongoDB.collection<UserActivityLog>(COLLECTIONS.USER_ACTIVITIES);
+};
+
+export const getSystemLogsCollection = (): Collection<SystemLog> => {
+  if (!mongoDB) {
+    throw new Error("MongoDB not connected");
+  }
+  return mongoDB.collection<SystemLog>(COLLECTIONS.SYSTEM_LOGS);
+};
+
+export const getOrderLogsCollection = (): Collection<OrderLog> => {
+  if (!mongoDB) {
+    throw new Error("MongoDB not connected");
+  }
+  return mongoDB.collection<OrderLog>(COLLECTIONS.ORDER_LOGS);
+};
+
+export const getEventLogsCollection = (): Collection<EventLog> => {
+  if (!mongoDB) {
+    throw new Error("MongoDB not connected");
+  }
+  return mongoDB.collection<EventLog>(COLLECTIONS.EVENT_LOGS);
+};
+
+export const getErrorLogsCollection = (): Collection<ErrorLog> => {
+  if (!mongoDB) {
+    throw new Error("MongoDB not connected");
+  }
+  return mongoDB.collection<ErrorLog>(COLLECTIONS.ERROR_LOGS);
+};
+
+export const getSecurityLogsCollection = (): Collection<SecurityLog> => {
+  if (!mongoDB) {
+    throw new Error("MongoDB not connected");
+  }
+  return mongoDB.collection<SecurityLog>(COLLECTIONS.SECURITY_LOGS);
+};
+
+export const getAuthFailuresCollection = (): Collection<any> => {
+  if (!mongoDB) {
+    throw new Error("MongoDB not connected");
+  }
+  return mongoDB.collection(COLLECTIONS.AUTH_FAILURES);
+};
+
+// Enhanced MongoDB logger class
+export class MongoDBLogger {
+  static async saveUserActivity(log: UserActivityLog): Promise<void> {
+    try {
+      if (!mongoDB) return;
+      await getUserActivitiesCollection().insertOne(log);
+    } catch (error) {
+      logger.error("Failed to save user activity to MongoDB", String(error));
+    }
+  }
+
+  static async saveSystemLog(log: SystemLog): Promise<void> {
+    try {
+      if (!mongoDB) return;
+      await getSystemLogsCollection().insertOne(log);
+    } catch (error) {
+      logger.error("Failed to save system log to MongoDB", String(error));
+    }
+  }
+
+  static async saveOrderLog(log: OrderLog): Promise<void> {
+    try {
+      if (!mongoDB) return;
+      await getOrderLogsCollection().insertOne(log);
+    } catch (error) {
+      logger.error("Failed to save order log to MongoDB", String(error));
+    }
+  }
+
+  static async saveSecurityLog(log: SecurityLog): Promise<void> {
+    try {
+      if (!mongoDB) return;
+      await getSecurityLogsCollection().insertOne(log);
+    } catch (error) {
+      logger.error("Failed to save security log to MongoDB", String(error));
+    }
+  }
+
+  static async saveEventLog(log: EventLog): Promise<void> {
+    try {
+      if (!mongoDB) return;
+      await getEventLogsCollection().insertOne(log);
+    } catch (error) {
+      logger.error("Failed to save event log to MongoDB", String(error));
+    }
+  }
+
+  static async saveErrorLog(log: ErrorLog): Promise<void> {
+    try {
+      if (!mongoDB) return;
+      await getErrorLogsCollection().insertOne(log);
+    } catch (error) {
+      logger.error("Failed to save error log to MongoDB", String(error));
+    }
+  }
+
+  static async saveAuthFailure(data: {
+    username: string;
+    ipAddress?: string;
+    reason: string;
+    metadata?: Record<string, any>;
+  }): Promise<void> {
+    try {
+      if (!mongoDB) return;
+      await getAuthFailuresCollection().insertOne({
+        ...data,
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      logger.error("Failed to save auth failure to MongoDB", String(error));
+    }
+  }
+
+  static async getUserActivities(
+    userId?: string,
+    limit: number = 100
+  ): Promise<UserActivityLog[]> {
+    try {
+      if (!mongoDB) return [];
+      const query = userId ? { userId } : {};
+      return await getUserActivitiesCollection()
+        .find(query)
+        .sort({ timestamp: -1 })
+        .limit(limit)
+        .toArray();
+    } catch (error) {
+      logger.error(
+        "Failed to get user activities from MongoDB",
+        String(error)
+      );
+      return [];
+    }
+  }
+
+  static async getSystemLogs(
+    level?: "info" | "warn" | "error" | "debug",
+    limit: number = 100
+  ): Promise<SystemLog[]> {
+    try {
+      if (!mongoDB) return [];
+      const query = level ? { level } : {};
+      return await getSystemLogsCollection()
+        .find(query)
+        .sort({ timestamp: -1 })
+        .limit(limit)
+        .toArray();
+    } catch (error) {
+      logger.error("Failed to get system logs from MongoDB", String(error));
+      return [];
+    }
+  }
+
+  static async getOrderLogs(
+    orderId?: string,
+    limit: number = 100
+  ): Promise<OrderLog[]> {
+    try {
+      if (!mongoDB) return [];
+      const query = orderId ? { orderId } : {};
+      return await getOrderLogsCollection()
+        .find(query)
+        .sort({ timestamp: -1 })
+        .limit(limit)
+        .toArray();
+    } catch (error) {
+      logger.error("Failed to get order logs from MongoDB", String(error));
+      return [];
+    }
+  }
+
+  static async getErrorLogs(
+    errorType?: string,
+    limit: number = 100
+  ): Promise<ErrorLog[]> {
+    try {
+      if (!mongoDB) return [];
+      const query = errorType ? { errorType } : {};
+      return await getErrorLogsCollection()
+        .find(query)
+        .sort({ timestamp: -1 })
+        .limit(limit)
+        .toArray();
+    } catch (error) {
+      logger.error("Failed to get error logs from MongoDB", String(error));
+      return [];
+    }
+  }
+
+  static async getSecurityLogs(
+    actionType?: string,
+    limit: number = 100
+  ): Promise<SecurityLog[]> {
+    try {
+      if (!mongoDB) return [];
+      const query = actionType ? { actionType } : {};
+      return await getSecurityLogsCollection()
+        .find(query)
+        .sort({ timestamp: -1 })
+        .limit(limit)
+        .toArray();
+    } catch (error) {
+      logger.error("Failed to get security logs from MongoDB", String(error));
+      return [];
+    }
+  }
+}
+
+// Check if MongoDB is connected
+export const isMongoDBConnected = (): boolean => {
+  return mongoDB !== null;
+};
+
+export { mongoDB };
+export default {
+  connectMongoDB,
+  disconnectMongoDB,
+  mongoDB,
+  isMongoDBConnected,
+  MongoDBLogger,
+};

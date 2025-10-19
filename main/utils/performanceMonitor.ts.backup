@@ -1,0 +1,362 @@
+// DEPRECATED - This file is no longer used in the application
+// It has been kept as a reference for potential future performance monitoring integration
+// Original implementation follows:
+
+import { app, BrowserWindow } from "electron";
+import { logInfo, logWarning, logError, logDebug } from "../error-handler";
+import { isDev } from "./environment";
+
+interface PerformanceMetrics {
+  timestamp: Date;
+  memory: {
+    heapUsed: number;
+    heapTotal: number;
+    external: number;
+    rss: number;
+  };
+  cpu: {
+    user: number;
+    system: number;
+  };
+  uptime: number;
+  windowCount: number;
+  ipcCalls: number;
+  dbQueries: number;
+}
+
+interface PerformanceAlert {
+  timestamp: Date;
+  message: string;
+  severity: "low" | "medium" | "high" | "critical";
+  source: string;
+}
+
+/**
+ * Performance Monitor for mr5-POS Electron Application
+ * Tracks memory usage, CPU performance, and application metrics
+ */
+class PerformanceMonitor {
+  private metricsHistory: PerformanceMetrics[] = [];
+  private alerts: PerformanceAlert[] = [];
+  private monitoringInterval: NodeJS.Timeout | null = null;
+  private ipcCallCount = 0;
+  private dbQueryCount = 0;
+  private lastCpuUsage = process.cpuUsage();
+
+  // Thresholds for alerts
+  private readonly thresholds = {
+    memory: {
+      heapUsed: 512 * 1024 * 1024, // 512MB
+      rss: 1024 * 1024 * 1024, // 1GB
+    },
+    cpu: {
+      high: 80, // 80% CPU usage
+      critical: 95, // 95% CPU usage
+    },
+    windowCount: 10,
+    ipcCallsPerMinute: 1000,
+    dbQueriesPerMinute: 500,
+  };
+
+  constructor() {
+    this.setupMonitoring();
+  }
+
+  /**
+   * Start performance monitoring
+   */
+  public startMonitoring(intervalMs: number = 30000): void {
+    if (this.monitoringInterval) {
+      this.stopMonitoring();
+    }
+
+    this.monitoringInterval = setInterval(() => {
+      this.collectMetrics();
+      this.checkThresholds();
+      this.performMemoryCleanup();
+    }, intervalMs);
+
+    logInfo(
+      `Performance monitoring started (interval: ${intervalMs}ms)`,
+      "PerformanceMonitor"
+    );
+  }
+
+  /**
+   * Stop performance monitoring
+   */
+  public stopMonitoring(): void {
+    if (this.monitoringInterval) {
+      clearInterval(this.monitoringInterval);
+      this.monitoringInterval = null;
+      logInfo("Performance monitoring stopped", "PerformanceMonitor");
+    }
+  }
+
+  /**
+   * Collect current performance metrics
+   */
+  private collectMetrics(): void {
+    try {
+      const memoryUsage = process.memoryUsage();
+      const cpuUsage = process.cpuUsage(this.lastCpuUsage);
+      this.lastCpuUsage = process.cpuUsage();
+
+      const metrics: PerformanceMetrics = {
+        timestamp: new Date(),
+        memory: {
+          heapUsed: Math.round(memoryUsage.heapUsed / 1024 / 1024), // MB
+          heapTotal: Math.round(memoryUsage.heapTotal / 1024 / 1024), // MB
+          external: Math.round(memoryUsage.external / 1024 / 1024), // MB
+          rss: Math.round(memoryUsage.rss / 1024 / 1024), // MB
+        },
+        cpu: {
+          user: Math.round(cpuUsage.user / 1000), // microseconds to milliseconds
+          system: Math.round(cpuUsage.system / 1000), // microseconds to milliseconds
+        },
+        uptime: Math.round(process.uptime()),
+        windowCount: BrowserWindow.getAllWindows().length,
+        ipcCalls: this.ipcCallCount,
+        dbQueries: this.dbQueryCount,
+      };
+
+      this.metricsHistory.push(metrics);
+
+      // Keep only last 100 entries
+      if (this.metricsHistory.length > 100) {
+        this.metricsHistory = this.metricsHistory.slice(-100);
+      }
+
+      // Log detailed metrics in development
+      if (isDev) {
+        logDebug(
+          `Performance: Memory=${metrics.memory.heapUsed}MB, CPU=${
+            metrics.cpu.user + metrics.cpu.system
+          }ms, Windows=${metrics.windowCount}`,
+          "PerformanceMonitor"
+        );
+      }
+    } catch (error) {
+      logError(error as Error, "PerformanceMonitor metrics collection");
+    }
+  }
+
+  /**
+   * Check performance thresholds and trigger alerts
+   */
+  private checkThresholds(): void {
+    try {
+      const latest = this.metricsHistory[this.metricsHistory.length - 1];
+      if (!latest) return;
+
+      // Check memory usage
+      if (latest.memory.heapUsed > this.thresholds.memory.heapUsed / 1024 / 1024) {
+        this.addAlert({
+          timestamp: new Date(),
+          message: `High memory usage: ${latest.memory.heapUsed}MB`,
+          severity: "high",
+          source: "Memory",
+        });
+      }
+
+      // Check RSS memory
+      if (latest.memory.rss > this.thresholds.memory.rss / 1024 / 1024) {
+        this.addAlert({
+          timestamp: new Date(),
+          message: `Critical RSS memory usage: ${latest.memory.rss}MB`,
+          severity: "critical",
+          source: "Memory",
+        });
+      }
+
+      // Check window count
+      if (latest.windowCount > this.thresholds.windowCount) {
+        this.addAlert({
+          timestamp: new Date(),
+          message: `High window count: ${latest.windowCount}`,
+          severity: "medium",
+          source: "Windows",
+        });
+      }
+
+      // Check IPC call rate
+      if (latest.ipcCalls > this.thresholds.ipcCallsPerMinute) {
+        this.addAlert({
+          timestamp: new Date(),
+          message: `High IPC call rate: ${latest.ipcCalls}/min`,
+          severity: "medium",
+          source: "IPC",
+        });
+      }
+
+      // Check DB query rate
+      if (latest.dbQueries > this.thresholds.dbQueriesPerMinute) {
+        this.addAlert({
+          timestamp: new Date(),
+          message: `High database query rate: ${latest.dbQueries}/min`,
+          severity: "medium",
+          source: "Database",
+        });
+      }
+    } catch (error) {
+      logError(error as Error, "PerformanceMonitor threshold check");
+    }
+  }
+
+  /**
+   * Perform memory cleanup when thresholds are exceeded
+   */
+  private performMemoryCleanup(): void {
+    try {
+      const latest = this.metricsHistory[this.metricsHistory.length - 1];
+      if (!latest) return;
+
+      // If memory usage is critically high, force garbage collection
+      if (latest.memory.heapUsed > this.thresholds.memory.heapUsed / 1024 / 1024) {
+        if (global.gc) {
+          logInfo("Forcing garbage collection", "PerformanceMonitor");
+          global.gc();
+        } else {
+          logWarning(
+            "Cannot force garbage collection. Run with --expose-gc flag.",
+            "PerformanceMonitor"
+          );
+        }
+      }
+
+      // Reset counters
+      this.resetCounters();
+    } catch (error) {
+      logError(error as Error, "PerformanceMonitor memory cleanup");
+    }
+  }
+
+  /**
+   * Add performance alert
+   */
+  private addAlert(alert: PerformanceAlert): void {
+    this.alerts.push(alert);
+
+    // Keep only last 50 alerts
+    if (this.alerts.length > 50) {
+      this.alerts = this.alerts.slice(-50);
+    }
+
+    // Log alert
+    if (alert.severity === "critical") {
+      logError(new Error(alert.message), "PerformanceAlert");
+    } else if (alert.severity === "high") {
+      logWarning(alert.message, "PerformanceAlert");
+    } else {
+      logInfo(alert.message, "PerformanceAlert");
+    }
+  }
+
+  /**
+   * Track database query
+   */
+  public trackDatabaseQuery(): void {
+    this.dbQueryCount++;
+  }
+
+  /**
+   * Track IPC call
+   */
+  public trackIPCCall(): void {
+    this.ipcCallCount++;
+  }
+
+  /**
+   * Get current performance status
+   */
+  public getPerformanceStatus(): {
+    current: PerformanceMetrics | null;
+    alerts: PerformanceAlert[];
+    summary: {
+      memoryUsageMB: number;
+      uptime: number;
+      alertCount: number;
+      averageMemoryUsage: number;
+    };
+  } {
+    const current = this.metricsHistory[this.metricsHistory.length - 1] || null;
+    const recentAlerts = this.alerts.filter(
+      (alert) => Date.now() - alert.timestamp.getTime() < 60 * 60 * 1000 // Last hour
+    );
+
+    const averageMemoryUsage =
+      this.metricsHistory.length > 0
+        ? this.metricsHistory.reduce(
+            (sum, metric) => sum + metric.memory.heapUsed,
+            0
+          ) / this.metricsHistory.length
+        : 0;
+
+    return {
+      current,
+      alerts: recentAlerts,
+      summary: {
+        memoryUsageMB: current?.memory.heapUsed || 0,
+        uptime: current?.uptime || 0,
+        alertCount: recentAlerts.length,
+        averageMemoryUsage: Math.round(averageMemoryUsage),
+      },
+    };
+  }
+
+  /**
+   * Export performance data for analysis
+   */
+  public exportPerformanceData(): {
+    metrics: PerformanceMetrics[];
+    alerts: PerformanceAlert[];
+    exportTimestamp: Date;
+  } {
+    return {
+      metrics: [...this.metricsHistory],
+      alerts: [...this.alerts],
+      exportTimestamp: new Date(),
+    };
+  }
+
+  /**
+   * Setup monitoring configuration
+   */
+  private setupMonitoring(): void {
+    // Handle app events for performance tracking
+    app.on("browser-window-created", () => {
+      logDebug("New browser window created", "PerformanceMonitor");
+    });
+
+    // Note: browser-window-destroyed event doesn't exist on app
+    // Window destruction is tracked via BrowserWindow.getAllWindows() count
+
+    logInfo("Performance monitor initialized", "PerformanceMonitor");
+  }
+
+  /**
+   * Reset counters (called periodically)
+   */
+  public resetCounters(): void {
+    this.ipcCallCount = 0;
+    this.dbQueryCount = 0;
+    logDebug("Performance counters reset", "PerformanceMonitor");
+  }
+}
+
+// Create singleton instance
+const performanceMonitor = new PerformanceMonitor();
+
+// Export functions for use throughout the application
+export const startPerformanceMonitoring = (intervalMs?: number) =>
+  performanceMonitor.startMonitoring(intervalMs);
+export const stopPerformanceMonitoring = () =>
+  performanceMonitor.stopMonitoring();
+export const trackDatabaseQuery = () => performanceMonitor.trackDatabaseQuery();
+export const trackIPCCall = () => performanceMonitor.trackIPCCall();
+export const getPerformanceStatus = () =>
+  performanceMonitor.getPerformanceStatus();
+export const exportPerformanceData = () =>
+  performanceMonitor.exportPerformanceData();
+
+export default performanceMonitor;

@@ -1,0 +1,9 @@
+{
+  "rules": [
+    "rules/documentation-guide.mdc",
+    "rules/developper-guide.mdc",
+    "rules/source-of-truth-guidelines.mdc",
+    "rules/mcp-guidelines.mdc",
+    "rules/duplicate-call-prevention.mdc"
+  ]
+}

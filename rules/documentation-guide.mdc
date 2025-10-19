@@ -1,0 +1,48 @@
+---
+description: guidelines for AI assistant to always refer to the documetations when solving or thinking or analyzing a task.
+globs:
+alwaysApply: true
+---
+<DocumentationGuidelines>
+  <Purpose>
+    <Summary>
+      Ensure the AI assistant always refers to authoritative documentation before making decisions,
+      adapting logic, or implementing features. This reduces errors and ensures alignment with best practices.
+    </Summary>
+  </Purpose>
+
+  <Sources>
+    <Source name="Electron-Docs" url="https://www.electronjs.org/docs/latest">
+      <Note>Use for understanding core Electron APIs, process model, and security practices.</Note>
+    </Source>
+    <Source name="Electron Builder" url="https://www.electron.build/">
+      <Note>Consult for packaging, building, and creating distributable executables.</Note>
+    </Source>
+    <Source name="Electron Next.js" url="https://nextron.js.org/">
+      <Note>Check for integrating Next.js with Electron (renderer process) best practices.</Note>
+    </Source>
+    <Source name="Nextron" url="https://nextron.js.org/">
+      <Note>General framework patterns and Nextron-specific conventions.</Note>
+    </Source>
+    <Source name="SQLite - Doc" url="https://www.sqlite.org/docs.html">
+      <Note>Refer to for database design, schema, constraints, and queries.</Note>
+    </Source>
+    <Source name="better-sqlite3" url="https://github.com/WiseLibs/better-sqlite3">
+      <Note>Check for best practices using better-sqlite3 (transactions, prepared statements, performance tips).</Note>
+    </Source>
+  </Sources>
+
+  <Rules>
+    <Rule>Before creating or adapting any database operation, consult SQLite and better-sqlite3 docs.</Rule>
+    <Rule>Before using Electron APIs or creating windows, verify patterns in Electron Docs and Nextron documentation.</Rule>
+    <Rule>Before building or packaging the executable, consult Electron Builder documentation for best practices.</Rule>
+    <Rule>Always prefer documented methods and avoid custom hacks unless absolutely necessary and logged.</Rule>
+  </Rules>
+
+  <Workflow>
+    <Step>Check documentation for any API usage before implementing.</Step>
+    <Step>Verify your approach aligns with best practices from official docs.</Step>
+    <Step>If the documentation has multiple approaches, select the one that ensures security, performance, and maintainability.</Step>
+    <Step>Log the reference URL and explanation in comments for future maintainers.</Step>
+  </Workflow>
+</DocumentationGuidelines>

@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 94%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+  }
+
+  body {
+    background-color: hsl(var(--background)) !important;
+    color: hsl(var(--foreground));
+  }
+}
+
+@layer components {
+  .btn-blue {
+    @apply text-white font-bold px-4 py-2 rounded bg-blue-600 hover:bg-blue-500;
+  }
+}
