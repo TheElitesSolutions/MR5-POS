@@ -47,9 +47,9 @@ nsis:
 # Auto-update configuration - GitHub Releases
 publish:
   provider: github
-  owner: YourGitHubUsername  # TODO: Replace with your actual GitHub username
-  repo: MR5-POS-v2  # TODO: Confirm repository name
-  private: true  # Set to false if public repository
+  owner: TheElitesSolutions
+  repo: MR5-POS
+  private: true
   releaseType: release  # Only publish stable releases (not drafts or prereleases)
 # Code signing configuration (to be added when certificates are available)
 # win:
