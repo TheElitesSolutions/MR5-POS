@@ -29,7 +29,6 @@ export default function LoginPage() {
   const { toast } = useToast();
   const { login, isLoading, error, clearError } = useAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showDiagnostic, setShowDiagnostic] = useState(false);
 
   const {
     register,
@@ -44,83 +43,6 @@ export default function LoginPage() {
     // debug: login page mounted
     electronAPI.debugAPI();
   }, []);
-
-  const runDiagnostic = async () => {
-    try {
-      toast({
-        title: 'Running Diagnostics',
-        description: 'Checking database and admin user...',
-      });
-
-      // @ts-ignore - diagnostic API is exposed but not in all type definitions
-      const result = await window.electronAPI?.diagnostic?.runDatabaseDiagnostics();
-
-      if (result?.success && result?.data?.success) {
-        const details = result.data.details;
-        let message = `Database: ${details?.databaseExists ? 'Connected' : 'Not Connected'}\n`;
-        message += `Tables: ${details?.tablesCount || 0}\n`;
-        message += `Users: ${details?.usersCount || 0}\n`;
-        message += `Admin User: ${details?.adminUserExists ? 'EXISTS' : 'MISSING'}`;
-
-        toast({
-          title: details?.adminUserExists ? 'Diagnostic Complete' : 'Admin User Missing',
-          description: message,
-          variant: details?.adminUserExists ? 'default' : 'destructive',
-        });
-
-        // If admin user is missing, offer to create it
-        if (!details?.adminUserExists) {
-          setShowDiagnostic(true);
-        }
-      } else {
-        toast({
-          title: 'Diagnostic Failed',
-          description: result?.data?.message || 'Could not run diagnostics',
-          variant: 'destructive',
-        });
-      }
-    } catch (error) {
-      console.error('Diagnostic error:', error);
-      toast({
-        title: 'Diagnostic Error',
-        description: 'Failed to run database diagnostics',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const createAdminUser = async () => {
-    try {
-      toast({
-        title: 'Creating Admin User',
-        description: 'Please wait...',
-      });
-
-      // @ts-ignore - diagnostic API is exposed but not in all type definitions
-      const result = await window.electronAPI?.diagnostic?.createAdminUser();
-
-      if (result?.success && result?.data?.success) {
-        toast({
-          title: 'Admin User Created',
-          description: result.data.message || 'You can now login with admin/admin',
-        });
-        setShowDiagnostic(false);
-      } else {
-        toast({
-          title: 'Failed to Create Admin User',
-          description: result?.data?.message || 'An error occurred',
-          variant: 'destructive',
-        });
-      }
-    } catch (error) {
-      console.error('Create admin error:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to create admin user',
-        variant: 'destructive',
-      });
-    }
-  };
 
   const onSubmit = async (data: LoginFormData) => {
     try {
@@ -234,30 +156,6 @@ export default function LoginPage() {
                 {isLoading || isSubmitting ? 'Signing in...' : 'Sign in'}
               </Button>
             </form>
-
-            <div className='mt-6 space-y-3'>
-              <Button
-                type='button'
-                variant='outline'
-                className='w-full'
-                onClick={runDiagnostic}
-                disabled={isSubmitting}
-              >
-                Run Database Diagnostic
-              </Button>
-
-              {showDiagnostic && (
-                <Button
-                  type='button'
-                  variant='default'
-                  className='w-full bg-success hover:bg-success/90'
-                  onClick={createAdminUser}
-                  disabled={isSubmitting}
-                >
-                  Create Admin User
-                </Button>
-              )}
-            </div>
 
             {/* Commented out until register page is implemented
             <div className='mt-8 text-center'>

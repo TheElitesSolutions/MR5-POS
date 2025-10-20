@@ -1,5 +1,5 @@
-appId: com.mr5pos.app
-productName: MR5 POS
+appId: com.theelitespos.app
+productName: The Elites POS
 copyright: Copyright © 2025 TheElites Solutions
 directories:
   output: dist
@@ -41,7 +41,7 @@ nsis:
   perMachine: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: MR5 POS
+  shortcutName: The Elites POS
   # Enable differential updates for smaller download sizes
   differentialPackage: true
 # Auto-update configuration - GitHub Releases
