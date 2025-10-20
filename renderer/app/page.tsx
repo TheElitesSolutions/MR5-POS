@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 
 export default function HomePage() {
   const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, _hasHydrated } = useAuthStore();
   const { isLoading: authLoading } = useAuth();
   const permissions = useUserPermissions();
   const [hasRedirected, setHasRedirected] = useState(false);
@@ -15,6 +15,12 @@ export default function HomePage() {
   useEffect(() => {
     // Prevent multiple redirects
     if (hasRedirected) return;
+
+    // Wait for store hydration first
+    if (!_hasHydrated) {
+      console.log('Homepage: Waiting for store hydration...');
+      return;
+    }
 
     // Wait for auth to finish loading
     if (authLoading) return;
@@ -24,6 +30,7 @@ export default function HomePage() {
       user: user?.username,
       canViewDashboard: permissions.isManager || permissions.isAdmin,
       authLoading,
+      storeHydrated: _hasHydrated,
       isElectron: typeof window !== 'undefined' && window.electronAPI,
     });
 
@@ -57,6 +64,7 @@ export default function HomePage() {
     router,
     authLoading,
     hasRedirected,
+    _hasHydrated,  // Add hydration dependency
   ]);
 
   return (
@@ -66,7 +74,9 @@ export default function HomePage() {
         <h1 className='mb-4 text-3xl font-bold text-gray-900 dark:text-white'>
           The Elites POS
         </h1>
-        <p className='text-gray-600 dark:text-gray-400'>Loading...</p>
+        <p className='text-gray-600 dark:text-gray-400'>
+          {!_hasHydrated ? 'Initializing...' : 'Loading...'}
+        </p>
       </div>
     </div>
   );

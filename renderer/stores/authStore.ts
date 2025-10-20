@@ -13,6 +13,10 @@ interface AuthState {
   error: string | null;
   lastTokenCheck: number;
 
+  // Hydration tracking
+  _hasHydrated: boolean;
+  setHasHydrated: (state: boolean) => void;
+
   // Actions
   login: (credentials: LoginRequest) => Promise<void>;
   register: (userData: RegisterRequest) => Promise<void>;
@@ -65,6 +69,12 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
       error: null,
       lastTokenCheck: 0,
+
+      // Hydration tracking
+      _hasHydrated: false,
+      setHasHydrated: (state) => {
+        set({ _hasHydrated: state });
+      },
 
       login: async (credentials: LoginRequest) => {
         try {
@@ -356,16 +366,36 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
+      onRehydrateStorage: () => {
+        console.log('[AUTH STORE] Starting rehydration from localStorage');
+        return (state, error) => {
+          if (error) {
+            console.error('[AUTH STORE] Rehydration failed:', error);
+          } else {
+            console.log('[AUTH STORE] Rehydration complete', {
+              hasUser: !!state?.user,
+              isAuthenticated: state?.isAuthenticated,
+            });
+            state?.setHasHydrated(true);
+          }
+        };
+      },
       partialize: state => ({
         user: state.user,
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
         lastTokenCheck: state.lastTokenCheck,
+        // Don't persist _hasHydrated - it should reset on mount
       }),
     }
   )
 );
+
+// Export custom hook to check hydration status
+export const useAuthHydration = () => {
+  return useAuthStore(state => state._hasHydrated);
+};
 
 /**
  * Custom hook to get user permissions

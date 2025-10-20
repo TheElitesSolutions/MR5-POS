@@ -29,6 +29,7 @@ export default function LoginPage() {
   const { toast } = useToast();
   const { login, isLoading, error, clearError } = useAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDiagnostic, setShowDiagnostic] = useState(false);
 
   const {
     register,
@@ -44,52 +45,91 @@ export default function LoginPage() {
     electronAPI.debugAPI();
   }, []);
 
+  const runDiagnostic = async () => {
+    try {
+      toast({
+        title: 'Running Diagnostics',
+        description: 'Checking database and admin user...',
+      });
+
+      // @ts-ignore - diagnostic API is exposed but not in all type definitions
+      const result = await window.electronAPI?.diagnostic?.runDatabaseDiagnostics();
+
+      if (result?.success && result?.data?.success) {
+        const details = result.data.details;
+        let message = `Database: ${details?.databaseExists ? 'Connected' : 'Not Connected'}\n`;
+        message += `Tables: ${details?.tablesCount || 0}\n`;
+        message += `Users: ${details?.usersCount || 0}\n`;
+        message += `Admin User: ${details?.adminUserExists ? 'EXISTS' : 'MISSING'}`;
+
+        toast({
+          title: details?.adminUserExists ? 'Diagnostic Complete' : 'Admin User Missing',
+          description: message,
+          variant: details?.adminUserExists ? 'default' : 'destructive',
+        });
+
+        // If admin user is missing, offer to create it
+        if (!details?.adminUserExists) {
+          setShowDiagnostic(true);
+        }
+      } else {
+        toast({
+          title: 'Diagnostic Failed',
+          description: result?.data?.message || 'Could not run diagnostics',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Diagnostic error:', error);
+      toast({
+        title: 'Diagnostic Error',
+        description: 'Failed to run database diagnostics',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const createAdminUser = async () => {
+    try {
+      toast({
+        title: 'Creating Admin User',
+        description: 'Please wait...',
+      });
+
+      // @ts-ignore - diagnostic API is exposed but not in all type definitions
+      const result = await window.electronAPI?.diagnostic?.createAdminUser();
+
+      if (result?.success && result?.data?.success) {
+        toast({
+          title: 'Admin User Created',
+          description: result.data.message || 'You can now login with admin/admin',
+        });
+        setShowDiagnostic(false);
+      } else {
+        toast({
+          title: 'Failed to Create Admin User',
+          description: result?.data?.message || 'An error occurred',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Create admin error:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to create admin user',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const onSubmit = async (data: LoginFormData) => {
     try {
       setIsSubmitting(true);
       clearError();
 
-      // Run debug check right before login attempt
-      // debug: API check before login
-      try {
-        electronAPI.debugAPI();
-      } catch (debugError) {
-        console.error('Debug API error:', debugError);
-      }
-
-      // Test IPC connection first
-      // debug: testing IPC auth connection
-      let testResult;
-      try {
-        testResult = await ipcAPI.auth.test();
-        // debug: IPC auth test result
-      } catch (testError) {
-        // debug: IPC auth test failed
-        toast({
-          title: 'Connection Error',
-          description:
-            'Failed to connect to authentication service. Please restart the application.',
-          variant: 'destructive',
-        });
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Validate test result
-      if (!testResult?.success) {
-        // debug: auth test returned unsuccessful
-        toast({
-          title: 'Authentication Service Error',
-          description:
-            'Authentication service is not responding properly. Please contact support.',
-          variant: 'destructive',
-        });
-        setIsSubmitting(false);
-        return;
-      }
-
-      // Proceed with login
-      // debug: attempting login with credentials
+      // TEMPORARILY BYPASSED: Auth connection test
+      // This test was causing silent failures - bypassing to test actual login
+      console.log('[LOGIN] Attempting direct login without auth test...');
 
       await login(data as LoginRequest);
 
@@ -195,6 +235,31 @@ export default function LoginPage() {
               </Button>
             </form>
 
+            <div className='mt-4 space-y-2'>
+              <Button
+                type='button'
+                variant='outline'
+                className='w-full'
+                onClick={runDiagnostic}
+                disabled={isSubmitting}
+              >
+                Run Database Diagnostic
+              </Button>
+
+              {showDiagnostic && (
+                <Button
+                  type='button'
+                  variant='default'
+                  className='w-full bg-green-600 hover:bg-green-700'
+                  onClick={createAdminUser}
+                  disabled={isSubmitting}
+                >
+                  Create Admin User
+                </Button>
+              )}
+            </div>
+
+            {/* Commented out until register page is implemented
             <div className='mt-6 text-center'>
               <p className='text-sm text-gray-600'>
                 Don&apos;t have an account?{' '}
@@ -206,6 +271,7 @@ export default function LoginPage() {
                 </Link>
               </p>
             </div>
+            */}
 
             <div className='mt-4 text-center text-xs text-gray-500'>
               <p>🔒 Secure login with enhanced protection</p>

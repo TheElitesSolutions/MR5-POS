@@ -191,6 +191,10 @@ declare global {
         installUpdate: () => Promise<void>;
         skipVersion: (version: string) => Promise<void>;
       };
+      diagnostic: {
+        runDatabaseDiagnostics: () => Promise<any>;
+        createAdminUser: () => Promise<any>;
+      };
     };
 
     /**

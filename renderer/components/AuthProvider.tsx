@@ -27,19 +27,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
   const [hasInitialized, setHasInitialized] = useState(false);
-  const { user, accessToken, refreshToken, clearAuth, refreshAccessToken } =
-    useAuthStore();
+  const {
+    user,
+    accessToken,
+    refreshToken,
+    clearAuth,
+    refreshAccessToken,
+    _hasHydrated  // Track hydration status
+  } = useAuthStore();
 
   const isAuthenticated = !!user && !!accessToken;
 
   // Check authentication status on mount and token refresh
   const checkAuth = async (): Promise<boolean> => {
+    // Wait for hydration first
+    if (!_hasHydrated) {
+      console.log('AuthProvider: Waiting for store hydration...');
+      return false;
+    }
+
     setIsLoading(true);
     try {
       console.log('AuthProvider: Checking authentication status', {
         hasUser: !!user,
         hasAccessToken: !!accessToken,
         hasRefreshToken: !!refreshToken,
+        storeHydrated: _hasHydrated,
       });
 
       // If we have a user and access token, we're authenticated
@@ -53,8 +66,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         console.log('AuthProvider: Attempting token refresh');
         // Temporarily disable token refresh for desktop version
         console.log('AuthProvider: Token refresh disabled for desktop version');
-        clearAuth(); // Clear auth since refresh is not implemented
-        return false;
+        // NOTE: Token refresh disabled but keeping existing auth
+        // clearAuth(); // ❌ REMOVED: This was clearing auth on every mount!
+        return true; // Keep existing authentication
       }
 
       console.log('AuthProvider: No valid credentials found');
@@ -73,12 +87,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     router.push('/login');
   };
 
-  // Check auth status on mount - only run once
+  // Check auth status on mount - only run once hydration completes
   useEffect(() => {
     if (hasInitialized) return;
+    if (!_hasHydrated) {
+      console.log('AuthProvider: Waiting for hydration before initialization');
+      return;
+    }
 
     const initialize = async () => {
-      console.log('AuthProvider: Starting initialization');
+      console.log('AuthProvider: Starting initialization (store hydrated)');
       setIsLoading(true);
       setHasInitialized(true);
 
@@ -95,9 +113,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
           console.log('AuthProvider: Attempting to refresh token');
           // Temporarily disable for desktop version
           console.log(
-            'AuthProvider: Token refresh disabled for desktop, clearing auth'
+            'AuthProvider: Token refresh disabled for desktop, keeping existing auth'
           );
-          clearAuth();
+          // NOTE: Token refresh disabled but keeping existing auth
+          // clearAuth(); // ❌ REMOVED: This was clearing auth on app restart!
         } else {
           console.log('AuthProvider: No refresh token available');
         }
@@ -116,6 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     initialize();
   }, [
     hasInitialized,
+    _hasHydrated,  // Re-run when hydration completes
     user,
     accessToken,
     refreshToken,
@@ -124,7 +144,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   ]);
 
   // Cleanup tokens when browser/app is closed
+  // DISABLED FOR ELECTRON: beforeunload fires on every page navigation in static exports
+  // This would clear auth on every route change, breaking authentication
+  // For security in Electron desktop app, tokens are cleared on app close by the OS
   useEffect(() => {
+    // Skip for Electron environment
+    const isElectron = typeof window !== 'undefined' && window.electronAPI;
+    if (isElectron) {
+      console.log('AuthProvider: Skipping beforeunload handler for Electron app');
+      return;
+    }
+
     const handleBeforeUnload = () => {
       // Clear tokens when user closes browser/tab (for security)
       try {
@@ -134,22 +164,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       }
     };
 
-    const handleVisibilityChange = () => {
-      // Optional: Clear tokens when tab becomes hidden (more aggressive security)
-      // Uncomment if you want tokens cleared when user switches tabs
-      // if (document.hidden) {
-      //   clearAuth();
-      // }
-    };
-
-    // Add event listeners
+    // Add event listeners (browser only)
     window.addEventListener('beforeunload', handleBeforeUnload);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // Cleanup event listeners
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [clearAuth]);
 

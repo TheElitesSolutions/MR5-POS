@@ -30,7 +30,12 @@ export const useAuthGuard = (options: UseAuthGuardOptions = {}): AuthGuardState 
   } = options;
 
   const router = useRouter();
-  const { isAuthenticated, user, isLoading: authLoading } = useAuthStore();
+  const {
+    isAuthenticated,
+    user,
+    isLoading: authLoading,
+    _hasHydrated  // Track hydration status
+  } = useAuthStore();
   const permissions = useUserPermissions();
 
   // Component-level states to prevent race conditions
@@ -77,16 +82,22 @@ export const useAuthGuard = (options: UseAuthGuardOptions = {}): AuthGuardState 
 
   // Sequential auth and permission check
   const performAuthCheck = useCallback(async () => {
+    // CRITICAL: Wait for store hydration first
+    if (!_hasHydrated) {
+      console.log('AuthGuard: Waiting for store hydration...');
+      return;
+    }
+
     // Debounce rapid auth checks
     const now = Date.now();
     if (now - lastCheckTime.current < CHECK_DEBOUNCE_MS) {
       return;
     }
-    
+
     if (checkInProgress.current || authLoading || permissions.isLoading) {
       return;
     }
-    
+
     lastCheckTime.current = now;
 
     checkInProgress.current = true;
@@ -96,7 +107,7 @@ export const useAuthGuard = (options: UseAuthGuardOptions = {}): AuthGuardState 
     try {
       // Reduce logging noise
       if (process.env.NODE_ENV === 'development' && requiredRoles.length > 0) {
-        console.log('AuthGuard: Starting auth check');
+        console.log('AuthGuard: Starting auth check (store hydrated)');
       }
 
       // Wait for auth loading to complete
@@ -144,6 +155,7 @@ export const useAuthGuard = (options: UseAuthGuardOptions = {}): AuthGuardState 
       checkInProgress.current = false;
     }
   }, [
+    _hasHydrated,  // Add hydration dependency
     authLoading,
     permissions.isLoading,
     checkPermissions,
@@ -158,17 +170,18 @@ export const useAuthGuard = (options: UseAuthGuardOptions = {}): AuthGuardState 
     performAuthCheck();
   }, [performAuthCheck]);
 
-  // Reset state when user changes
+  // Reset state when user changes or hydration status changes
   useEffect(() => {
-    if (!user) {
+    if (!user || !_hasHydrated) {
       setAuthCheckComplete(false);
       setPermissionCheckComplete(false);
       setHasAccess(false);
       checkInProgress.current = false;
     }
-  }, [user]);
+  }, [user, _hasHydrated]);
 
-  const isLoading = authLoading || permissions.isLoading || isInitializing || !authCheckComplete || !permissionCheckComplete;
+  // Include hydration status in loading state
+  const isLoading = !_hasHydrated || authLoading || permissions.isLoading || isInitializing || !authCheckComplete || !permissionCheckComplete;
 
   return {
     isLoading,

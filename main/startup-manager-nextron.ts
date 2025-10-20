@@ -32,6 +32,7 @@ import { SupabaseSyncService } from './services/supabaseSync';
 import { SyncScheduler } from './services/syncScheduler';
 import { SyncController } from './controllers/syncController';
 import { DatabaseManagementController } from './controllers/databaseManagementController';
+import { DiagnosticController } from './controllers/diagnosticController';
 import { ipcMain } from 'electron';
 
 // Controller interface
@@ -76,6 +77,7 @@ export class StartupManagerNextron {
         { name: 'SystemController', instance: new SystemController() },
         { name: 'LogController', instance: new LogController() },
         { name: 'SettingsController', instance: new SettingsController() },
+        { name: 'DiagnosticController', instance: new DiagnosticController() },
       ];
 
       for (const { name, instance } of coreControllers) {

@@ -8,6 +8,7 @@ import { validateWithSchema } from '../utils/validation-helpers';
 import { logError, logInfo } from '../error-handler';
 import { UserModel } from '../models/User';
 import { IPCResponse, JWTPayload, User } from '../types/index';
+import { enhancedLogger, LogCategory } from '../utils/enhanced-logger';
 import { AdvancedLogger } from '../utils/advancedLogger';
 import { generateToken, verifyToken } from '../utils/auth';
 import { BaseController } from './baseController';
@@ -99,16 +100,15 @@ export class AuthController extends BaseController {
 
   constructor() {
     super();
-    logInfo('🔧 AuthController constructor called');
+    enhancedLogger.info('AuthController constructor called', LogCategory.SYSTEM, 'AuthController');
     this.userModel = new UserModel(prisma);
-    logInfo('🔧 UserModel initialized');
+    enhancedLogger.info('AuthController initialized', LogCategory.SYSTEM, 'AuthController');
     // NOTE: Do NOT call this.initialize() here!
     // StartupManager will call initialize() after construction
-    logInfo('🔧 AuthController construction completed');
   }
 
   protected registerHandlers(): void {
-    logInfo('🎯 Starting IPC handler registration...');
+    enhancedLogger.info('Starting IPC handler registration', LogCategory.SYSTEM, 'AuthController');
 
     // Test handler for debugging IPC communication
     this.registerHandler<any>(
@@ -190,12 +190,8 @@ export class AuthController extends BaseController {
 
     // Verify handlers are actually registered
     const registeredChannels = Object.values(AUTH_CHANNELS);
-    logInfo(`🎯 AUTH_CHANNELS defined: ${registeredChannels.join(', ')}`);
-    logInfo('🎯 All Auth IPC handlers registered successfully!');
-
-    AdvancedLogger.info(
-      'AuthController initialized with advanced security features'
-    );
+    enhancedLogger.info(`AUTH_CHANNELS defined: ${registeredChannels.join(', ')}`, LogCategory.SYSTEM, 'AuthController');
+    enhancedLogger.info('All Auth IPC handlers registered successfully', LogCategory.SYSTEM, 'AuthController');
   }
 
   public override unregisterHandlers(): void {
@@ -223,7 +219,7 @@ export class AuthController extends BaseController {
       );
 
       if (!validation.success) {
-        AdvancedLogger.error(`Login: Validation failed - ${validation.error}`);
+        enhancedLogger.error(`Login: Validation failed - ${validation.error}`);
         return this.createErrorResponse(new Error(validation.error));
       }
 
@@ -234,7 +230,7 @@ export class AuthController extends BaseController {
         ipAddress: '127.0.0.1', // Desktop app local
       };
 
-      AdvancedLogger.info(`Login attempt for: ${validatedCredentials.username}`);
+      enhancedLogger.info(`Login attempt for: ${validatedCredentials.username}`);
 
       const result = await this.userModel.findByCredentials(
         validatedCredentials.username,
@@ -243,6 +239,7 @@ export class AuthController extends BaseController {
 
       if (!result.success || !result.data) {
         // Log failed login attempt for security monitoring
+        enhancedLogger.error(`Login failed for: ${validatedCredentials.username} - ${result.error || 'Invalid credentials'}`, LogCategory.SYSTEM, 'AuthController');
         AdvancedLogger.securityEvent(
           'authentication_failure',
           {
@@ -300,6 +297,7 @@ export class AuthController extends BaseController {
       );
 
       logInfo(`Login successful for user: ${user.username} (${user.role})`);
+      enhancedLogger.info(`Returning success response with tokens for: ${user.username}`, LogCategory.SYSTEM, 'AuthController');
 
       return this.createSuccessResponse({
         user: user as User,
@@ -473,7 +471,7 @@ export class AuthController extends BaseController {
       );
 
       if (!validation.success) {
-        AdvancedLogger.error(`ChangePassword: Validation failed - ${validation.error}`);
+        enhancedLogger.error(`ChangePassword: Validation failed - ${validation.error}`);
         return this.createErrorResponse(new Error(validation.error));
       }
 

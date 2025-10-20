@@ -78,11 +78,19 @@ const updaterAPI = {
   },
 }
 
+// Diagnostic API for renderer process
+const diagnosticAPI = {
+  runDatabaseDiagnostics: () => ipcRenderer.invoke('diagnostic:run-database-diagnostics'),
+  createAdminUser: () => ipcRenderer.invoke('diagnostic:create-admin-user'),
+}
+
 // Expose at the correct path that matches TypeScript definitions
 contextBridge.exposeInMainWorld('electronAPI', {
   ipc: handler,
   updater: updaterAPI,
+  diagnostic: diagnosticAPI,
 })
 
 export type IpcHandler = typeof handler
 export type UpdaterAPI = typeof updaterAPI
+export type DiagnosticAPI = typeof diagnosticAPI
