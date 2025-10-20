@@ -968,7 +968,7 @@ const ExpenseForm = memo(
 
     return (
       <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className='max-h-[90vh] max-w-4xl overflow-y-auto'>
+        <DialogContent className='max-h-[90dvh] max-w-4xl overflow-y-auto'>
           <DialogHeader>
             <DialogTitle>
               {expenseId ? 'Edit Expense' : 'Add New Expense'}

@@ -54,11 +54,11 @@ const PasswordStrengthIndicator = ({
   };
 
   return (
-    <div className="mt-2">
-      <div className="flex items-center space-x-2">
-        <div className="flex-1 bg-gray-200 rounded-full h-2">
+    <div className="mt-3">
+      <div className="flex items-center space-x-3">
+        <div className="flex-1 bg-muted rounded-full h-3">
           <div
-            className={`h-2 rounded-full transition-all ${getStrengthColor(
+            className={`h-3 rounded-full transition-all ${getStrengthColor(
               score
             )}`}
             style={{ width: `${(score / 5) * 100}%` }}
@@ -66,14 +66,14 @@ const PasswordStrengthIndicator = ({
         </div>
         <span
           className={`text-xs font-medium ${
-            isStrong ? "text-green-600" : "text-gray-600"
+            isStrong ? "text-success" : "text-muted-foreground"
           }`}
         >
           {getStrengthText(score)}
         </span>
       </div>
       {feedback.length > 0 && (
-        <ul className="mt-1 text-xs text-gray-600">
+        <ul className="mt-2 text-xs text-muted-foreground">
           {feedback.map((item, index) => (
             <li key={index}>• {item}</li>
           ))}
@@ -139,13 +139,13 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center bg-background py-16 px-6">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
+          <h1 className="text-3xl font-bold text-gray-900 mb-3">
             The Elites POS
           </h1>
-          <p className="text-gray-600">Create your POS account</p>
+          <p className="text-muted-foreground">Create your POS account</p>
         </div>
 
         <Card>
@@ -156,40 +156,40 @@ export default function RegisterPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="space-y-2">
+            <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+              <div className="space-y-3">
                 <Label htmlFor="username">Username</Label>
                 <Input
                   id="username"
                   type="text"
                   placeholder="Enter your username"
                   {...register("username")}
-                  className={errors.username ? "border-red-500" : ""}
+                  className={errors.username ? "border-destructive" : ""}
                   disabled={isSubmitting}
                 />
                 {errors.username && (
-                  <p className="text-sm text-red-600">
+                  <p className="text-sm text-destructive">
                     {errors.username.message}
                   </p>
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label htmlFor="name">Full Name</Label>
                 <Input
                   id="name"
                   type="text"
                   placeholder="Enter your full name"
                   {...register("name")}
-                  className={errors.name ? "border-red-500" : ""}
+                  className={errors.name ? "border-destructive" : ""}
                   disabled={isSubmitting}
                 />
                 {errors.name && (
-                  <p className="text-sm text-red-600">{errors.name.message}</p>
+                  <p className="text-sm text-destructive">{errors.name.message}</p>
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label htmlFor="role">Role</Label>
                 <Select
                   onValueChange={(value) => setValue("role", value as Role)}
@@ -197,7 +197,7 @@ export default function RegisterPage() {
                   disabled={isSubmitting}
                 >
                   <SelectTrigger
-                    className={errors.role ? "border-red-500" : ""}
+                    className={errors.role ? "border-destructive" : ""}
                   >
                     <SelectValue placeholder="Select your role" />
                   </SelectTrigger>
@@ -208,47 +208,47 @@ export default function RegisterPage() {
                   </SelectContent>
                 </Select>
                 {errors.role && (
-                  <p className="text-sm text-red-600">{errors.role.message}</p>
+                  <p className="text-sm text-destructive">{errors.role.message}</p>
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label htmlFor="password">Password</Label>
                 <Input
                   id="password"
                   type="password"
                   placeholder="Enter your password"
                   {...register("password")}
-                  className={errors.password ? "border-red-500" : ""}
+                  className={errors.password ? "border-destructive" : ""}
                   disabled={isSubmitting}
                 />
                 <PasswordStrengthIndicator password={password} />
                 {errors.password && (
-                  <p className="text-sm text-red-600">
+                  <p className="text-sm text-destructive">
                     {errors.password.message}
                   </p>
                 )}
               </div>
 
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <Label htmlFor="confirmPassword">Confirm Password</Label>
                 <Input
                   id="confirmPassword"
                   type="password"
                   placeholder="Confirm your password"
                   {...register("confirmPassword")}
-                  className={errors.confirmPassword ? "border-red-500" : ""}
+                  className={errors.confirmPassword ? "border-destructive" : ""}
                   disabled={isSubmitting}
                 />
                 {errors.confirmPassword && (
-                  <p className="text-sm text-red-600">
+                  <p className="text-sm text-destructive">
                     {errors.confirmPassword.message}
                   </p>
                 )}
               </div>
 
               {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+                <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded">
                   {error}
                 </div>
               )}
@@ -264,19 +264,19 @@ export default function RegisterPage() {
               </Button>
             </form>
 
-            <div className="mt-6 text-center">
-              <p className="text-sm text-gray-600">
+            <div className="mt-8 text-center">
+              <p className="text-sm text-muted-foreground">
                 Already have an account?{" "}
                 <Link
                   href="/login"
-                  className="font-medium text-blue-600 hover:text-blue-500"
+                  className="font-medium text-primary hover:text-primary/90"
                 >
                   Sign in here
                 </Link>
               </p>
             </div>
 
-            <div className="mt-4 text-xs text-gray-500 text-center">
+            <div className="mt-6 text-xs text-muted-foreground text-center">
               <p>🔒 Secure registration with password strength validation</p>
               <p>Rate limited for security</p>
             </div>

@@ -296,7 +296,7 @@ Small Size,Small size option,-0.50,Drink Sizes,3,true`;
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className='max-h-[90vh] max-w-4xl overflow-y-auto'>
+      <DialogContent className='max-h-[90dvh] max-w-4xl overflow-y-auto'>
         <DialogHeader>
           <DialogTitle className='flex items-center gap-2'>
             <Upload className='h-5 w-5' />

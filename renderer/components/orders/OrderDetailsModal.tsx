@@ -86,7 +86,7 @@ const OrderDetailsModal = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className='max-h-[90vh] max-w-2xl overflow-y-auto'>
+      <DialogContent className='max-h-[90dvh] max-w-2xl overflow-y-auto'>
         <DialogHeader>
           <DialogTitle className='text-center text-2xl font-bold'>
             Invoice

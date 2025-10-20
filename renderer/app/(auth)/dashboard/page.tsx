@@ -104,54 +104,48 @@ function DashboardContent() {
 
   return (
     <POSLayout>
-      {/* Fixed Header Section */}
-      <div className='border-b dark:border-gray-800'>
-        <div className='space-y-4 p-4'>
-          {/* Header with Real-time Status */}
-          <div className='flex items-center justify-between'>
-            <div>
-              <h1 className='text-2xl font-bold text-gray-900 dark:text-white'>
-                Live Dashboard
-              </h1>
-              <div className='flex items-center space-x-4 text-sm text-gray-500 dark:text-gray-400'>
-                <div className='flex items-center space-x-1'>
-                  <Clock className='h-4 w-4' />
-                  <span>Last updated: {currentTime}</span>
-                </div>
-                <div className='flex items-center space-x-1'>
-                  <Activity className='h-4 w-4 text-green-500' />
-                  <span>Real-time</span>
-                </div>
+      <div className='space-y-6 p-6'>
+        {/* Header with Real-time Status */}
+        <div className='flex items-center justify-between border-b pb-4'>
+          <div>
+            <h1 className='text-lg font-bold text-gray-900 dark:text-white'>
+              Live Dashboard
+            </h1>
+            <div className='flex items-center space-x-3 text-xs text-gray-500 dark:text-gray-400'>
+              <div className='flex items-center space-x-3'>
+                <Clock className='h-4 w-4' />
+                <span>Last updated: {currentTime}</span>
               </div>
-            </div>
-
-            <div className='flex items-center space-x-2'>
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={handleRefresh}
-                disabled={isRefreshing || isLoading}
-                className='flex items-center space-x-2'
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
-                />
-                <span>Refresh</span>
-              </Button>
+              <div className='flex items-center space-x-3'>
+                <Activity className='h-4 w-4 text-green-500' />
+                <span>Real-time</span>
+              </div>
             </div>
           </div>
 
-          {/* Real-time Metrics Hero Section */}
-          <RealTimeMetrics />
+          <div className='flex items-center space-x-3'>
+            <Button
+              variant='outline'
+              size='sm'
+              onClick={handleRefresh}
+              disabled={isRefreshing || isLoading}
+              className='flex items-center space-x-3'
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`}
+              />
+              <span>Refresh</span>
+            </Button>
+          </div>
         </div>
-      </div>
 
-      {/* Scrollable Content Area */}
-      <div className='flex-1 overflow-hidden'>
-        <div className='h-full overflow-y-auto'>
-          <div className='space-y-6 p-4'>
+        {/* Real-time Metrics Hero Section */}
+        <RealTimeMetrics />
+
+        {/* Content Area */}
+        <div className='space-y-6'>
             {/* Key Performance Indicators */}
-            <div className='space-y-3'>
+            <div className='space-y-4'>
               <div className='flex items-center space-x-2'>
                 <TrendingUp className='h-5 w-5 text-blue-600' />
                 <h2 className='text-lg font-semibold text-gray-900 dark:text-white'>
@@ -184,22 +178,21 @@ function DashboardContent() {
               </div>
             </div>
 
-            {/* Quick Actions */}
-            <QuickActions />
-
-            {/* Loading Overlay */}
-            {isLoading && (
-              <div className='fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-25'>
-                <Card className='p-6'>
-                  <div className='flex items-center space-x-3'>
-                    <div className='h-6 w-6 animate-spin rounded-full border-b-2 border-blue-600'></div>
-                    <span>Updating dashboard...</span>
-                  </div>
-                </Card>
-              </div>
-            )}
-          </div>
+          {/* Quick Actions */}
+          <QuickActions />
         </div>
+
+        {/* Loading Overlay */}
+        {isLoading && (
+          <div className='fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-25'>
+            <Card className='p-6'>
+              <div className='flex items-center space-x-3'>
+                <div className='h-6 w-6 animate-spin rounded-full border-b-2 border-blue-600'></div>
+                <span>Updating dashboard...</span>
+              </div>
+            </Card>
+          </div>
+        )}
       </div>
     </POSLayout>
   );

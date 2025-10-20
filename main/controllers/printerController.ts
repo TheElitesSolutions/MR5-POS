@@ -217,9 +217,10 @@ export class PrinterController extends BaseController {
         // Mark default printer
         if (printers.length > 0) {
           try {
+            // FIX: Increased timeout from 3s to 8s for older hardware (WMI queries take 5-8s on old systems)
             const { stdout } = await execAsync(
               'powershell -command "Get-WmiObject -Query \\"SELECT * FROM Win32_Printer WHERE Default=TRUE\\" | Select-Object -ExpandProperty Name"',
-              { windowsHide: true, timeout: 3000 }
+              { windowsHide: true, timeout: 8000 }
             );
             const defaultPrinterName = stdout.trim();
 

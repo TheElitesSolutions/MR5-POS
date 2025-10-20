@@ -220,9 +220,9 @@ export default function StockManagementPage() {
 
   return (
     <POSLayout>
-      {/* Fixed Header Section */}
-      <div className='border-b border-gray-200 dark:border-gray-700'>
-        <div className='space-y-3 p-3 sm:p-4'>
+      <div className='space-y-4 p-6'>
+        {/* Header Section */}
+        <div className='border-b pb-4 space-y-4'>
           {/* Header */}
           <StockHeader
             onAddItem={handleAddItem}
@@ -253,12 +253,9 @@ export default function StockManagementPage() {
             resultCount={filteredItems.length}
           />
         </div>
-      </div>
 
-      {/* Scrollable Content Area */}
-      <div className='flex-1 overflow-hidden'>
-        <div className='h-full overflow-y-auto'>
-          <div className='space-y-3 p-3 sm:p-4'>
+        {/* Content Area */}
+        <div className='space-y-4'>
             {/* Category Overview - Only show when viewing all items and no specific category filter */}
             {filters.categoryFilter === 'all' && activeTab === 'all' && (
               <CategoryOverview
@@ -343,13 +340,12 @@ export default function StockManagementPage() {
                 )}
               </TabsContent>
             </Tabs>
-          </div>
         </div>
       </div>
 
       {/* Add/Edit Item Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className='max-h-[90vh] max-w-2xl overflow-y-auto'>
+        <DialogContent className='max-h-[90dvh] max-w-2xl overflow-y-auto'>
           <DialogHeader>
             <DialogTitle>
               {editingItem ? 'Edit Stock Item' : 'Add New Stock Item'}

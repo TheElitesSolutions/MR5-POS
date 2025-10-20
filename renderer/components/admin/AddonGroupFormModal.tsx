@@ -158,7 +158,7 @@ export function AddonGroupFormModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className='max-h-[90vh] max-w-2xl overflow-y-auto'>
+      <DialogContent className='max-h-[90dvh] max-w-2xl overflow-y-auto'>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>

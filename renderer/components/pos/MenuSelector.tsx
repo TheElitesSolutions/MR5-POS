@@ -334,7 +334,7 @@ const MenuSelector = ({ onClose }: MenuSelectorProps) => {
 
   return (
     <Dialog open={true} onOpenChange={onClose}>
-      <DialogContent className='max-h-[90vh] max-w-4xl overflow-hidden'>
+      <DialogContent className='max-h-[90dvh] max-w-4xl overflow-hidden'>
         <DialogHeader>
           <DialogTitle>Add Items to Order</DialogTitle>
         </DialogHeader>

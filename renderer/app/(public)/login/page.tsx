@@ -158,23 +158,23 @@ export default function LoginPage() {
   };
 
   return (
-    <div className='flex min-h-screen items-center justify-center bg-background px-4 py-12 sm:px-6 lg:px-8'>
+    <div className='flex min-h-screen items-center justify-center bg-background px-6 py-16'>
       <div className='w-full max-w-md space-y-8'>
         <div className='text-center'>
-          <div className='mb-6 flex justify-center'>
+          <div className='mb-8 flex justify-center'>
             <Image
               src='/the-elites-logo.png'
               alt='The Elites Logo'
               width={200}
               height={200}
-              className='h-auto w-48'
+              className='h-auto w-32 sm:w-40 md:w-48'
               priority
             />
           </div>
-          <h1 className='mb-2 text-3xl font-bold text-gray-900'>
+          <h1 className='mb-3 text-3xl font-bold text-gray-900'>
             The Elites POS
           </h1>
-          <p className='text-gray-600'>Restaurant Management System</p>
+          <p className='text-muted-foreground'>Restaurant Management System</p>
         </div>
 
         <Card>
@@ -185,43 +185,43 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className='space-y-4'>
-              <div className='space-y-2'>
+            <form onSubmit={handleSubmit(onSubmit)} className='space-y-6'>
+              <div className='space-y-3'>
                 <Label htmlFor='username'>Username</Label>
                 <Input
                   id='username'
                   type='text'
                   placeholder='Enter your username'
                   {...register('username')}
-                  className={errors.username ? 'border-red-500' : ''}
+                  className={errors.username ? 'border-destructive' : ''}
                   disabled={isSubmitting}
                 />
                 {errors.username && (
-                  <p className='text-sm text-red-600'>
+                  <p className='text-sm text-destructive'>
                     {errors.username.message}
                   </p>
                 )}
               </div>
 
-              <div className='space-y-2'>
+              <div className='space-y-3'>
                 <Label htmlFor='password'>Password</Label>
                 <Input
                   id='password'
                   type='password'
                   placeholder='Enter your password'
                   {...register('password')}
-                  className={errors.password ? 'border-red-500' : ''}
+                  className={errors.password ? 'border-destructive' : ''}
                   disabled={isSubmitting}
                 />
                 {errors.password && (
-                  <p className='text-sm text-red-600'>
+                  <p className='text-sm text-destructive'>
                     {errors.password.message}
                   </p>
                 )}
               </div>
 
               {error && (
-                <div className='rounded border border-red-200 bg-red-50 px-4 py-3 text-red-700'>
+                <div className='rounded border border-destructive/20 bg-destructive/10 px-4 py-3 text-destructive'>
                   {error}
                 </div>
               )}
@@ -235,7 +235,7 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            <div className='mt-4 space-y-2'>
+            <div className='mt-6 space-y-3'>
               <Button
                 type='button'
                 variant='outline'
@@ -250,7 +250,7 @@ export default function LoginPage() {
                 <Button
                   type='button'
                   variant='default'
-                  className='w-full bg-green-600 hover:bg-green-700'
+                  className='w-full bg-success hover:bg-success/90'
                   onClick={createAdminUser}
                   disabled={isSubmitting}
                 >
@@ -260,12 +260,12 @@ export default function LoginPage() {
             </div>
 
             {/* Commented out until register page is implemented
-            <div className='mt-6 text-center'>
-              <p className='text-sm text-gray-600'>
+            <div className='mt-8 text-center'>
+              <p className='text-sm text-muted-foreground'>
                 Don&apos;t have an account?{' '}
                 <Link
                   href='/register'
-                  className='font-medium text-blue-600 hover:text-blue-500'
+                  className='font-medium text-primary hover:text-primary/90'
                 >
                   Register here
                 </Link>
@@ -273,7 +273,7 @@ export default function LoginPage() {
             </div>
             */}
 
-            <div className='mt-4 text-center text-xs text-gray-500'>
+            <div className='mt-6 text-center text-xs text-muted-foreground'>
               <p>🔒 Secure login with enhanced protection</p>
               <p>Rate limited for security</p>
             </div>

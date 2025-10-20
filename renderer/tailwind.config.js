@@ -36,6 +36,50 @@ module.exports = {
             },
         },
         extend: {
+            // DESIGN SYSTEM: 8-Point Grid Spacing
+            spacing: {
+                // Standard 8-point grid values (8, 16, 24, 32, 40, 48, 64, 80, 96, 128)
+                // These override default Tailwind spacing for consistency
+                '2': '8px',    // 8pt base
+                '3': '16px',   // was 12px, now aligned to 8pt grid
+                '4': '16px',   // keep at 16px (2 * 8pt)
+                '5': '24px',   // was 20px, now 3 * 8pt
+                '6': '24px',   // keep at 24px (3 * 8pt)
+                '8': '32px',   // keep at 32px (4 * 8pt)
+                '10': '40px',  // keep at 40px (5 * 8pt)
+                '12': '48px',  // keep at 48px (6 * 8pt)
+                '16': '64px',  // keep at 64px (8 * 8pt)
+                '20': '80px',  // keep at 80px (10 * 8pt)
+                '24': '96px',  // keep at 96px (12 * 8pt)
+                '32': '128px', // keep at 128px (16 * 8pt)
+            },
+            // DESIGN SYSTEM: Typography Scale (Major Third - 1.250 ratio)
+            fontSize: {
+                'xs': ['12px', { lineHeight: '16px' }],     // Caption, metadata
+                'sm': ['14px', { lineHeight: '20px' }],     // Labels, small text
+                'base': ['16px', { lineHeight: '24px' }],   // Body default
+                'lg': ['18px', { lineHeight: '28px' }],     // Subheadings
+                'xl': ['20px', { lineHeight: '28px' }],     // H4
+                '2xl': ['24px', { lineHeight: '32px' }],    // H3
+                '3xl': ['30px', { lineHeight: '36px' }],    // H2
+                '4xl': ['36px', { lineHeight: '40px' }],    // H1
+            },
+            // DESIGN SYSTEM: Max-Width Tokens
+            maxWidth: {
+                'form': '600px',      // Form containers (was max-w-md 448px)
+                'prose': '768px',     // Text content
+                'page': '1280px',     // Page containers
+                'dialog-sm': '400px', // Small dialogs
+                'dialog-md': '600px', // Medium dialogs
+                'dialog-lg': '800px', // Large dialogs
+            },
+            // DESIGN SYSTEM: Component Heights (8pt aligned)
+            height: {
+                'input': '40px',      // Form inputs (5 * 8pt)
+                'button-sm': '32px',  // Small buttons (4 * 8pt)
+                'button': '40px',     // Default buttons (5 * 8pt)
+                'button-lg': '48px',  // Large buttons (6 * 8pt)
+            },
             colors: {
                 border: "hsl(var(--border))",
                 input: "hsl(var(--input))",

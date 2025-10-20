@@ -321,9 +321,22 @@ export class OptimizedPrintingService {
         ];
       }
 
-      // DIAGNOSTIC: Check if printData is empty or has issues
+      // FIX: Enhanced validation with error notification
       if (!printData || printData.length === 0) {
         this.logger.error('❌ CRITICAL: printData array is empty!');
+
+        // Notify UI of the error
+        const { BrowserWindow } = require('electron');
+        const mainWindow = BrowserWindow.getAllWindows()[0];
+        if (mainWindow) {
+          mainWindow.webContents.send('print-error', {
+            jobId: (job as any).id,
+            orderId: (orderData.order as any).id || (orderData.order as any).orderNumber,
+            error: 'Invoice generation failed - no print data generated. Please check order items and try again.',
+            timestamp: new Date().toISOString()
+          });
+        }
+
         return false;
       }
       
@@ -351,6 +364,7 @@ export class OptimizedPrintingService {
       );
 
       // Use ZERO MARGIN print options to eliminate paper waste
+      // FIX: Added DPI configuration for Windows 10 thermal printer compatibility
       const printOptions = {
         preview: false,
         margin: '0 0 0 0', // ZERO MARGINS = NO WASTED PAPER!
@@ -358,7 +372,19 @@ export class OptimizedPrintingService {
         printerName: printer.name,
         timeOutPerLine: 3000,
         silent: true,
-        pageSize: '80mm',
+
+        // FIX: Explicit DPI settings for thermal printers (prevents blank paper on Windows 10)
+        dpi: {
+          horizontal: 203,  // Standard thermal printer DPI
+          vertical: 203
+        },
+
+        // FIX: Page size in microns for precise Windows 10 rendering
+        pageSize: {
+          width: 80000,   // 80mm in microns
+          height: 200000  // Auto-height
+        },
+
         width: '100%',
         autoCut: false,
         paperCut: false,
@@ -555,17 +581,25 @@ export class OptimizedPrintingService {
       return invoiceContent;
     } catch (error) {
       this.logger.error('❌ Error generating addon-enhanced invoice:', error);
-      
-      // Return a basic fallback invoice in case of error
-      return `
-        <div style="font-family: Arial, sans-serif; width: 100%; text-align: center;">
-          <h1>INVOICE</h1>
-          <p>Order #: ${order.orderNumber || order.id}</p>
-          <p>Date: ${new Date().toLocaleString()}</p>
-          <p>Total: $${(order as any).totalAmount || order.total}</p>
-          <p>Error generating full invoice. Please try again.</p>
-        </div>
-      `;
+
+      // FIX: Return valid JSON array instead of HTML string (prevents JSON.parse failures)
+      return JSON.stringify([
+        {
+          type: 'text',
+          value: `<div style="font-family: Arial, sans-serif; width: 100%; text-align: center; padding: 20px;">
+            <h1 style="font-size: 24px; margin-bottom: 20px;">INVOICE</h1>
+            <p style="font-size: 14px;">Order #: ${order.orderNumber || order.id}</p>
+            <p style="font-size: 14px;">Date: ${new Date().toLocaleString()}</p>
+            <p style="font-size: 16px; font-weight: bold;">Total: $${(order as any).totalAmount || order.total}</p>
+            <p style="font-size: 12px; color: #ff0000; margin-top: 20px;">Error generating full invoice. Please try again.</p>
+          </div>`,
+          style: {
+            fontSize: '14px',
+            textAlign: 'center' as const,
+            fontFamily: 'Arial, sans-serif'
+          }
+        }
+      ], null, 0);
     }
   }
 

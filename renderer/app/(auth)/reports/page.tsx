@@ -16,9 +16,9 @@ function ReportsPage() {
 
   return (
     <POSLayout>
-      <div className='space-y-6 p-6'>
+      <div className='space-y-4 p-6'>
         {/* Header Section */}
-        <div className='flex flex-col space-y-4'>
+        <div className='flex flex-col space-y-3'>
           <div>
             <h1 className='text-3xl font-bold text-gray-900 dark:text-white'>
               Reports
@@ -36,7 +36,7 @@ function ReportsPage() {
         <Tabs
           value={activeTab}
           onValueChange={setActiveTab}
-          className='space-y-6'
+          className='space-y-4'
         >
           <TabsList className='grid w-full max-w-3xl grid-cols-3'>
             <TabsTrigger

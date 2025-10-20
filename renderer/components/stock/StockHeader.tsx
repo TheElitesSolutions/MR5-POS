@@ -14,10 +14,10 @@ const StockHeader = memo(
     return (
       <div className='flex items-center justify-between'>
         <div>
-          <h1 className='text-xl font-bold text-gray-900 dark:text-white'>
+          <h1 className='text-lg font-bold text-gray-900 dark:text-white'>
             Stock Management
           </h1>
-          <p className='text-sm text-gray-600 dark:text-gray-400'>
+          <p className='text-xs text-gray-600 dark:text-gray-400'>
             Monitor inventory levels, track usage, and manage stock efficiently
             through automated POS integration.
           </p>

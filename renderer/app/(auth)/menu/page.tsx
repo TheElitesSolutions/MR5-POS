@@ -231,22 +231,21 @@ export default function MenuManagementPage() {
 
   return (
     <POSLayout>
-      {/* Fixed Header Section */}
-      <div className='border-b border-gray-200 dark:border-gray-700'>
-        <div className='space-y-3 p-3 sm:p-4'>
-          {/* Header - Mobile Responsive */}
-          <div className='flex items-center justify-between'>
+      <div className='space-y-6 p-6'>
+        {/* Header */}
+        <div className='border-b pb-4'>
+          <div className='flex items-center justify-between mb-4'>
             <div>
-              <h1 className='text-xl font-bold text-gray-900 dark:text-white'>
+              <h1 className='text-lg font-bold text-gray-900 dark:text-white'>
                 Menu Management
               </h1>
-              <p className='text-sm text-gray-600 dark:text-gray-400'>
+              <p className='text-xs text-gray-600 dark:text-gray-400'>
                 Organize your menu by categories and track ingredient costs for
                 profit optimization.
               </p>
             </div>
 
-            <div className='flex flex-col items-stretch space-y-2 sm:flex-row sm:items-center sm:space-x-3 sm:space-y-0'>
+            <div className='flex flex-col items-stretch space-y-3 sm:flex-row sm:items-center sm:space-x-3 sm:space-y-0'>
               {/* View Mode Toggle - Mobile Friendly */}
               <div className='flex items-center rounded-lg border border-gray-200 bg-white p-1 dark:border-gray-700 dark:bg-gray-800'>
                 <Button
@@ -314,7 +313,7 @@ export default function MenuManagementPage() {
                     <span className='sm:hidden'>Add Item</span>
                   </Button>
                 </DialogTrigger>
-                <DialogContent className='mx-4 max-h-[90vh] max-w-4xl overflow-y-auto'>
+                <DialogContent className='mx-4 max-h-[90dvh] max-w-4xl overflow-y-auto'>
                   <DialogHeader>
                     <DialogTitle>
                       {editingItem ? 'Edit Menu Item' : 'Add New Menu Item'}
@@ -402,13 +401,13 @@ export default function MenuManagementPage() {
           {error && (
             <div className='rounded-lg border border-red-200 bg-red-50 p-4 dark:border-red-800 dark:bg-red-900/20'>
               <div className='flex items-center justify-between'>
-                <div className='flex items-center space-x-2'>
+                <div className='flex items-center space-x-3'>
                   <AlertCircle className='h-5 w-5 text-red-500' />
                   <span className='font-medium text-red-700 dark:text-red-400'>
                     Error loading data
                   </span>
                 </div>
-                <div className='flex space-x-2'>
+                <div className='flex space-x-3'>
                   <Button
                     variant='outline'
                     size='sm'
@@ -425,16 +424,13 @@ export default function MenuManagementPage() {
                   </Button>
                 </div>
               </div>
-              <p className='mt-1 text-red-600 dark:text-red-300'>{error}</p>
+              <p className='mt-3 text-red-600 dark:text-red-300'>{error}</p>
             </div>
           )}
         </div>
-      </div>
 
-      {/* Scrollable Content Area */}
-      <div className='flex-1 overflow-hidden'>
-        <div className='h-full overflow-y-auto'>
-          <div className='space-y-3 p-3 sm:p-4'>
+        {/* Content Area */}
+        <div className='space-y-4'>
             {/* Loading State */}
             {isLoading ? (
               <div className='flex flex-col items-center justify-center py-20'>
@@ -544,7 +540,6 @@ export default function MenuManagementPage() {
             )}
 
             {/* Loading state is already handled above */}
-          </div>
         </div>
       </div>
     </POSLayout>
