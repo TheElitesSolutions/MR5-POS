@@ -2,7 +2,7 @@
   "private": true,
   "name": "my-nextron-app",
   "description": "MR5 POS - Point of Sale System",
-  "version": "1.0.2",
+  "version": "2.1.0",
   "author": "TheElites Solutions",
   "main": "app/background.js",
   "repository": {
