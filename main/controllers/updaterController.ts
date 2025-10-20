@@ -112,6 +112,21 @@ export class UpdaterController extends BaseController {
       autoUpdater.allowDowngrade = false; // Don't allow downgrades
       autoUpdater.allowPrerelease = false; // Only stable releases
 
+      // For private repositories, set GitHub token if available
+      // Token can be set via environment variable or hardcoded (not recommended for production)
+      if (process.env.GH_TOKEN) {
+        autoUpdater.setFeedURL({
+          provider: 'github',
+          owner: 'TheElitesSolutions',
+          repo: 'MR5-POS',
+          private: true,
+          token: process.env.GH_TOKEN,
+        });
+        logInfo('Auto-updater configured with GitHub token for private repository');
+      } else {
+        logInfo('Auto-updater configured for public repository (no GH_TOKEN found)');
+      }
+
       // Configure logging
       autoUpdater.logger = {
         info: message => logInfo(message, 'AutoUpdater'),
