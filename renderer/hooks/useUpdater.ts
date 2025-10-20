@@ -144,7 +144,9 @@ export function useUpdater() {
   useIpcEvent(
     UPDATER_EVENTS.ERROR as any,
     (_, error: any) => {
+      console.error('[useUpdater] Error event received:', error);
       const errorMessage = error?.message || (typeof error === 'string' ? error : 'An unknown error occurred');
+      console.error('[useUpdater] Processed error message:', errorMessage);
       setStatus(prev => ({
         ...prev,
         checking: false,
@@ -190,15 +192,17 @@ export function useUpdater() {
   // Check for updates
   const checkForUpdates = useCallback(async () => {
     if (!isElectron()) {
-      console.warn('Update check not available - not in Electron environment');
+      console.warn('[useUpdater] Update check not available - not in Electron environment');
       return { success: false, error: 'Not in Electron environment' };
     }
 
     try {
+      console.log('[useUpdater] Invoking check for updates...');
       const response = await checkForUpdatesInvoke();
+      console.log('[useUpdater] Check for updates response:', response);
       return response;
     } catch (error) {
-      console.error('Failed to check for updates:', error);
+      console.error('[useUpdater] Failed to check for updates:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to check for updates',
