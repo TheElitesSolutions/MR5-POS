@@ -143,12 +143,13 @@ export function useUpdater() {
 
   useIpcEvent(
     UPDATER_EVENTS.ERROR as any,
-    (_, error: { message: string; stack?: string }) => {
+    (_, error: any) => {
+      const errorMessage = error?.message || (typeof error === 'string' ? error : 'An unknown error occurred');
       setStatus(prev => ({
         ...prev,
         checking: false,
         downloading: false,
-        error: error.message,
+        error: errorMessage,
       }));
     },
     []
@@ -162,15 +163,29 @@ export function useUpdater() {
       try {
         const response = await getUpdateStatusInvoke();
         if (response && response.success && response.data) {
-          setStatus(response.data as UpdateStatus);
+          // Safely extract status data with defaults
+          const data = response.data as any;
+          setStatus({
+            checking: data.checking ?? false,
+            available: data.available ?? false,
+            downloading: data.downloading ?? false,
+            downloaded: data.downloaded ?? false,
+            error: data.error ?? null,
+            updateInfo: data.updateInfo ?? null,
+            progress: data.progress ?? null,
+            isDev: data.getIsDev ? data.getIsDev() : (data.isDev ?? false),
+            autoUpdateEnabled: data.autoUpdateEnabled ?? false,
+          });
         }
       } catch (error) {
         console.error('Failed to get update status:', error);
+        // Set safe defaults on error
+        setStatus(prev => ({ ...prev, error: 'Failed to load update status' }));
       }
     };
 
     loadStatus();
-  }, []);
+  }, [getUpdateStatusInvoke]);
 
   // Check for updates
   const checkForUpdates = useCallback(async () => {

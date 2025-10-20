@@ -40,7 +40,7 @@ export default function UpdateSettings() {
 
   const handleCheckForUpdates = async () => {
     const result = await checkForUpdates();
-    if (result.success) {
+    if (result && result.success) {
       if (!status.available) {
         toast({
           title: 'No updates available',
@@ -50,7 +50,7 @@ export default function UpdateSettings() {
     } else {
       toast({
         title: 'Update check failed',
-        description: result.error || 'Failed to check for updates',
+        description: result?.error || 'Failed to check for updates',
         variant: 'destructive',
       });
     }
@@ -58,7 +58,7 @@ export default function UpdateSettings() {
 
   const handleDownloadUpdate = async () => {
     const result = await downloadUpdate();
-    if (result.success) {
+    if (result && result.success) {
       toast({
         title: 'Download started',
         description: 'Downloading update... A backup will be created automatically.',
@@ -66,7 +66,7 @@ export default function UpdateSettings() {
     } else {
       toast({
         title: 'Download failed',
-        description: result.error || 'Failed to start download',
+        description: result?.error || 'Failed to start download',
         variant: 'destructive',
       });
     }
@@ -74,10 +74,10 @@ export default function UpdateSettings() {
 
   const handleInstallUpdate = async () => {
     const result = await installUpdate();
-    if (!result.success) {
+    if (!result || !result.success) {
       toast({
         title: 'Installation failed',
-        description: result.error || 'Failed to install update',
+        description: result?.error || 'Failed to install update',
         variant: 'destructive',
       });
     }
@@ -86,7 +86,7 @@ export default function UpdateSettings() {
 
   const handleCancelUpdate = async () => {
     const result = await cancelUpdate();
-    if (result.success) {
+    if (result && result.success) {
       toast({
         title: 'Update cancelled',
         description: 'The update has been cancelled.',
@@ -94,7 +94,7 @@ export default function UpdateSettings() {
     } else {
       toast({
         title: 'Cancellation failed',
-        description: result.error || 'Failed to cancel update',
+        description: result?.error || 'Failed to cancel update',
         variant: 'destructive',
       });
     }
@@ -104,7 +104,7 @@ export default function UpdateSettings() {
     if (!status.updateInfo?.version) return;
 
     const result = await skipVersion(status.updateInfo.version);
-    if (result.success) {
+    if (result && result.success) {
       toast({
         title: 'Version skipped',
         description: `Version ${status.updateInfo.version} will be ignored.`,
@@ -112,7 +112,7 @@ export default function UpdateSettings() {
     } else {
       toast({
         title: 'Skip failed',
-        description: result.error || 'Failed to skip version',
+        description: result?.error || 'Failed to skip version',
         variant: 'destructive',
       });
     }
