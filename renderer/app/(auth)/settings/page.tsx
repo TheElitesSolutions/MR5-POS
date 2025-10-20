@@ -4,10 +4,11 @@ import POSLayout from '@/components/pos/POSLayout';
 import PrinterSettings from '@/components/settings/PrinterSettings';
 import UserProfileSettings from '@/components/settings/UserProfileSettings';
 import DatabaseSettings from '@/components/settings/DatabaseSettings';
+import UpdateSettings from '@/components/settings/UpdateSettings';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Role } from '@/types';
-import { Database, Printer, Settings as SettingsIcon, User } from 'lucide-react';
+import { Database, Download, Printer, Settings as SettingsIcon, User } from 'lucide-react';
 import { useState } from 'react';
 
 function SettingsContent() {
@@ -25,7 +26,7 @@ function SettingsContent() {
             </h1>
           </div>
           <p className='text-sm text-gray-600 dark:text-gray-400 sm:text-base'>
-            Manage your account settings and printer configurations
+            Manage your account settings, printer configurations, and updates
           </p>
         </div>
 
@@ -35,7 +36,7 @@ function SettingsContent() {
           onValueChange={setActiveTab}
           className='space-y-6'
         >
-          <TabsList className='grid w-full grid-cols-3'>
+          <TabsList className='grid w-full grid-cols-4'>
             <TabsTrigger
               value='profile'
               className='flex items-center space-x-2'
@@ -56,6 +57,13 @@ function SettingsContent() {
             >
               <Database className='h-4 w-4' />
               <span>Database</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value='updates'
+              className='flex items-center space-x-2'
+            >
+              <Download className='h-4 w-4' />
+              <span>Updates</span>
             </TabsTrigger>
           </TabsList>
 
@@ -97,6 +105,20 @@ function SettingsContent() {
               </CardHeader>
               <CardContent>
                 <DatabaseSettings />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value='updates'>
+            <Card>
+              <CardHeader>
+                <CardTitle className='flex items-center space-x-2'>
+                  <Download className='h-5 w-5' />
+                  <span>Application Updates</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <UpdateSettings />
               </CardContent>
             </Card>
           </TabsContent>
