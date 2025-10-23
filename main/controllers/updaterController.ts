@@ -107,7 +107,7 @@ export class UpdaterController extends BaseController {
 
     try {
       // Configure auto-updater
-      autoUpdater.autoDownload = false; // Manual download control
+      autoUpdater.autoDownload = true; // Automatically download updates in background
       autoUpdater.autoInstallOnAppQuit = true; // Auto install when app quits
       autoUpdater.allowDowngrade = false; // Don't allow downgrades
       autoUpdater.allowPrerelease = false; // Only stable releases

@@ -52,7 +52,7 @@ publish:
   provider: github
   owner: TheElitesSolutions
   repo: MR5-POS
-  private: true
+  private: false  # Set to false for easier auto-update distribution (no token required)
   releaseType: release  # Only publish stable releases (not drafts or prereleases)
 # Code signing configuration (to be added when certificates are available)
 # win:
