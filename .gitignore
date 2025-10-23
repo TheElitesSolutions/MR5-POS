@@ -38,6 +38,7 @@ Thumbs.db
 !.vscode/launch.json
 !.vscode/extensions.json
 .cursor
+.claude
 
 # database files (development)
 *.db
@@ -45,3 +46,5 @@ Thumbs.db
 *.db-shm
 *.db-wal
 .serena/
+
+

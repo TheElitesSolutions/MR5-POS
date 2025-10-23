@@ -57,6 +57,7 @@ import { ensureDefaultAdminExists } from './utils/create-default-admin';
 import { getUpdateSafety } from './utils/updateSafety';
 import { getUpdaterController } from './controllers/updaterController';
 import { logInfo, logError } from './error-handler';
+import { enhancedLogger, LogCategory } from './utils/enhanced-logger';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -231,6 +232,118 @@ let startupManager: StartupManagerNextron | null = null;
     await mainWindow.loadURL(`http://localhost:${port}`);
     mainWindow.webContents.openDevTools();
   }
+
+  // Prevent closing app without logging out
+  let isForceClosing = false;
+
+  mainWindow.on('close', async (event) => {
+    if (isForceClosing) {
+      // Allow close if force closing
+      return;
+    }
+
+    // Prevent default close
+    event.preventDefault();
+
+    try {
+      // Check if user is authenticated by reading localStorage
+      const result = await mainWindow.webContents.executeJavaScript(`
+        (function() {
+          try {
+            const authStorage = localStorage.getItem('auth-storage');
+            if (authStorage) {
+              const parsed = JSON.parse(authStorage);
+              return {
+                isAuthenticated: parsed.state?.isAuthenticated || false,
+                user: parsed.state?.user?.username || 'Unknown'
+              };
+            }
+            return { isAuthenticated: false, user: null };
+          } catch (e) {
+            return { isAuthenticated: false, user: null };
+          }
+        })()
+      `);
+
+      if (result.isAuthenticated) {
+        // User is still logged in - show dialog
+        const response = await dialog.showMessageBox(mainWindow, {
+          type: 'warning',
+          title: 'Logout Required',
+          message: 'You are still logged in',
+          detail: `User "${result.user}" is still authenticated. Please logout before closing the app, or click "Force Quit" to logout and close.`,
+          buttons: ['Cancel', 'Force Quit & Logout'],
+          defaultId: 0,
+          cancelId: 0
+        });
+
+        if (response.response === 1) {
+          // Force Quit & Logout selected
+          enhancedLogger.info(
+            'Force quit requested - clearing authentication and closing',
+            LogCategory.SECURITY,
+            'Main',
+            { user: result.user, action: 'force-quit' }
+          );
+
+          // Clear localStorage
+          await mainWindow.webContents.executeJavaScript(`
+            localStorage.removeItem('auth-storage');
+          `);
+
+          enhancedLogger.info(
+            'Authentication cleared - closing application',
+            LogCategory.SECURITY,
+            'Main',
+            { user: result.user }
+          );
+
+          // Reset crash count before closing (this is a normal close, not a crash)
+          await getUpdateSafety().recordSuccessfulStartup();
+
+          // Now close for real - use destroy to avoid re-triggering close event
+          isForceClosing = true;
+          mainWindow.destroy();
+        } else {
+          // User cancelled - don't close
+          enhancedLogger.info(
+            'Close cancelled - user still logged in',
+            LogCategory.SECURITY,
+            'Main',
+            { user: result.user }
+          );
+        }
+      } else {
+        // Not authenticated - allow close - use destroy to avoid re-triggering close event
+        enhancedLogger.info(
+          'Closing app - user not authenticated',
+          LogCategory.SECURITY,
+          'Main'
+        );
+
+        // Reset crash count before closing (this is a normal close, not a crash)
+        await getUpdateSafety().recordSuccessfulStartup();
+
+        isForceClosing = true;
+        mainWindow.destroy();
+      }
+    } catch (error) {
+      // Error checking auth - allow close to prevent app being stuck
+      enhancedLogger.error(
+        'Error checking authentication status - allowing close',
+        LogCategory.SECURITY,
+        'Main',
+        { error: (error as Error).message },
+        error as Error
+      );
+
+      // Reset crash count before closing (this is a normal close, not a crash)
+      await getUpdateSafety().recordSuccessfulStartup();
+
+      isForceClosing = true;
+      mainWindow.destroy();
+    }
+  });
 
   // Prevent window from being garbage collected
   mainWindow.on('closed', () => {
