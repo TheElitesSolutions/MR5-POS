@@ -175,20 +175,6 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            {/* Commented out until register page is implemented
-            <div className='mt-6 text-center sm:mt-8'>
-              <p className='text-xs text-muted-foreground sm:text-sm'>
-                Don&apos;t have an account?{' '}
-                <Link
-                  href='/register'
-                  className='font-medium text-primary hover:text-primary/90'
-                >
-                  Register here
-                </Link>
-              </p>
-            </div>
-            */}
-
             {/* Security Notice */}
             <div className='mt-4 space-y-1 text-center text-xs text-muted-foreground sm:mt-6'>
               <p>🔒 Secure login with enhanced protection</p>
