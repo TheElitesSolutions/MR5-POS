@@ -98,7 +98,7 @@ export class MenuService {
           items: uiItems,
           total: response.data?.total || items.length || 0,
           page: response.data?.page || 1,
-          pageSize: response.data?.pageSize || 10,
+          pageSize: response.data?.pageSize || 12,
         };
         console.log('🍽️ MenuService: Processed result:', result);
         return result;
@@ -250,7 +250,7 @@ export class MenuService {
           items: uiItems,
           total: response.data?.total || 0,
           page: response.data?.page || 1,
-          pageSize: response.data?.pageSize || 10,
+          pageSize: response.data?.pageSize || 12,
         };
       },
       {
@@ -438,7 +438,7 @@ export class MenuService {
   private generateMenuItemsCacheKey(params: MenuQueryParams): string {
     const normalizedParams = {
       page: params.page || 1,
-      pageSize: params.pageSize || 10,
+      pageSize: params.pageSize || 12,
       search: params.search || '',
       category: params.category || '',
       availableOnly: params.availableOnly || false,

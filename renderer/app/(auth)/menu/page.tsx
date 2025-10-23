@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import React, { useEffect, useState, useRef } from 'react';
+import { menuLogger } from '@/utils/logger';
 
 export default function MenuManagementPage() {
   // Clear any stale menu cache on page load
@@ -118,7 +119,7 @@ export default function MenuManagementPage() {
       console.log('MenuManagementPage: Force refreshing menu data');
       _internalFetchMenuItems({
         page: 1,
-        pageSize: 10,
+        pageSize: 12,
         search: '',
         category: '',
       });
@@ -165,15 +166,16 @@ export default function MenuManagementPage() {
     );
   }
 
-  // Filter menu items by selected category when in items view
-  const filteredMenuItems = selectedCategory
-    ? (rendererMenuItems || []).filter(item => item.category === selectedCategory)
-    : rendererMenuItems || [];
+  // FIX: Don't filter on client side - store already handles category filtering via backend
+  // The store's setPaginationCategory triggers a backend query with category filter
+  // Double-filtering was causing only 2-3 items to show per page from paginated results
+  const filteredMenuItems = rendererMenuItems || [];
 
   // Debug: Menu items filtering by category
-  console.log('📋 Menu page filtering:', {
+  menuLogger.debug('Menu page filtering', {
     totalItems: rendererMenuItems?.length || 0,
     selectedCategory,
+    paginationCategory: pagination.category,
     filteredCount: filteredMenuItems?.length || 0,
     allCategories: rendererMenuItems?.map(item => ({
       name: item.name,
@@ -225,7 +227,18 @@ export default function MenuManagementPage() {
 
   const handleCategorySelect = (categoryName: string) => {
     setSelectedCategory(categoryName);
-    setPaginationCategory(categoryName); // Filter by category
+
+    // FIX: Send categoryId instead of category name for optimal backend filtering
+    // Backend can filter by ID directly (indexed, faster) without looking up name
+    const category = categories.find((c: any) => c.name === categoryName);
+
+    if (category && (category as any).id) {
+      setPaginationCategory((category as any).id); // Send category ID for backend filter
+    } else {
+      // Fallback to name if category object not found
+      setPaginationCategory(categoryName);
+    }
+
     setViewMode('items');
   };
 
@@ -378,18 +391,28 @@ export default function MenuManagementPage() {
                 <select
                   value={selectedCategory}
                   onChange={e => {
-                    const newCategory = e.target.value;
-                    setSelectedCategory(newCategory);
-                    setPaginationCategory(newCategory);
+                    const newCategoryName = e.target.value;
+                    setSelectedCategory(newCategoryName);
+
+                    // FIX: Send categoryId instead of category name (same logic as handleCategorySelect)
+                    // Backend filters by categoryId for optimal performance
+                    const category = categories.find((c: any) => c.name === newCategoryName);
+
+                    if (category && (category as any).id) {
+                      setPaginationCategory((category as any).id); // Send category ID
+                    } else {
+                      // Fallback to name if category object not found (or clear filter)
+                      setPaginationCategory(newCategoryName);
+                    }
                   }}
                   className='touch-manipulation rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white'
                 >
                   <option value=''>All Categories</option>
                   {(categories || [])
-                    .filter(category => category && category.trim() !== '')
-                    .map(category => (
-                      <option key={category} value={category}>
-                        {category}
+                    .filter((category: any) => category && typeof category === 'object' && category.name && category.name.trim() !== '')
+                    .map((category: any) => (
+                      <option key={category.id} value={category.name}>
+                        {category.name}
                       </option>
                     ))}
                 </select>

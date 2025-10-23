@@ -96,7 +96,7 @@ export function useMenuItems(
     items: [],
     total: 0,
     page: 1,
-    pageSize: 10,
+    pageSize: 12,
   });
   const [categories, setCategories] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -107,7 +107,7 @@ export function useMenuItems(
   const stableQueryParams = useMemo(() => {
     return {
       page: queryParams.page || 1,
-      pageSize: queryParams.pageSize || 10,
+      pageSize: queryParams.pageSize || 12,
       search: queryParams.search || '',
       category: queryParams.category || '',
       availableOnly: queryParams.availableOnly || false,
@@ -453,7 +453,7 @@ export function useMenuItemsByCategory(
     items: [],
     total: 0,
     page: 1,
-    pageSize: 10,
+    pageSize: 12,
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -463,7 +463,7 @@ export function useMenuItemsByCategory(
   const stableParams = useMemo(
     () => ({
       page: params.page || 1,
-      pageSize: params.pageSize || 10,
+      pageSize: params.pageSize || 12,
     }),
     [params.page, params.pageSize]
   );
@@ -472,7 +472,7 @@ export function useMenuItemsByCategory(
   const fetchData = useCallback(
     async (isRefresh = false) => {
       if (!enabled || !category) {
-        setData({ items: [], total: 0, page: 1, pageSize: 10 });
+        setData({ items: [], total: 0, page: 1, pageSize: 12 });
         return;
       }
 

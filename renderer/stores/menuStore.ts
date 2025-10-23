@@ -83,7 +83,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
   error: null,
   pagination: {
     page: 1,
-    pageSize: 10,
+    pageSize: 12,
     totalItems: 0,
     totalPages: 0,
     search: '',
@@ -191,7 +191,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
         items: apiMenuItems = [],
         total = 0,
         page = 1,
-        pageSize = 10,
+        pageSize = 12,
       } = response.data || {};
       const totalPages = Math.ceil(total / pageSize);
 
@@ -280,51 +280,62 @@ export const useMenuStore = create<MenuState>((set, get) => ({
         return;
       }
 
-      // Extract category names with null/undefined safety
-      const names = response.data
+      // FIX: Store full category objects with id and name (not just names)
+      // This allows frontend to send categoryId for optimal backend filtering
+      const categoryObjects = response.data
         .filter((c: any) => c !== null && typeof c === 'object')
-        .map((c: any) => c.name)
-        .filter((name: string) =>
-          Boolean(name && typeof name === 'string' && name.trim())
-        );
+        .filter((c: any) => c.id && c.name && typeof c.name === 'string' && c.name.trim())
+        .map((c: any) => ({ id: c.id, name: c.name }));
 
-      // Make sure we have unique category names
-      const uniqueNames = [...new Set(names)];
+      // Make sure we have unique categories (by id)
+      const uniqueCategories = Array.from(
+        new Map(categoryObjects.map(c => [c.id, c])).values()
+      );
 
       // Ensure we're not setting an empty array if we previously had categories
       const { categories: existingCategories } = get();
-      if (uniqueNames.length === 0 && existingCategories.length > 0) {
+      if (uniqueCategories.length === 0 && existingCategories.length > 0) {
         console.warn(
           'Menu Store: Received empty categories from server, keeping existing categories'
         );
         set({ isLoading: false });
       } else {
-        set({ categories: uniqueNames, isLoading: false });
+        set({ categories: uniqueCategories as any, isLoading: false });
         if (process.env.NODE_ENV === 'development') {
           console.log(
             'Menu Store: Fetched categories successfully',
-            uniqueNames
+            uniqueCategories
           );
         }
       }
 
-      // Also extract categories from menu items as a backup
+      // FIX: Backup extraction from menu items if API returned no categories
+      // IMPORTANT: Must preserve object structure {id, name}, not convert to strings
       const { menuItems } = get();
       if (
         Array.isArray(menuItems) &&
         menuItems.length > 0 &&
-        uniqueNames.length === 0
+        uniqueCategories.length === 0  // FIX: was uniqueNames (ReferenceError!)
       ) {
-        const categoriesFromItems = menuItems
+        // Extract unique category objects from menu items
+        const categoryMap = new Map<string, { id: string; name: string }>();
+
+        menuItems
           .filter(item => item && typeof item === 'object')
-          .map(item => item.category)
-          .filter((category: string) =>
-            Boolean(category && typeof category === 'string')
-          )
-          .filter((v, i, a) => a.indexOf(v) === i); // Unique values
+          .forEach(item => {
+            // Each menu item has categoryId and category (name)
+            if (item.categoryId && item.category && typeof item.category === 'string') {
+              categoryMap.set(item.categoryId, {
+                id: item.categoryId,
+                name: item.category
+              });
+            }
+          });
+
+        const categoriesFromItems = Array.from(categoryMap.values());
 
         if (categoriesFromItems.length > 0) {
-          set({ categories: categoriesFromItems });
+          set({ categories: categoriesFromItems as any });
           if (process.env.NODE_ENV === 'development') {
             console.log(
               'Menu Store: Used categories from menu items as fallback',
@@ -1114,7 +1125,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
         // Use explicit parameters to avoid undefined issues
         await get()._internalFetchMenuItems({
           page: pagination.page || 1,
-          pageSize: pagination.pageSize || 10,
+          pageSize: pagination.pageSize || 12,
           search: pagination.search || '',
           category: '', // Reset category filter after deletion
         });

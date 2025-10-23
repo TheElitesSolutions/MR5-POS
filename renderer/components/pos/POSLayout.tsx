@@ -122,7 +122,7 @@ const POSLayout = ({ children }: POSLayoutProps) => {
   };
 
   return (
-    <div className='flex h-screen flex-col bg-background dark:bg-gray-900'>
+    <div className='flex h-full flex-col bg-background dark:bg-gray-900'>
       {/* Header */}
       <header className='border-b border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800'>
         <div className='flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4'>
@@ -288,7 +288,7 @@ const POSLayout = ({ children }: POSLayoutProps) => {
       </div>
 
       {/* Main content */}
-      <main className='flex-1 overflow-auto bg-background dark:bg-gray-900'>
+      <main className='flex-1 overflow-hidden bg-background dark:bg-gray-900'>
         {children}
       </main>
     </div>

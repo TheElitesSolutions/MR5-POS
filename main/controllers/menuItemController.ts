@@ -159,7 +159,7 @@ export class MenuItemController extends BaseController {
 
       // Set defaults for pagination
       const page = params?.page || 1;
-      const pageSize = params?.pageSize || 10;
+      const pageSize = params?.pageSize || 12;
       const offset = (page - 1) * pageSize;
 
       // Convert params to filters for the service
@@ -283,7 +283,7 @@ export class MenuItemController extends BaseController {
 
       // Set defaults for pagination
       const page = params?.page || 1;
-      const pageSize = params?.pageSize || 10;
+      const pageSize = params?.pageSize || 12;
       const offset = (page - 1) * pageSize;
 
       const result = await this.menuItemService.findAvailable();

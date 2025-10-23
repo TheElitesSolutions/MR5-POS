@@ -234,7 +234,7 @@ export default function POSPage() {
   return (
     <StockDataProvider>
       <POSLayout>
-        <div className='flex h-full flex-col'>
+        <div className='flex h-full flex-col overflow-hidden'>
           {/* Order Type Selector */}
           <div className='border-b border-gray-200 p-4 dark:border-gray-700'>
             <SegmentedControl
@@ -260,13 +260,14 @@ export default function POSPage() {
 
           <div className='flex flex-1 overflow-hidden'>
             {/* Main panel - Tables or Menu Flow based on viewMode */}
-            <div className='flex-1 lg:flex-1'>
+            <div className='flex flex-1 flex-col overflow-hidden lg:flex-1'>
               {(() => {
                 const isCurrentlyDineIn = orderType === 'DINE_IN'; // Use direct state value instead of function
 
                 if (viewMode === 'tables' && isCurrentlyDineIn) {
                   return (
-                    <div className='h-full p-3 sm:p-4 lg:p-6'>
+                    <div className='flex h-full flex-col overflow-hidden'>
+                      <div className='flex-none p-3 sm:p-4 lg:p-6 pb-0'>
                       <div className='mb-4 lg:mb-6'>
                         <div className='flex items-center justify-between'>
                           <div>
@@ -300,15 +301,17 @@ export default function POSPage() {
                         </div>
                       </div>
 
+                      </div>
                       {/* Table Grid */}
-                      <div className='h-full overflow-auto'>
+                      <div className='flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 pt-0'>
                         <TableGrid />
                       </div>
                     </div>
                   );
                 } else if (viewMode === 'tables' && !isCurrentlyDineIn) {
                   return (
-                    <div className='h-full p-3 sm:p-4 lg:p-6'>
+                    <div className='flex h-full flex-col overflow-hidden'>
+                      <div className='flex-none p-3 sm:p-4 lg:p-6 pb-0'>
                       <div className='mb-4 lg:mb-6'>
                         <div className='flex items-center justify-between'>
                           <div>
@@ -323,7 +326,8 @@ export default function POSPage() {
                           </div>
                         </div>
                       </div>
-                      <div className='h-full overflow-auto'>
+                      </div>
+                      <div className='flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 pt-0'>
                         <TakeoutOrderGrid />
                       </div>
                     </div>
@@ -331,9 +335,9 @@ export default function POSPage() {
                 } else {
                   return (
                     /* Menu Flow View */
-                    <div className='flex h-full flex-col'>
+                    <div className='flex h-full flex-col overflow-hidden'>
                       {/* Back button for menu flow */}
-                      <div className='border-b border-gray-200 p-4 dark:border-gray-700'>
+                      <div className='flex-none border-b border-gray-200 p-4 dark:border-gray-700'>
                         <Button
                           variant='outline'
                           onClick={switchToTables}
@@ -343,7 +347,7 @@ export default function POSPage() {
                           Back to Tables
                         </Button>
                       </div>
-                      <div className='flex-1'>
+                      <div className='flex-1 overflow-y-auto'>
                         <MenuFlow onItemAdded={handleItemAdded} />
                       </div>
                     </div>

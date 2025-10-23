@@ -303,11 +303,9 @@ export class MenuItemService extends BaseService {
       const where: any = { isActive: true };
 
       if (filters?.category) {
-        // Filter by category name instead of categoryId
-        where.category = {
-          name: filters.category,
-          isActive: true,
-        };
+        // FIX: Filter by categoryId directly (simple field filter, works with prisma-wrapper)
+        // Frontend now sends categoryId instead of category name for optimal performance
+        where.categoryId = filters.category;
       }
 
       const findOptions: any = {

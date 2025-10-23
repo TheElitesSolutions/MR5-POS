@@ -556,7 +556,7 @@ const MenuFlow = ({
 
   return (
     <AddonSelectionProvider>
-      <div className='h-full p-4 lg:p-6'>
+      <div className='p-4 lg:p-6'>
         {currentStep === 'categories' && renderCategories()}
         {currentStep === 'items' && renderItems()}
         {currentStep === 'customize' && renderCustomization()}

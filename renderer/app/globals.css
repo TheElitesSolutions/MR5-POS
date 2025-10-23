@@ -247,6 +247,9 @@
   }
 
   html {
+    /* Viewport height constraint - CRITICAL for fixed layout */
+    height: 100vh;
+    overflow: hidden;
     /* Enhanced color scheme support */
     color-scheme: light dark;
     /* Improved mobile viewport handling */
@@ -257,6 +260,9 @@
   }
 
   body {
+    /* Viewport height constraint - CRITICAL for fixed layout */
+    height: 100vh;
+    overflow: hidden;
     scroll-behavior: smooth;
     background-color: hsl(var(--background)) !important;
     color: hsl(var(--foreground));
@@ -267,6 +273,12 @@
     transition:
       background-color 0.3s ease,
       color 0.3s ease;
+  }
+
+  /* Next.js root container - CRITICAL for layout chain */
+  #__next {
+    height: 100%;
+    overflow: hidden;
   }
 
   /* Better button and input touch targets */

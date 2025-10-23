@@ -77,10 +77,14 @@ const MenuCategoryGrid = ({
   // This was recalculating on EVERY render, now only when categories or menuItems change
   const categoryStats = useMemo(() => {
     return categories.map(category => {
+      // FIX: Extract category name from object or use string directly
+      // Categories can be either string or {id, name} object from getCategories()
+      const categoryName = typeof category === 'string' ? category : category.name;
+
       const categoryItems = menuItems.filter(
-        item => item.category === category && item.isAvailable
+        item => item.category === categoryName && item.isAvailable
       );
-      const totalItems = menuItems.filter(item => item.category === category);
+      const totalItems = menuItems.filter(item => item.category === categoryName);
       const avgPrice =
         categoryItems.length > 0
           ? categoryItems.reduce((sum, item) => sum + item.price, 0) /
@@ -88,7 +92,7 @@ const MenuCategoryGrid = ({
           : 0;
 
       return {
-        name: category,
+        name: categoryName,
         availableItems: categoryItems.length,
         totalItems: totalItems.length,
         avgPrice,
