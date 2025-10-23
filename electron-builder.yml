@@ -11,6 +11,9 @@ files:
       - app
       - main
       - .env
+extraResources:
+  - from: resources/logo.png
+    to: app/logo.png
 asarUnpack:
   - node_modules/better-sqlite3/**/*
   - node_modules/electron-pos-printer/**/*

@@ -15,6 +15,7 @@ import { Order } from '../types';
 import { PRINTER_CHANNELS } from '../../shared/ipc-channels';
 import { PrintReceiptRequest } from '../../shared/ipc-types';
 import { IPCResponse } from '../types';
+import { enhancedLogger, LogCategory } from '../utils/enhanced-logger';
 
 interface PrintJob {
   id: string;
@@ -64,34 +65,57 @@ export class OptimizedPrintingService {
   private readonly QUEUE_PROCESS_INTERVAL = 50; // Process queue every 50ms
 
   public static getInstance(): OptimizedPrintingService {
+    enhancedLogger.info('🔧 [OptimizedPrintingService] getInstance() called', LogCategory.SYSTEM, 'OptimizedPrintingService');
     if (!OptimizedPrintingService.instance) {
+      enhancedLogger.info('🔧 [OptimizedPrintingService] Creating new instance...', LogCategory.SYSTEM, 'OptimizedPrintingService');
       OptimizedPrintingService.instance = new OptimizedPrintingService();
+      enhancedLogger.info('🔧 [OptimizedPrintingService] Instance created successfully', LogCategory.SYSTEM, 'OptimizedPrintingService');
+    } else {
+      enhancedLogger.info('🔧 [OptimizedPrintingService] Returning existing instance', LogCategory.SYSTEM, 'OptimizedPrintingService');
     }
     return OptimizedPrintingService.instance;
   }
 
   constructor() {
-    this.logger = console; // Will be replaced with actual logger
-    this.startQueueProcessor();
+    enhancedLogger.info('🔧 [OptimizedPrintingService] Constructor called', LogCategory.SYSTEM, 'OptimizedPrintingService');
+    this.logger = enhancedLogger;
+    enhancedLogger.info('🔧 [OptimizedPrintingService] Logger assigned', LogCategory.SYSTEM, 'OptimizedPrintingService');
+    try {
+      this.startQueueProcessor();
+      enhancedLogger.info('🔧 [OptimizedPrintingService] Queue processor started successfully', LogCategory.SYSTEM, 'OptimizedPrintingService');
+    } catch (error) {
+      enhancedLogger.error('❌ [OptimizedPrintingService] CRITICAL ERROR in constructor', LogCategory.SYSTEM, 'OptimizedPrintingService', { error });
+      throw error;
+    }
   }
 
   /**
    * Register optimized IPC handlers
    */
   registerIPCHandlers(ipcMain: IpcMain): void {
-    // Optimized print receipt with instant response
-    ipcMain.handle(
-      'print-receipt-optimized',
-      this.handleOptimizedPrintRequest.bind(this)
-    );
+    enhancedLogger.info('🔧 [OptimizedPrintingService] registerIPCHandlers() called', LogCategory.SYSTEM, 'OptimizedPrintingService');
+    try {
+      // Optimized print receipt with instant response
+      enhancedLogger.info('🔧 [OptimizedPrintingService] Registering print-receipt-optimized handler...', LogCategory.SYSTEM, 'OptimizedPrintingService');
+      ipcMain.handle(
+        'print-receipt-optimized',
+        this.handleOptimizedPrintRequest.bind(this)
+      );
 
-    // Queue status check
-    ipcMain.handle('print-queue-status', this.getQueueStatus.bind(this));
+      // Queue status check
+      enhancedLogger.info('🔧 [OptimizedPrintingService] Registering print-queue-status handler...', LogCategory.SYSTEM, 'OptimizedPrintingService');
+      ipcMain.handle('print-queue-status', this.getQueueStatus.bind(this));
 
-    // Cache management
-    ipcMain.handle('print-cache-clear', this.clearCaches.bind(this));
+      // Cache management
+      enhancedLogger.info('🔧 [OptimizedPrintingService] Registering print-cache-clear handler...', LogCategory.SYSTEM, 'OptimizedPrintingService');
+      ipcMain.handle('print-cache-clear', this.clearCaches.bind(this));
 
-    this.logger.info('✅ Optimized printing IPC handlers registered');
+      enhancedLogger.info('✅ [OptimizedPrintingService] All IPC handlers registered successfully', LogCategory.SYSTEM, 'OptimizedPrintingService');
+      this.logger.info('✅ Optimized printing IPC handlers registered');
+    } catch (error) {
+      enhancedLogger.error('❌ [OptimizedPrintingService] CRITICAL ERROR registering IPC handlers', LogCategory.SYSTEM, 'OptimizedPrintingService', { error });
+      throw error;
+    }
   }
 
   /**
@@ -416,14 +440,29 @@ export class OptimizedPrintingService {
             resolve(true);
           })
           .catch((error: any) => {
-            this.logger.error(
-              `❌ electron-pos-printer failed: ${error.message}`
+            enhancedLogger.error(
+              `❌ electron-pos-printer failed`,
+              LogCategory.BUSINESS,
+              'OptimizedPrintingService',
+              {
+                error,
+                errorMessage: error?.message,
+                errorStack: error?.stack,
+                errorString: String(error),
+                printData: printData?.data?.slice(0, 3), // First 3 elements for debugging
+                printerName: printOptions.printerName
+              }
             );
             resolve(false);
           });
       });
     } catch (error) {
-      this.logger.error(`❌ Optimized print error:`, error);
+      enhancedLogger.error(
+        `❌ Optimized print error`,
+        LogCategory.BUSINESS,
+        'OptimizedPrintingService',
+        { error, errorString: String(error), stack: error instanceof Error ? error.stack : undefined }
+      );
       return false;
     }
   }
@@ -627,13 +666,13 @@ export class OptimizedPrintingService {
     // Initialize logger and other properties, but skip IPC handler registration
     printerController.logger = {
       info: (message: string, ...args: any[]) => {
-        console.log(`[PRINTER] ${message}`, ...args);
+        enhancedLogger.info(`[PRINTER] ${message}`, LogCategory.BUSINESS, 'OptimizedPrintingService', { args });
       },
       error: (message: string, ...args: any[]) => {
-        console.error(`[PRINTER] ${message}`, ...args);
+        enhancedLogger.error(`[PRINTER] ${message}`, LogCategory.BUSINESS, 'OptimizedPrintingService', { args });
       },
       warn: (message: string, ...args: any[]) => {
-        console.warn(`[PRINTER] ${message}`, ...args);
+        enhancedLogger.warn(`[PRINTER] ${message}`, LogCategory.BUSINESS, 'OptimizedPrintingService', { args });
       },
     };
 
@@ -653,7 +692,7 @@ export class OptimizedPrintingService {
         itemChanges // CRITICAL FIX: Pass the enhanced change tracking information
       );
     } catch (error) {
-      console.error('Error generating kitchen content:', error);
+      enhancedLogger.error('Error generating kitchen content', LogCategory.BUSINESS, 'OptimizedPrintingService', { error });
       // Return a basic fallback kitchen ticket in case of error
       return `
         <div style="font-family: Arial, sans-serif; width: 100%; text-align: center;">
@@ -683,13 +722,13 @@ export class OptimizedPrintingService {
     // Initialize logger and other properties, but skip IPC handler registration
     printerController.logger = {
       info: (message: string, ...args: any[]) => {
-        console.log(`[PRINTER] ${message}`, ...args);
+        enhancedLogger.info(`[PRINTER] ${message}`, LogCategory.BUSINESS, 'OptimizedPrintingService', { args });
       },
       error: (message: string, ...args: any[]) => {
-        console.error(`[PRINTER] ${message}`, ...args);
+        enhancedLogger.error(`[PRINTER] ${message}`, LogCategory.BUSINESS, 'OptimizedPrintingService', { args });
       },
       warn: (message: string, ...args: any[]) => {
-        console.warn(`[PRINTER] ${message}`, ...args);
+        enhancedLogger.warn(`[PRINTER] ${message}`, LogCategory.BUSINESS, 'OptimizedPrintingService', { args });
       },
     };
 
@@ -701,7 +740,7 @@ export class OptimizedPrintingService {
         businessInfo
       );
     } catch (error) {
-      console.error('Error generating receipt content:', error);
+      enhancedLogger.error('Error generating receipt content', LogCategory.BUSINESS, 'OptimizedPrintingService', { error });
       // Return a basic fallback receipt in case of error
       return `
         <div style="font-family: Arial, sans-serif; width: 100%; text-align: center;">

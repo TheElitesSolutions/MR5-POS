@@ -4,7 +4,7 @@
  */
 
 import { BrowserWindow } from 'electron';
-import { logError, logInfo } from './error-handler';
+import { enhancedLogger, LogCategory } from './utils/enhanced-logger';
 import { prisma } from './db/prisma-wrapper';
 
 // Controller imports
@@ -48,7 +48,7 @@ export class StartupManagerNextron {
   private startupTimes: Map<string, number> = new Map();
 
   constructor() {
-    logInfo('[StartupManager] Initializing Nextron startup manager');
+    enhancedLogger.info('[StartupManager] Initializing Nextron startup manager', LogCategory.SYSTEM, 'StartupManager');
   }
 
   /**
@@ -57,21 +57,21 @@ export class StartupManagerNextron {
   async initializeControllers(): Promise<void> {
     try {
       const startTime = Date.now();
-      logInfo('[StartupManager] Initializing controllers...');
+      enhancedLogger.info('[StartupManager] Initializing controllers...', LogCategory.SYSTEM, 'StartupManager');
 
       // Test database connection first
       try {
         await prisma.$queryRaw('SELECT 1 as test');
-        logInfo('[StartupManager] Database connection verified');
+        enhancedLogger.info('[StartupManager] Database connection verified', LogCategory.SYSTEM, 'StartupManager');
       } catch (dbError) {
-        logError('[StartupManager] Database test failed:', dbError);
+        enhancedLogger.error('[StartupManager] Database test failed', LogCategory.SYSTEM, 'StartupManager', { error: dbError });
         throw new Error('Database not accessible');
       }
 
       // Initialize controllers in logical groups
 
       // Group 1: Core controllers (no dependencies on other controllers)
-      logInfo('[StartupManager] Initializing core controllers...');
+      enhancedLogger.info('[StartupManager] Initializing core controllers...', LogCategory.SYSTEM, 'StartupManager');
       const coreControllers = [
         { name: 'AuthController', instance: new AuthController() },
         { name: 'SystemController', instance: new SystemController() },
@@ -84,15 +84,21 @@ export class StartupManagerNextron {
         try {
           instance.initialize();
           this.controllers.set(name, instance);
-          logInfo(`[StartupManager] ✓ ${name} initialized`);
+          enhancedLogger.info(`[StartupManager] ✓ ${name} initialized`, LogCategory.SYSTEM, 'StartupManager');
         } catch (error) {
-          logError(`[StartupManager] ✗ ${name} failed:`, error);
-          throw error;
+          enhancedLogger.error(`[StartupManager] ✗ ${name} failed`, LogCategory.SYSTEM, 'StartupManager', { error });
+          // Only throw for critical controllers that break the entire system
+          if (name === 'AuthController' || name === 'SettingsController') {
+            enhancedLogger.error(`[StartupManager] CRITICAL: ${name} is required for system operation`, LogCategory.SYSTEM, 'StartupManager');
+            throw error;
+          }
+          // Non-critical controllers: log error and continue
+          enhancedLogger.error(`[StartupManager] ${name} failed but continuing initialization`, LogCategory.SYSTEM, 'StartupManager');
         }
       }
 
       // Group 2: Data controllers (depend on core but not on each other)
-      logInfo('[StartupManager] Initializing data controllers...');
+      enhancedLogger.info('[StartupManager] Initializing data controllers...', LogCategory.SYSTEM, 'StartupManager');
       const dataControllers = [
         { name: 'MenuController', instance: new MenuController(prisma) },
         { name: 'MenuItemController', instance: new MenuItemController() },
@@ -108,15 +114,15 @@ export class StartupManagerNextron {
         try {
           instance.initialize();
           this.controllers.set(name, instance);
-          logInfo(`[StartupManager] ✓ ${name} initialized`);
+          enhancedLogger.info(`[StartupManager] ✓ ${name} initialized`, LogCategory.SYSTEM, 'StartupManager');
         } catch (error) {
-          logError(`[StartupManager] ✗ ${name} failed:`, error);
+          enhancedLogger.error(`[StartupManager] ✗ ${name} failed`, LogCategory.SYSTEM, 'StartupManager', { error });
           // Non-critical, continue
         }
       }
 
       // Group 3: Complex controllers (depend on multiple other controllers)
-      logInfo('[StartupManager] Initializing complex controllers...');
+      enhancedLogger.info('[StartupManager] Initializing complex controllers...', LogCategory.SYSTEM, 'StartupManager');
       const complexControllers = [
         { name: 'OrderController', instance: new OrderController() },
         { name: 'DashboardController', instance: new DashboardController() },
@@ -127,15 +133,15 @@ export class StartupManagerNextron {
         try {
           instance.initialize();
           this.controllers.set(name, instance);
-          logInfo(`[StartupManager] ✓ ${name} initialized`);
+          enhancedLogger.info(`[StartupManager] ✓ ${name} initialized`, LogCategory.SYSTEM, 'StartupManager');
         } catch (error) {
-          logError(`[StartupManager] ✗ ${name} failed:`, error);
+          enhancedLogger.error(`[StartupManager] ✗ ${name} failed`, LogCategory.SYSTEM, 'StartupManager', { error });
           // Non-critical, continue
         }
       }
 
       // Group 4: Optional controllers
-      logInfo('[StartupManager] Initializing optional controllers...');
+      enhancedLogger.info('[StartupManager] Initializing optional controllers...', LogCategory.SYSTEM, 'StartupManager');
       const optionalControllers = [
         { name: 'BackupController', instance: new BackupController() },
         { name: 'UpdaterController', instance: new UpdaterController() },
@@ -145,57 +151,57 @@ export class StartupManagerNextron {
         try {
           instance.initialize();
           this.controllers.set(name, instance);
-          logInfo(`[StartupManager] ✓ ${name} initialized`);
+          enhancedLogger.info(`[StartupManager] ✓ ${name} initialized`, LogCategory.SYSTEM, 'StartupManager');
         } catch (error) {
-          logError(`[StartupManager] ✗ ${name} failed (non-critical):`, error);
+          enhancedLogger.error(`[StartupManager] ✗ ${name} failed (non-critical)`, LogCategory.SYSTEM, 'StartupManager', { error });
           // Completely optional, just log
         }
       }
 
       // Initialize OptimizedPrintingService
-      logInfo('[StartupManager] Initializing OptimizedPrintingService...');
+      enhancedLogger.info('[StartupManager] Initializing OptimizedPrintingService...', LogCategory.SYSTEM, 'StartupManager');
       try {
         const optimizedPrinting = OptimizedPrintingService.getInstance();
         optimizedPrinting.registerIPCHandlers(ipcMain);
-        logInfo('[StartupManager] ✓ OptimizedPrintingService initialized');
+        enhancedLogger.info('[StartupManager] ✓ OptimizedPrintingService initialized', LogCategory.SYSTEM, 'StartupManager');
       } catch (error) {
-        logError('[StartupManager] ✗ OptimizedPrintingService failed (non-critical):', error);
+        enhancedLogger.error('[StartupManager] ✗ OptimizedPrintingService failed (non-critical)', LogCategory.SYSTEM, 'StartupManager', { error });
       }
 
       // Initialize Supabase Sync Services
-      logInfo('[StartupManager] Initializing Supabase Sync Services...');
+      enhancedLogger.info('[StartupManager] Initializing Supabase Sync Services...', LogCategory.SYSTEM, 'StartupManager');
       try {
         const supabaseSyncService = new SupabaseSyncService(prisma);
         const syncScheduler = new SyncScheduler(supabaseSyncService);
         const syncController = new SyncController(supabaseSyncService, syncScheduler);
-        
+
         syncController.initialize();
         this.controllers.set('SyncController', syncController);
-        logInfo('[StartupManager] ✓ Supabase Sync Services initialized');
-        
-        // Note: Auto-sync is not started by default. 
+        enhancedLogger.info('[StartupManager] ✓ Supabase Sync Services initialized', LogCategory.SYSTEM, 'StartupManager');
+
+        // Note: Auto-sync is not started by default.
         // Users can enable it from the Menu sync button or Settings.
       } catch (error) {
-        logError('[StartupManager] ✗ Supabase Sync Services failed (non-critical):', error);
+        enhancedLogger.error('[StartupManager] ✗ Supabase Sync Services failed (non-critical)', LogCategory.SYSTEM, 'StartupManager', { error });
       }
 
       // Initialize Database Management Controller
-      logInfo('[StartupManager] Initializing Database Management Controller...');
+      enhancedLogger.info('[StartupManager] Initializing Database Management Controller...', LogCategory.SYSTEM, 'StartupManager');
       try {
         const dbManagementController = new DatabaseManagementController();
         dbManagementController.initialize();
         this.controllers.set('DatabaseManagementController', dbManagementController);
-        logInfo('[StartupManager] ✓ Database Management Controller initialized');
+        enhancedLogger.info('[StartupManager] ✓ Database Management Controller initialized', LogCategory.SYSTEM, 'StartupManager');
       } catch (error) {
-        logError('[StartupManager] ✗ Database Management Controller failed (non-critical):', error);
+        enhancedLogger.error('[StartupManager] ✗ Database Management Controller failed (non-critical)', LogCategory.SYSTEM, 'StartupManager', { error });
       }
 
       const duration = Date.now() - startTime;
       this.startupTimes.set('controllers_init', duration);
-      logInfo(`[StartupManager] All controllers initialized in ${duration}ms`);
-      logInfo(`[StartupManager] Total controllers: ${this.controllers.size}`);
+      enhancedLogger.info(`[StartupManager] All controllers initialized in ${duration}ms`, LogCategory.SYSTEM, 'StartupManager');
+      enhancedLogger.info(`[StartupManager] Total controllers: ${this.controllers.size}`, LogCategory.SYSTEM, 'StartupManager');
     } catch (error) {
-      logError('[StartupManager] Fatal error during controller initialization:', error);
+      enhancedLogger.error('[StartupManager] Fatal error during controller initialization', LogCategory.SYSTEM, 'StartupManager', { error });
       throw error;
     }
   }
@@ -205,7 +211,7 @@ export class StartupManagerNextron {
    */
   setMainWindow(window: BrowserWindow): void {
     this.mainWindow = window;
-    logInfo('[StartupManager] Main window reference set');
+    enhancedLogger.info('[StartupManager] Main window reference set', LogCategory.SYSTEM, 'StartupManager');
   }
 
   /**
@@ -219,7 +225,7 @@ export class StartupManagerNextron {
    * Cleanup all controllers on shutdown
    */
   async cleanup(): Promise<void> {
-    logInfo('[StartupManager] Cleaning up controllers...');
+    enhancedLogger.info('[StartupManager] Cleaning up controllers...', LogCategory.SYSTEM, 'StartupManager');
 
     for (const [name, controller] of Array.from(this.controllers.entries())) {
       try {
@@ -227,14 +233,14 @@ export class StartupManagerNextron {
         if (controller.cleanup) {
           controller.cleanup();
         }
-        logInfo(`[StartupManager] ✓ ${name} cleaned up`);
+        enhancedLogger.info(`[StartupManager] ✓ ${name} cleaned up`, LogCategory.SYSTEM, 'StartupManager');
       } catch (error) {
-        logError(`[StartupManager] ✗ ${name} cleanup failed:`, error);
+        enhancedLogger.error(`[StartupManager] ✗ ${name} cleanup failed`, LogCategory.SYSTEM, 'StartupManager', { error });
       }
     }
 
     this.controllers.clear();
-    logInfo('[StartupManager] All controllers cleaned up');
+    enhancedLogger.info('[StartupManager] All controllers cleaned up', LogCategory.SYSTEM, 'StartupManager');
   }
 
   /**
