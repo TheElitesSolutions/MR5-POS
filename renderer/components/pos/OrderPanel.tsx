@@ -1276,272 +1276,185 @@ const OrderPanel = ({ pendingCustomization }: OrderPanelProps) => {
           </span>
         </div>
 
-        {/* Action Buttons */}
-        <div className='space-y-2'>
-          {/* Add Item or Done Adding Items button - only show in tables view */}
-          {viewMode === 'tables' && (
+        {/* Action Buttons - Progressive Disclosure Layout for Space Efficiency */}
+        <div className='space-y-3'>
+          {/* PRIMARY ACTION - Context-Aware (Full Width) */}
+          {viewMode === 'tables' && hasChanges && (
             <Button
-              onClick={
-                hasChanges
-                  ? async () => {
-                      try {
-                        
+              onClick={async () => {
+                try {
+                  // ✅ SIMPLE: Print only net changes using simple tracking system
+                  let printError = null;
+                  try {
+                    const printerAPI = await import('@/lib/printer-api');
+                    const user = useAuthStore.getState().user;
 
-                        // ✅ SIMPLE: Print only net changes using simple tracking system
-                        let printError = null;
-                        try {
-                          const printerAPI = await import('@/lib/printer-api');
-                          const user = useAuthStore.getState().user;
+                    if (user?.id && currentOrder && changesSummary) {
+                      const printers = await printerAPI.PrinterAPI.getPrinters();
+                      const defaultPrinter = printers.find(p => p.isDefault) || printers[0];
 
-                          if (user?.id && currentOrder && changesSummary) {
-                            const printers =
-                              await printerAPI.PrinterAPI.getPrinters();
-                            const defaultPrinter =
-                              printers.find(p => p.isDefault) || printers[0];
+                      if (defaultPrinter) {
+                        const newItems = changesSummary.filter(c => c.changeType === 'NEW');
+                        const updates = changesSummary.filter(c => c.changeType === 'UPDATE');
+                        const filteredChangesSummary = changesSummary.filter(c => c.changeType !== 'REMOVE');
 
-                            if (defaultPrinter) {
-                              // Generate simple print data - EXCLUDE removals (already printed immediately)
-                              const newItems = changesSummary.filter(
-                                c => c.changeType === 'NEW'
-                              );
-                              const updates = changesSummary.filter(
-                                c => c.changeType === 'UPDATE'
-                              );
-
-                              // Filter out REMOVE items from changesSummary to prevent duplicate printing
-                              const filteredChangesSummary =
-                                changesSummary.filter(
-                                  c => c.changeType !== 'REMOVE'
-                                );
-
-                              // CRITICAL FIX: If only removals occurred, don't print anything
-                              // (removals were already printed immediately upon deletion)
-                              if (filteredChangesSummary.length === 0) {
-                                orderLogger.debug(
-                                  'Skip printing: Only removals occurred, already printed'
-                                );
-                                // Just reset tracking and exit - no printing needed
-                                clearTracking();
-                                return;
-                              }
-
-                              const result =
-                                await printerAPI.PrinterAPI.printKitchenOrder(
-                                  currentOrder.id,
-                                  defaultPrinter.name,
-                                  1,
-                                  user.id,
-                                  false, // Not using onlyUnprinted flag
-                                  [], // No cancelled items (already printed immediately upon removal)
-                                  [...newItems, ...updates].map(
-                                    item => item.itemId
-                                  ), // All changed items
-                                  filteredChangesSummary // Net change information (excluding removals)
-                                );
-
-                              if (result.success) {
-                                orderLogger.debug(
-                                  'Net changes printed successfully'
-                                );
-                                // Clear all tracking after successful printing
-                                clearTracking();
-
-                                // Navigate back to tables view
-                                switchToTables();
-                              }
-                            }
-                          }
-                        } catch (error) {
-                          printError = error;
-                          orderLogger.error('Simple print failed:', error);
-                          toast({
-                            title: 'Print Failed',
-                            description:
-                              'Failed to print to kitchen. You can try again.',
-                            variant: 'destructive',
-                          });
+                        if (filteredChangesSummary.length === 0) {
+                          orderLogger.debug('Skip printing: Only removals occurred, already printed');
+                          clearTracking();
+                          return;
                         }
 
-                        // Only show success toast if no print error occurred
-                        if (!printError) {
-                          toast({
-                            title: 'Order Changes Sent',
-                            description:
-                              'All changes have been sent to the kitchen successfully',
-                          });
-                        }
-                      } catch (error) {
-                        orderLogger.error(
-                          'Failed to process updated items:',
-                          error
+                        const result = await printerAPI.PrinterAPI.printKitchenOrder(
+                          currentOrder.id,
+                          defaultPrinter.name,
+                          1,
+                          user.id,
+                          false,
+                          [],
+                          [...newItems, ...updates].map(item => item.itemId),
+                          filteredChangesSummary
                         );
-                        toast({
-                          title: 'Error',
-                          description: 'Failed to process updated quantities',
-                          variant: 'destructive',
-                        });
-                      } finally {
-                        
+
+                        if (result.success) {
+                          orderLogger.debug('Net changes printed successfully');
+                          clearTracking();
+                          switchToTables();
+                        }
                       }
                     }
-                  : () => switchToMenu()
-              }
-              variant={hasChanges ? 'default' : 'outline'}
-              className={`w-full ${hasChanges ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg hover:from-green-600 hover:to-emerald-700' : ''}`}
-              size='lg'
+                  } catch (error) {
+                    printError = error;
+                    orderLogger.error('Simple print failed:', error);
+                    toast({
+                      title: 'Print Failed',
+                      description: 'Failed to print to kitchen. You can try again.',
+                      variant: 'destructive',
+                    });
+                  }
+
+                  if (!printError) {
+                    toast({
+                      title: 'Order Changes Sent',
+                      description: 'All changes have been sent to the kitchen successfully',
+                    });
+                  }
+                } catch (error) {
+                  orderLogger.error('Failed to process updated items:', error);
+                  toast({
+                    title: 'Error',
+                    description: 'Failed to process updated quantities',
+                    variant: 'destructive',
+                  });
+                }
+              }}
+              className='w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md hover:from-green-600 hover:to-emerald-700'
               disabled={isLoading || isProcessing}
             >
-              {hasChanges ? (
-                <>
-                  <Check className='mr-2 h-4 w-4' />
-                  {isProcessing ? 'Processing...' : 'Done Adding Items'}
-                </>
-              ) : (
-                <>
-                  <Plus className='mr-2 h-4 w-4' />
-                  Add Item
-                </>
-              )}
+              <Check className='mr-2 h-4 w-4' />
+              {isProcessing ? 'Processing...' : 'Done Adding Items'}
             </Button>
           )}
 
-          {/* Complete Order button - only show when in menu flow */}
-          {viewMode === 'menu' &&
-            currentOrder.items &&
-            currentOrder.items.length > 0 && (
-              <Button
-                onClick={async () => {
+          {viewMode === 'tables' && !hasChanges && (
+            <Button
+              onClick={() => switchToMenu()}
+              variant='outline'
+              className='w-full'
+              disabled={isLoading || isProcessing}
+            >
+              <Plus className='mr-2 h-4 w-4' />
+              Add Item
+            </Button>
+          )}
+
+          {/* Menu view "Done Adding Items" button */}
+          {viewMode === 'menu' && currentOrder.items && currentOrder.items.length > 0 && (
+            <Button
+              onClick={async () => {
+                try {
+                  // Auto-print logic for menu view
                   try {
-                    
+                    const printerAPI = await import('@/lib/printer-api');
+                    const user = useAuthStore.getState().user;
 
-                    // Automatically print newly added items for kitchen using our enhanced tracking system
-                    try {
-                      const printerAPI = await import('@/lib/printer-api');
-                      const user = useAuthStore.getState().user;
+                    if (user?.id) {
+                      const printers = await printerAPI.PrinterAPI.getPrinters();
+                      const defaultPrinter = printers.find(p => p.isDefault) || printers[0];
 
-                      if (user?.id) {
-                        // Get default printer
-                        const printers =
-                          await printerAPI.PrinterAPI.getPrinters();
-                        const defaultPrinter =
-                          printers.find(p => p.isDefault) || printers[0];
+                      if (defaultPrinter && hasChanges && changesSummary) {
+                        orderLogger.debug('Menu view - simple net changes', {
+                          newItems: newItemsCount,
+                          updates: updatedItemsCount,
+                          removals: removedItemsCount,
+                          totalChanges: changeCount,
+                        });
 
-                        if (defaultPrinter) {
-                          // Check if we have any changes to print using simple tracking
-                          if (hasChanges && changesSummary) {
-                            orderLogger.debug(
-                              'Menu view - simple net changes',
-                              {
-                                newItems: newItemsCount,
-                                updates: updatedItemsCount,
-                                removals: removedItemsCount,
-                                totalChanges: changeCount,
-                              }
-                            );
+                        const newItems = changesSummary.filter(c => c.changeType === 'NEW');
+                        const updates = changesSummary.filter(c => c.changeType === 'UPDATE');
+                        const removals = changesSummary.filter(c => c.changeType === 'REMOVE');
 
-                            // Generate simple print data
-                            const newItems = changesSummary.filter(
-                              c => c.changeType === 'NEW'
-                            );
-                            const updates = changesSummary.filter(
-                              c => c.changeType === 'UPDATE'
-                            );
-                            const removals = changesSummary.filter(
-                              c => c.changeType === 'REMOVE'
-                            );
+                        const result = await printerAPI.PrinterAPI.printKitchenOrder(
+                          currentOrder.id,
+                          defaultPrinter.name,
+                          1,
+                          user.id,
+                          false,
+                          removals.map(item => item.itemId),
+                          [...newItems, ...updates].map(item => item.itemId),
+                          changesSummary
+                        );
 
-                            const result =
-                              await printerAPI.PrinterAPI.printKitchenOrder(
-                                currentOrder.id,
-                                defaultPrinter.name,
-                                1,
-                                user.id,
-                                false, // Not using onlyUnprinted flag
-                                removals.map(item => item.itemId), // Cancelled items
-                                [...newItems, ...updates].map(
-                                  item => item.itemId
-                                ), // All changed items
-                                changesSummary // Net change information
-                              );
-
-                            if (result.success) {
-                              orderLogger.debug(
-                                'Menu changes printed successfully'
-                              );
-                              // Clear tracking after successful print
-                              clearTracking();
-                            } else {
-                              throw new Error(result.error || 'Print failed');
-                            }
-                          } else {
-                            // 🔧 DISABLED: Removed automatic fallback printing to force use of "Done Adding Items" tracking system
-                            orderLogger.debug(
-                              'Automatic fallback printing disabled'
-                            );
-                            // Note: Users must use "Done Adding Items" button in tables view for kitchen notifications
-                          }
+                        if (result.success) {
+                          orderLogger.debug('Menu changes printed successfully');
+                          clearTracking();
+                        } else {
+                          throw new Error(result.error || 'Print failed');
                         }
+                      } else {
+                        orderLogger.debug('Automatic fallback printing disabled');
                       }
-                    } catch (printError) {
-                      orderLogger.error('Auto-print failed:', printError);
-                      // Don't block the workflow if printing fails
                     }
-
-                    // Switch back to tables view
-                    switchToTables();
-
-                    // CRITICAL FIX: Refresh tables to update activeOrder with newly added items
-                    try {
-                      const { fetchTables } = usePOSStore.getState();
-                      await fetchTables();
-                      orderLogger.debug(
-                        'Tables refreshed with updated order data'
-                      );
-                    } catch (refreshError) {
-                      orderLogger.error(
-                        'Failed to refresh tables after item addition:',
-                        refreshError
-                      );
-                      // Don't block the workflow for table refresh errors
-                    }
-
-                    // Clear simple tracking state after successful operation
-                    clearTracking();
-                    orderLogger.debug(
-                      'Simple tracking state cleared after completion'
-                    );
-
-                    toast({
-                      title: 'Order Updated',
-                      description:
-                        'Items have been added to the order and sent to kitchen',
-                    });
-                  } catch (error) {
-                    orderLogger.error(
-                      'Failed to switch to tables view:',
-                      error
-                    );
-                    toast({
-                      title: 'Error',
-                      description: 'Failed to complete adding items',
-                      variant: 'destructive',
-                    });
-                  } finally {
-                    
+                  } catch (printError) {
+                    orderLogger.error('Auto-print failed:', printError);
                   }
-                }}
-                className='w-full transform bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-lg transition-all duration-300 ease-in-out hover:scale-105 hover:from-green-600 hover:to-emerald-700'
-                size='lg'
-                disabled={isLoading || isProcessing}
-              >
-                <Check className='mr-2 h-4 w-4' />
-                {isProcessing ? 'Sending to Kitchen...' : 'Done Adding Items'}
-              </Button>
-            )}
 
-          {/* Print Buttons Container */}
+                  switchToTables();
+
+                  try {
+                    const { fetchTables } = usePOSStore.getState();
+                    await fetchTables();
+                    orderLogger.debug('Tables refreshed with updated order data');
+                  } catch (refreshError) {
+                    orderLogger.error('Failed to refresh tables after item addition:', refreshError);
+                  }
+
+                  clearTracking();
+                  orderLogger.debug('Simple tracking state cleared after completion');
+
+                  toast({
+                    title: 'Order Updated',
+                    description: 'Items have been added to the order and sent to kitchen',
+                  });
+                } catch (error) {
+                  orderLogger.error('Failed to switch to tables view:', error);
+                  toast({
+                    title: 'Error',
+                    description: 'Failed to complete adding items',
+                    variant: 'destructive',
+                  });
+                }
+              }}
+              className='w-full bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-md hover:from-green-600 hover:to-emerald-700'
+              disabled={isLoading || isProcessing}
+            >
+              <Check className='mr-2 h-4 w-4' />
+              {isProcessing ? 'Sending to Kitchen...' : 'Done Adding Items'}
+            </Button>
+          )}
+
+          {/* SECONDARY ACTIONS - Compact 2-Column Grid */}
           {currentOrder.items && currentOrder.items.length > 0 && (
-            <div className='space-y-2'>
+            <div className='grid grid-cols-2 gap-2'>
               {/* Print Kitchen Order Button */}
               <Button
                 onClick={async () => {
@@ -1615,12 +1528,12 @@ const OrderPanel = ({ pendingCustomization }: OrderPanelProps) => {
                   }
                 }}
                 variant='outline'
-                className='w-full transform bg-gradient-to-r from-amber-500 to-orange-600 text-white shadow-lg transition-all duration-300 ease-in-out hover:scale-105 hover:from-amber-600 hover:to-orange-700'
-                size='lg'
+                className='bg-gradient-to-r from-orange-500 to-orange-600 text-white text-sm hover:from-orange-600 hover:to-orange-700'
+                size='sm'
                 disabled={isLoading || isProcessing}
               >
-                <ChefHat className='mr-2 h-4 w-4' />
-                {isProcessing ? 'Printing...' : 'Print Kitchen Order'}
+                <ChefHat className='mr-1.5 h-3.5 w-3.5' />
+                Kitchen
               </Button>
 
               {/* Print Invoice Button */}
@@ -1689,39 +1602,37 @@ const OrderPanel = ({ pendingCustomization }: OrderPanelProps) => {
                   }
                 }}
                 variant='outline'
-                className='w-full transform bg-gradient-to-r from-blue-500 to-purple-600 text-white shadow-lg transition-all duration-300 ease-in-out hover:scale-105 hover:from-blue-600 hover:to-purple-700'
-                size='lg'
+                className='bg-gradient-to-r from-purple-500 to-purple-600 text-white text-sm hover:from-purple-600 hover:to-purple-700'
+                size='sm'
                 disabled={isLoading || isProcessing}
               >
-                <FileText className='mr-2 h-4 w-4' />
-                {isProcessing ? 'Printing...' : 'Print Invoice'}
+                <FileText className='mr-1.5 h-3.5 w-3.5' />
+                Invoice
               </Button>
             </div>
           )}
 
-          {/* Complete Order button - final completion */}
-          {viewMode === 'tables' &&
-            currentOrder.items &&
-            currentOrder.items.length > 0 && (
-              <Button
-                onClick={handleCompleteOrder}
-                className='w-full'
-                size='lg'
-                disabled={isLoading}
-              >
-                <Check className='mr-2 h-4 w-4' />
-                {isProcessing ? 'Completing...' : 'Complete Order'}
-              </Button>
-            )}
+          {/* Complete Order button - only show in tables view when no changes pending */}
+          {viewMode === 'tables' && !hasChanges && currentOrder.items && currentOrder.items.length > 0 && (
+            <Button
+              onClick={handleCompleteOrder}
+              className='w-full bg-gradient-to-r from-green-500 to-green-600 text-white shadow-md hover:from-green-600 hover:to-green-700'
+              disabled={isLoading}
+            >
+              <Check className='mr-2 h-4 w-4' />
+              {isProcessing ? 'Completing...' : 'Complete Order'}
+            </Button>
+          )}
 
+          {/* TERTIARY ACTION - Cancel Button (Subtle) */}
           <Button
             onClick={() => setIsCancelDialogOpen(true)}
-            variant='outline'
-            className='w-full'
-            size='lg'
+            variant='ghost'
+            className='w-full text-gray-600 hover:bg-red-50 hover:text-red-600 dark:text-gray-400 dark:hover:bg-red-950 dark:hover:text-red-400'
+            size='sm'
             disabled={isLoading}
           >
-            <X className='mr-2 h-4 w-4' />
+            <X className='mr-1.5 h-3.5 w-3.5' />
             Cancel Order
           </Button>
 
