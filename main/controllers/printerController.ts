@@ -57,6 +57,9 @@ import { RetryUtility } from './utils/retry-utility';
 import { RONGTADetectionUtility } from './utils/rongta-detection-utility';
 import { RONGTAConnectionUtility } from './utils/rongta-connection-utility';
 
+// Import native printer detection service (Phase 2)
+import { nativePrinterDetection } from '../services/nativePrinterDetection';
+
 // Promisify exec for async execution
 const execAsync = promisify(exec);
 
@@ -83,7 +86,7 @@ export class PrinterController extends BaseController {
 
   // Printer cache with TTL
   private printerCache: { data: Printer[]; timestamp: number } | null = null;
-  private readonly CACHE_TTL = 30000; // 30 seconds
+  private readonly CACHE_TTL = 600000; // 10 minutes - optimized for old hardware performance
 
   constructor() {
     super();
@@ -154,97 +157,67 @@ export class PrinterController extends BaseController {
   }
 
   /**
-   * Get all available printers (with 30-second cache)
+   * Get all available printers (Phase 2: Native Win32 API detection with PowerShell fallback)
+   * Cache managed internally by nativePrinterDetection service (10-minute TTL)
    */
   private async getPrinters(
     _event: IpcMainInvokeEvent
   ): Promise<IPCResponse<Printer[]>> {
     try {
-      const now = Date.now();
+      this.logger.info('Fetching available printers (Phase 2: native detection)');
 
-      // Return cached data if still valid
-      if (this.printerCache && (now - this.printerCache.timestamp) < this.CACHE_TTL) {
-        this.logger.info('Returning cached printer list (cache hit)');
-        return this.createSuccessResponse(this.printerCache.data);
-      }
+      // Use native detection service (handles caching, native→PowerShell fallback internally)
+      const detectionResult = await nativePrinterDetection.detectPrinters();
 
-      this.logger.info('Fetching available printers (cache miss or expired)');
+      this.logger.info(
+        `Printer detection completed using ${detectionResult.method} method in ${detectionResult.duration}ms (cached: ${detectionResult.cached})`
+      );
 
-      // Try to get printers using PowerShell on Windows with retry logic
-      let printers: Printer[] = [];
-
-      try {
-        const retryConfig = RetryUtility.createPrinterConfig('detection');
-        const retryResult = await RetryUtility.executeWithRetry(
-          () => this.getPowerShellPrinters(),
-          retryConfig,
-          true,
-          'printer-detection'
+      // Transform PrinterInfo[] to Printer[] with enriched metadata
+      const printers: Printer[] = detectionResult.printers.map(printer => {
+        const connectionType = this.detectConnectionType(printer.portName);
+        const printerType = this.detectPrinterType(
+          printer.name,
+          printer.driverName
         );
 
-        if (!retryResult.success) {
-          throw (
-            retryResult.finalError ||
-            new Error('Printer detection failed after retries')
+        return {
+          name: printer.name,
+          displayName: printer.name,
+          description: printer.driverName,
+          status: printer.status,
+          isDefault: false, // Will be set below
+          isNetwork: connectionType === ConnectionType.NETWORK,
+          connectionType: connectionType,
+          pageSize: this.detectPageSize(printer.name, printer.driverName),
+          printerType: printerType,
+        };
+      });
+
+      // Mark default printer
+      if (printers.length > 0) {
+        try {
+          // FIX: Increased timeout from 3s to 8s for older hardware (WMI queries take 5-8s on old systems)
+          const { stdout } = await execAsync(
+            'powershell -command "Get-WmiObject -Query \\"SELECT * FROM Win32_Printer WHERE Default=TRUE\\" | Select-Object -ExpandProperty Name"',
+            { windowsHide: true, timeout: 8000 }
           );
-        }
+          const defaultPrinterName = stdout.trim();
 
-        const printerInfos = retryResult.data!;
-        this.logger.info(
-          `Printer detection completed after ${retryResult.totalAttempts} attempt(s) in ${retryResult.totalElapsedMs}ms`
-        );
-
-        printers = printerInfos.map(printer => {
-          const connectionType = this.detectConnectionType(printer.portName);
-          const printerType = this.detectPrinterType(
-            printer.name,
-            printer.driverName
+          const defaultPrinter = printers.find(
+            p => p.name === defaultPrinterName
           );
-
-          return {
-            name: printer.name,
-            displayName: printer.name,
-            description: printer.driverName,
-            status: printer.status,
-            isDefault: false, // Will be set below
-            isNetwork: connectionType === ConnectionType.NETWORK,
-            connectionType: connectionType,
-            pageSize: this.detectPageSize(printer.name, printer.driverName),
-            printerType: printerType,
-          };
-        });
-
-        // Mark default printer
-        if (printers.length > 0) {
-          try {
-            // FIX: Increased timeout from 3s to 8s for older hardware (WMI queries take 5-8s on old systems)
-            const { stdout } = await execAsync(
-              'powershell -command "Get-WmiObject -Query \\"SELECT * FROM Win32_Printer WHERE Default=TRUE\\" | Select-Object -ExpandProperty Name"',
-              { windowsHide: true, timeout: 8000 }
-            );
-            const defaultPrinterName = stdout.trim();
-
-            const defaultPrinter = printers.find(
-              p => p.name === defaultPrinterName
-            );
-            if (defaultPrinter) {
-              defaultPrinter.isDefault = true;
-            }
-          } catch (error) {
-            this.logger.warn(
-              `Could not determine default printer: ${error instanceof Error ? error.message : String(error)}`
-            );
+          if (defaultPrinter) {
+            defaultPrinter.isDefault = true;
           }
+        } catch (error) {
+          this.logger.warn(
+            `Could not determine default printer: ${error instanceof Error ? error.message : String(error)}`
+          );
         }
-      } catch (error) {
-        this.logger.warn(
-          `Failed to get printers using PowerShell: ${error instanceof Error ? error.message : String(error)}`
-        );
-        // Fallback to hardcoded printers for testing
-        printers = this.getFallbackPrinters();
       }
 
-      // Update cache
+      // Update local cache (for compatibility with existing code that references this.printerCache)
       this.printerCache = {
         data: printers,
         timestamp: Date.now()

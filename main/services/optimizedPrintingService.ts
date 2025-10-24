@@ -55,9 +55,9 @@ export class OptimizedPrintingService {
   private isProcessingQueue = false;
   private logger: any;
 
-  // Cache durations
-  private readonly PRINTER_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
-  private readonly ORDER_CACHE_DURATION = 2 * 60 * 1000; // 2 minutes
+  // Cache durations - optimized for old hardware
+  private readonly PRINTER_CACHE_DURATION = 10 * 60 * 1000; // 10 minutes - stable printer configurations
+  private readonly ORDER_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes - active order sessions
 
   // Performance optimizations
   private readonly OPTIMIZED_PRINT_DELAY = 100; // 100ms instead of 15 seconds
@@ -389,12 +389,13 @@ export class OptimizedPrintingService {
 
       // Use ZERO MARGIN print options to eliminate paper waste
       // FIX: Added DPI configuration for Windows 10 thermal printer compatibility
+      // OPTIMIZED: Reduced timeOutPerLine from 3000ms to 1500ms for faster printing on old hardware
       const printOptions = {
         preview: false,
         margin: '0 0 0 0', // ZERO MARGINS = NO WASTED PAPER!
         copies: 1,
         printerName: printer.name,
-        timeOutPerLine: 3000,
+        timeOutPerLine: 1500, // Reduced from 3000ms for better performance on old Windows 10 laptops
         silent: true,
 
         // FIX: Explicit DPI settings for thermal printers (prevents blank paper on Windows 10)

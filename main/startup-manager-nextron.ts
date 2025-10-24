@@ -28,6 +28,8 @@ import { UpdaterController } from './controllers/updaterController';
 
 // Service imports
 import { OptimizedPrintingService } from './services/optimizedPrintingService';
+import { printerSpoolerService } from './services/printerSpoolerService';
+import { nativePrinterDetection } from './services/nativePrinterDetection';
 import { SupabaseSyncService } from './services/supabaseSync';
 import { SyncScheduler } from './services/syncScheduler';
 import { SyncController } from './controllers/syncController';
@@ -168,6 +170,25 @@ export class StartupManagerNextron {
         enhancedLogger.error('[StartupManager] ✗ OptimizedPrintingService failed (non-critical)', LogCategory.SYSTEM, 'StartupManager', { error });
       }
 
+      // Initialize PrinterSpoolerService for background optimization
+      enhancedLogger.info('[StartupManager] Initializing PrinterSpoolerService...', LogCategory.SYSTEM, 'StartupManager');
+      try {
+        printerSpoolerService.startMonitoring();
+        enhancedLogger.info('[StartupManager] ✓ PrinterSpoolerService monitoring started', LogCategory.SYSTEM, 'StartupManager');
+      } catch (error) {
+        enhancedLogger.error('[StartupManager] ✗ PrinterSpoolerService failed (non-critical)', LogCategory.SYSTEM, 'StartupManager', { error });
+      }
+
+      // Initialize NativePrinterDetection service (Phase 2 - Native Win32 API detection)
+      enhancedLogger.info('[StartupManager] Initializing NativePrinterDetection service...', LogCategory.SYSTEM, 'StartupManager');
+      try {
+        // Service auto-initializes as singleton, just log stats
+        const stats = nativePrinterDetection.getStats();
+        enhancedLogger.info('[StartupManager] ✓ NativePrinterDetection service ready', LogCategory.SYSTEM, 'StartupManager', { stats });
+      } catch (error) {
+        enhancedLogger.error('[StartupManager] ✗ NativePrinterDetection service failed (non-critical)', LogCategory.SYSTEM, 'StartupManager', { error });
+      }
+
       // Initialize Supabase Sync Services
       enhancedLogger.info('[StartupManager] Initializing Supabase Sync Services...', LogCategory.SYSTEM, 'StartupManager');
       try {
@@ -226,6 +247,14 @@ export class StartupManagerNextron {
    */
   async cleanup(): Promise<void> {
     enhancedLogger.info('[StartupManager] Cleaning up controllers...', LogCategory.SYSTEM, 'StartupManager');
+
+    // Stop PrinterSpoolerService monitoring
+    try {
+      printerSpoolerService.stopMonitoring();
+      enhancedLogger.info('[StartupManager] ✓ PrinterSpoolerService stopped', LogCategory.SYSTEM, 'StartupManager');
+    } catch (error) {
+      enhancedLogger.error('[StartupManager] ✗ PrinterSpoolerService stop failed', LogCategory.SYSTEM, 'StartupManager', { error });
+    }
 
     for (const [name, controller] of Array.from(this.controllers.entries())) {
       try {

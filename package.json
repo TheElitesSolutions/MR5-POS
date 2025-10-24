@@ -46,6 +46,7 @@
     "@supabase/supabase-js": "^2.75.1",
     "@tanstack/react-table": "^8.21.3",
     "@tanstack/react-virtual": "^3.13.12",
+    "@thesusheer/electron-printer": "^2.0.4",
     "@types/bcrypt": "^6.0.0",
     "@types/react-window": "^2.0.0",
     "adm-zip": "^0.5.16",
