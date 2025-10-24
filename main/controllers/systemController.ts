@@ -1,11 +1,44 @@
 import { SYSTEM_CHANNELS, BACKUP_CHANNELS } from '../../shared/ipc-channels';
 import { AppError, logInfo } from '../error-handler';
 import { BaseController } from './baseController';
+import * as path from 'path';
+import * as fs from 'fs';
 
 export class SystemController extends BaseController {
+  private appVersion: string = '2.3.0'; // Default version
+
   constructor() {
     super();
+    // Load version from package.json
+    this.loadAppVersion();
     // this.initialize(); // Removed: StartupManager calls initialize() explicitly
+  }
+
+  private loadAppVersion(): void {
+    try {
+      // In production: Read from app's package.json in resources
+      // In development: Read from project root package.json
+      const isDev = process.env.NODE_ENV !== 'production';
+
+      let packageJsonPath: string;
+      if (isDev) {
+        // Development: Use project root
+        packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
+      } else {
+        // Production: package.json is in the app.asar or app folder
+        packageJsonPath = path.join(__dirname, '..', '..', 'package.json');
+      }
+
+      if (fs.existsSync(packageJsonPath)) {
+        const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+        this.appVersion = packageJson.version || '2.3.0';
+        logInfo(`App version loaded: ${this.appVersion}`);
+      } else {
+        logInfo(`package.json not found at ${packageJsonPath}, using default version`);
+      }
+    } catch (error) {
+      logInfo(`Failed to load version from package.json: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   protected registerHandlers(): void {
@@ -19,7 +52,7 @@ export class SystemController extends BaseController {
           arch: process.arch,
           electronVersion: process.versions.electron || 'unknown',
           nodeVersion: process.version,
-          appVersion: '1.0.0', // Required by interface
+          appVersion: this.appVersion, // Use dynamically loaded version
           isDevelopment: process.env.NODE_ENV !== 'production', // Required by interface
         };
       })

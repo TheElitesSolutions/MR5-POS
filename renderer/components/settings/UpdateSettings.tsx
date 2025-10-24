@@ -26,16 +26,29 @@ export default function UpdateSettings() {
     skipVersion,
   } = useUpdater();
 
-  const [appVersion, setAppVersion] = useState<string>('');
+  const [appVersion, setAppVersion] = useState<string>('Loading...');
 
-  // Get app version from package.json
+  // Get app version from Electron main process
   useEffect(() => {
-    // In production build, we can get it from Electron
-    if (typeof window !== 'undefined' && (window as any).electron) {
-      setAppVersion('2.1.0'); // This will be replaced with actual version from Electron
-    } else {
-      setAppVersion('2.1.0');
-    }
+    const fetchVersion = async () => {
+      if (typeof window !== 'undefined' && (window as any).electron) {
+        try {
+          const systemInfo = await (window as any).electron.ipcRenderer.invoke('mr5pos:system:get-info');
+          if (systemInfo && systemInfo.appVersion) {
+            setAppVersion(systemInfo.appVersion);
+          } else {
+            setAppVersion('2.3.0'); // Fallback version
+          }
+        } catch (error) {
+          console.error('Failed to fetch app version:', error);
+          setAppVersion('2.3.0'); // Fallback version
+        }
+      } else {
+        setAppVersion('2.3.0'); // Development fallback
+      }
+    };
+
+    fetchVersion();
   }, []);
 
   const handleCheckForUpdates = async () => {
