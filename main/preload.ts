@@ -84,13 +84,20 @@ const diagnosticAPI = {
   createAdminUser: () => ipcRenderer.invoke('diagnostic:create-admin-user'),
 }
 
+// App control API for renderer process
+const appAPI = {
+  quit: () => ipcRenderer.invoke('app:quit'),
+}
+
 // Expose at the correct path that matches TypeScript definitions
 contextBridge.exposeInMainWorld('electronAPI', {
   ipc: handler,
   updater: updaterAPI,
   diagnostic: diagnosticAPI,
+  app: appAPI,
 })
 
 export type IpcHandler = typeof handler
 export type UpdaterAPI = typeof updaterAPI
 export type DiagnosticAPI = typeof diagnosticAPI
+export type AppAPI = typeof appAPI

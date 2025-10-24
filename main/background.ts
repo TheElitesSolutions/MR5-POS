@@ -6,7 +6,7 @@
 // Load environment variables from .env file FIRST
 import dotenv from 'dotenv';
 import path from 'path';
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
 
 // In production, the .env file should be in the unpacked asar directory
 const isProdEnv = process.env.NODE_ENV === 'production';
@@ -179,6 +179,9 @@ let startupManager: StartupManagerNextron | null = null;
     height: 900,
     minWidth: 1024,
     minHeight: 768,
+    frame: false,             // Remove window frame and title bar
+    titleBarStyle: 'hidden',  // Hide title bar on macOS
+    fullscreen: true,         // Open in fullscreen mode
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,  // Security: prevent node in renderer
@@ -191,6 +194,9 @@ let startupManager: StartupManagerNextron | null = null;
   if (startupManager) {
     startupManager.setMainWindow(mainWindow);
   }
+
+  // Disable application menu (removes File, Edit, View, Window, Help menu bar)
+  Menu.setApplicationMenu(null);
 
   // Initialize auto-update system (only in production)
   if (isProd) {
@@ -370,15 +376,38 @@ app.on('window-all-closed', async () => {
 // Reactivate app on macOS
 app.on('activate', () => {
   if (mainWindow === null) {
-    createWindow('main', {
+    mainWindow = createWindow('main', {
       width: 1400,
       height: 900,
+      minWidth: 1024,
+      minHeight: 768,
+      frame: false,
+      titleBarStyle: 'hidden',
+      fullscreen: true,
       webPreferences: {
         preload: path.join(__dirname, 'preload.js'),
         nodeIntegration: false,
         contextIsolation: true,
+        sandbox: false,
       },
     });
+  }
+});
+
+// IPC handler for app quit (used by custom close button)
+ipcMain.handle('app:quit', async () => {
+  try {
+    logInfo('App quit requested via IPC', 'Main');
+
+    // Reset crash count before closing (this is a normal close, not a crash)
+    await getUpdateSafety().recordSuccessfulStartup();
+
+    // Quit the application
+    app.quit();
+    return { success: true };
+  } catch (error) {
+    logError(error as Error, 'Main - App Quit Handler');
+    return { success: false, error: (error as Error).message };
   }
 });
 

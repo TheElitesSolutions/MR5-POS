@@ -16,7 +16,7 @@ function SettingsContent() {
 
   return (
     <POSLayout>
-      <div className='mx-auto max-w-4xl space-y-4 p-3 sm:space-y-6 sm:p-4 lg:p-6'>
+      <div className='mx-auto h-full max-w-4xl space-y-4 overflow-y-auto p-3 sm:space-y-6 sm:p-4 lg:p-6'>
         {/* Header */}
         <div className='space-y-1'>
           <div className='flex items-center space-x-3'>

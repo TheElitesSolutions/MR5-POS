@@ -220,7 +220,7 @@ export default function StockManagementPage() {
 
   return (
     <POSLayout>
-      <div className='space-y-4 p-6'>
+      <div className='h-full space-y-4 overflow-y-auto p-6'>
         {/* Header Section */}
         <div className='border-b pb-4 space-y-4'>
           {/* Header */}

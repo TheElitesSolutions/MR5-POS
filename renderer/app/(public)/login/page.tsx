@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -44,6 +45,16 @@ export default function LoginPage() {
     electronAPI.debugAPI();
   }, []);
 
+  const handleClose = async () => {
+    try {
+      if (window.electronAPI?.app?.quit) {
+        await window.electronAPI.app.quit();
+      }
+    } catch (error) {
+      console.error('Failed to quit app:', error);
+    }
+  };
+
   const onSubmit = async (data: LoginFormData) => {
     try {
       setIsSubmitting(true);
@@ -80,7 +91,17 @@ export default function LoginPage() {
   };
 
   return (
-    <div className='flex min-h-screen items-center justify-center bg-background px-4 py-8 sm:px-6 sm:py-12 lg:px-8 lg:py-16'>
+    <div className='flex min-h-screen items-center justify-center bg-background px-4 py-8 sm:px-6 sm:py-12 lg:px-8 lg:py-16 relative'>
+      {/* Custom Close Button */}
+      <button
+        onClick={handleClose}
+        className='absolute top-4 right-4 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 group'
+        aria-label='Close application'
+        title='Close application'
+      >
+        <X className='h-5 w-5 text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-100' />
+      </button>
+
       <div className='w-full max-w-md space-y-6 sm:space-y-8'>
         {/* Logo and Title Section */}
         <div className='text-center'>

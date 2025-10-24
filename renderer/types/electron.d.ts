@@ -73,7 +73,7 @@ declare global {
       app: {
         getVersion: () => string;
         getName: () => string;
-        quit: () => void;
+        quit: () => Promise<{ success: boolean; error?: string }>;
         restart: () => void;
         minimize: () => void;
         maximize: () => void;

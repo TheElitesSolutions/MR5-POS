@@ -392,7 +392,7 @@ function OrdersPage() {
 
   return (
     <POSLayout>
-      <div className='mx-auto max-w-7xl space-y-4 p-3 sm:space-y-6 sm:p-4 lg:p-6'>
+      <div className='mx-auto h-full max-w-7xl space-y-4 overflow-y-auto p-3 sm:space-y-6 sm:p-4 lg:p-6'>
         {/* Header */}
         <div className='space-y-4 sm:flex sm:items-start sm:justify-between sm:space-y-0'>
           <div className='space-y-1'>

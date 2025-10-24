@@ -104,7 +104,7 @@ function DashboardContent() {
 
   return (
     <POSLayout>
-      <div className='space-y-6 p-6'>
+      <div className='h-full space-y-6 overflow-y-auto p-6'>
         {/* Header with Real-time Status */}
         <div className='flex items-center justify-between border-b pb-4'>
           <div>
