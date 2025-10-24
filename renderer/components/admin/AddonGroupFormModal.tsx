@@ -158,7 +158,7 @@ export function AddonGroupFormModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className='max-h-[90dvh] max-w-2xl overflow-y-auto'>
+      <DialogContent className='max-h-[80vh] max-w-2xl overflow-hidden flex flex-col'>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
@@ -168,13 +168,14 @@ export function AddonGroupFormModal({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onFormSubmit)} className='space-y-6'>
+        <form onSubmit={handleSubmit(onFormSubmit)} className='flex flex-col flex-1 overflow-hidden'>
+          <div className='flex-1 overflow-y-auto px-1 space-y-4'>
           {/* Basic Information */}
           <Card>
             <CardHeader className='pb-3'>
               <CardTitle className='text-lg'>Basic Information</CardTitle>
             </CardHeader>
-            <CardContent className='space-y-4'>
+            <CardContent className='space-y-3'>
               {/* Name */}
               <div className='space-y-2'>
                 <Label htmlFor='name' className='required'>
@@ -222,8 +223,8 @@ export function AddonGroupFormModal({
                 Configure how many add-ons customers can select from this group
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-4'>
-              <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+            <CardContent className='space-y-3'>
+              <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
                 {/* Minimum Selections */}
                 <div className='space-y-2'>
                   <Label htmlFor='minSelections'>Minimum Selections</Label>
@@ -296,8 +297,8 @@ export function AddonGroupFormModal({
             <CardHeader className='pb-3'>
               <CardTitle className='text-lg'>Settings</CardTitle>
             </CardHeader>
-            <CardContent className='space-y-4'>
-              <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+            <CardContent className='space-y-3'>
+              <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
                 {/* Active Status */}
                 <div className='flex items-center justify-between rounded-lg border p-4'>
                   <div className='space-y-1'>
@@ -339,8 +340,9 @@ export function AddonGroupFormModal({
               </div>
             </CardContent>
           </Card>
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className='mt-4'>
             <Button
               type='button'
               variant='outline'

@@ -315,7 +315,7 @@ export function AddonFormModal({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className='max-h-[90dvh] max-w-3xl overflow-y-auto'>
+      <DialogContent className='max-h-[80vh] max-w-3xl overflow-hidden flex flex-col'>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>
@@ -325,7 +325,8 @@ export function AddonFormModal({
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onFormSubmit)} className='space-y-6'>
+        <form onSubmit={handleSubmit(onFormSubmit)} className='flex flex-col flex-1 overflow-hidden'>
+          <div className='flex-1 overflow-y-auto px-1 space-y-4'>
           {/* Inventory Items (Optional) */}
           <Card>
             <CardHeader className='pb-3'>
@@ -337,7 +338,7 @@ export function AddonFormModal({
                 Add inventory items that make up this add-on. Quantities will be deducted when ordered.
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-4'>
+            <CardContent className='space-y-3'>
               {/* Add Item Section */}
               <div className='grid grid-cols-4 gap-2'>
                 <Select
@@ -472,8 +473,8 @@ export function AddonFormModal({
                 Basic Information
               </CardTitle>
             </CardHeader>
-            <CardContent className='space-y-4'>
-              <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+            <CardContent className='space-y-3'>
+              <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
                 {/* Name */}
                 <div className='space-y-2'>
                   <Label htmlFor='name' className='required'>
@@ -554,7 +555,7 @@ export function AddonFormModal({
                 Assign this add-on to a specific group
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-4'>
+            <CardContent className='space-y-3'>
               {/* Add-on Group */}
               <div className='space-y-2'>
                 <Label htmlFor='addonGroupId' className='required'>
@@ -607,8 +608,8 @@ export function AddonFormModal({
             <CardHeader className='pb-3'>
               <CardTitle className='text-lg'>Settings</CardTitle>
             </CardHeader>
-            <CardContent className='space-y-4'>
-              <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+            <CardContent className='space-y-3'>
+              <div className='grid grid-cols-1 gap-3 md:grid-cols-2'>
                 {/* Active Status */}
                 <div className='flex items-center justify-between rounded-lg border p-4'>
                   <div className='space-y-1'>
@@ -651,8 +652,9 @@ export function AddonFormModal({
               </div>
             </CardContent>
           </Card>
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className='mt-4'>
             <Button
               type='button'
               variant='outline'

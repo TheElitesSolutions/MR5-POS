@@ -1,16 +1,15 @@
 /**
- * MenuCategoryGrid Component - REFACTORED to use new Service Architecture
+ * MenuCategoryGrid Component - Uses Backend API for Accurate Category Stats
  *
- * IMPROVEMENTS:
- * ✅ No more direct API calls - uses cached service layer
- * ✅ Request deduplication - prevents duplicate API calls
- * ✅ Optimized caching - data shared across components
- * ✅ Separation of concerns - UI state vs Data state
- * ✅ Better error handling with service-level retry logic
+ * CRITICAL FIX:
+ * ✅ Uses backend API 'mr5pos:menu-items:get-category-stats' for accurate counts
+ * ✅ Database-driven counts (single source of truth)
+ * ✅ No client-side filtering issues
+ * ✅ Matches menu management page implementation
  */
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { usePOSStore } from '@/stores/posStore';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,25 +24,146 @@ import {
   Beef,
   Fish,
 } from 'lucide-react';
-import { useAvailableMenuItems } from '@/hooks/useMenuData';
 
 interface MenuCategoryGridProps {
   onCategorySelect: (category: string) => void;
   selectedCategory?: string;
 }
 
+// IPC-based file logger helper
+const writeLog = async (
+  level: 'info' | 'warn' | 'error',
+  message: string,
+  context?: any
+) => {
+  try {
+    await window.electronAPI?.ipc.invoke('mr5pos:logs:write-log', {
+      level,
+      message,
+      category: 'ui',
+      module: 'MenuCategoryGrid',
+      context,
+    });
+  } catch (error) {
+    // Silently fail if logging fails
+    console.error('Failed to write log:', error);
+  }
+};
+
 const MenuCategoryGrid = ({
   onCategorySelect,
   selectedCategory,
 }: MenuCategoryGridProps) => {
-  const { switchToTables } = usePOSStore();
-
-  // Data from new service layer - automatically cached and deduplicated
-  const { menuItems, categories, isLoading } = useAvailableMenuItems();
+  const { switchToTables, viewMode } = usePOSStore();
 
   const [searchTerm, setSearchTerm] = useState('');
+  const [previousViewMode, setPreviousViewMode] = useState<string>(viewMode);
 
-  // No manual fetching needed - service layer handles this automatically
+  // State for category statistics from backend API (like CategoryManagement)
+  const [categoryStats, setCategoryStats] = useState<
+    Array<{
+      name: string;
+      totalItems: number;
+      availableItems: number;
+      avgPrice: number;
+    }>
+  >([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Fetch category statistics from backend API
+  const fetchCategoryStats = async () => {
+    try {
+      setIsLoading(true);
+
+      await writeLog('info', '========================================');
+      await writeLog('info', '🔄 MenuCategoryGrid: Starting category stats fetch');
+      await writeLog('info', 'Calling IPC: mr5pos:menu-items:get-category-stats');
+
+      const response = await window.electronAPI?.ipc.invoke(
+        'mr5pos:menu-items:get-category-stats'
+      );
+
+      await writeLog('info', '📦 Backend Response Received', {
+        success: response?.success,
+        hasData: !!response?.data,
+        dataLength: response?.data?.length,
+      });
+
+      if (response?.success && response.data) {
+        await writeLog('info', '🔍 Raw Backend Data', { data: response.data });
+
+        // Transform backend data to match component format
+        const stats = response.data.map((stat: any, index: number) => {
+          const transformed = {
+            name: stat.categoryName,
+            totalItems: stat.totalItems,
+            availableItems: stat.activeItems, // Backend returns 'activeItems'
+            avgPrice: stat.avgPrice,
+          };
+
+          writeLog('info', `📊 Category ${index + 1}`, {
+            categoryName: stat.categoryName,
+            categoryId: stat.categoryId,
+            totalItems: stat.totalItems,
+            activeItems: stat.activeItems,
+            avgPrice: stat.avgPrice,
+            transformed: transformed,
+          });
+
+          return transformed;
+        });
+
+        const sortedStats = stats.sort((a, b) => b.totalItems - a.totalItems);
+
+        await writeLog('info', '✅ Final Stats to Display', {
+          totalCategories: sortedStats.length,
+          categories: sortedStats.map(s => ({
+            name: s.name,
+            available: s.availableItems,
+            total: s.totalItems,
+          })),
+        });
+
+        setCategoryStats(sortedStats);
+        await writeLog('info', '========================================');
+      } else {
+        await writeLog('error', '❌ Failed Response', {
+          success: response?.success,
+          error: response?.error,
+          data: response?.data,
+        });
+        setCategoryStats([]);
+      }
+    } catch (error) {
+      await writeLog('error', '❌ Exception in fetchCategoryStats', {
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      setCategoryStats([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Initial fetch on mount
+  useEffect(() => {
+    fetchCategoryStats();
+  }, []);
+
+  // FIX: Refresh category stats when returning to menu view
+  // This ensures category counts reflect any availability changes from order operations
+  useEffect(() => {
+    // Detect transition TO menu view (categories)
+    if (previousViewMode !== 'menu' && viewMode === 'menu') {
+      writeLog('info', '🔄 View Mode Changed', {
+        from: previousViewMode,
+        to: viewMode,
+        action: 'Refreshing category stats',
+      });
+      fetchCategoryStats();
+    }
+    setPreviousViewMode(viewMode);
+  }, [viewMode, previousViewMode]);
 
   const getCategoryIcon = (category: string) => {
     const lowerCategory = category.toLowerCase();
@@ -73,35 +193,7 @@ const MenuCategoryGrid = ({
     return UtensilsCrossed;
   };
 
-  // FIX: Memoize expensive category statistics calculation (100-200ms improvement)
-  // This was recalculating on EVERY render, now only when categories or menuItems change
-  const categoryStats = useMemo(() => {
-    return categories.map(category => {
-      // FIX: Extract category name from object or use string directly
-      // Categories can be either string or {id, name} object from getCategories()
-      const categoryName = typeof category === 'string' ? category : category.name;
-
-      const categoryItems = menuItems.filter(
-        item => item.category === categoryName && item.isAvailable
-      );
-      const totalItems = menuItems.filter(item => item.category === categoryName);
-      const avgPrice =
-        categoryItems.length > 0
-          ? categoryItems.reduce((sum, item) => sum + item.price, 0) /
-            categoryItems.length
-          : 0;
-
-      return {
-        name: categoryName,
-        availableItems: categoryItems.length,
-        totalItems: totalItems.length,
-        avgPrice,
-        items: categoryItems,
-      };
-    });
-  }, [categories, menuItems]);
-
-  // FIX: Memoize filtered categories to prevent re-filtering on every render
+  // Filter categories by search term
   const filteredCategories = useMemo(() => {
     return categoryStats.filter(category =>
       category.name.toLowerCase().includes(searchTerm.toLowerCase())

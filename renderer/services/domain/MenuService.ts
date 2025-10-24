@@ -449,8 +449,10 @@ export class MenuService {
 
   /**
    * Invalidate all menu-related caches
+   * Made public to allow external components (e.g., POS Store) to trigger cache invalidation
+   * after order operations that may affect menu item availability
    */
-  private invalidateMenuCaches(): void {
+  public invalidateMenuCaches(): void {
     const invalidatedCount = this.requestManager.invalidate(/^menu:/);
     console.log(
       `🗑️ MenuService: Invalidated ${invalidatedCount} menu cache entries`

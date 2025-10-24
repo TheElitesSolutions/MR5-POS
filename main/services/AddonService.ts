@@ -1050,7 +1050,11 @@ export class AddonService {
           include: {
             addon: {
               include: {
-                inventory: true,
+                inventoryItems: {
+                  include: {
+                    inventory: true,
+                  },
+                },
               },
             },
             orderItem: {
@@ -1065,17 +1069,37 @@ export class AddonService {
           return false;
         }
 
-        // Restore inventory
-        if (assignment.addon.inventory) {
-          await tx.inventory.update({
-            where: { id: assignment.addon.inventory.id },
-            data: {
-              currentStock: {
-                increment: assignment.quantity,
-              },
-              updatedAt: new Date(),
-            },
-          });
+        // Restore inventory for all inventory items linked to this addon
+        if (assignment.addon.inventoryItems && assignment.addon.inventoryItems.length > 0) {
+          for (const addonInvItem of assignment.addon.inventoryItems) {
+            if (addonInvItem.inventory && addonInvItem.quantity > 0) {
+              const totalToRestore = addonInvItem.quantity * assignment.quantity;
+              await tx.inventory.update({
+                where: { id: addonInvItem.inventoryId },
+                data: {
+                  currentStock: {
+                    increment: totalToRestore,
+                  },
+                  updatedAt: new Date(),
+                },
+              });
+
+              // Create audit log for inventory restoration
+              await tx.auditLog.create({
+                data: {
+                  action: 'INVENTORY_INCREASE',
+                  tableName: 'inventory',
+                  recordId: addonInvItem.inventoryId,
+                  newValues: {
+                    reason: 'Addon removed from order item',
+                    addonId: addonId,
+                    orderItemId: orderItemId,
+                    quantityRestored: totalToRestore,
+                  },
+                },
+              });
+            }
+          }
         }
 
         // Update order item total

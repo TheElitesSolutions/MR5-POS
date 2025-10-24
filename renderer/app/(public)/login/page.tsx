@@ -91,53 +91,53 @@ export default function LoginPage() {
   };
 
   return (
-    <div className='flex min-h-screen items-center justify-center bg-background px-4 py-8 sm:px-6 sm:py-12 lg:px-8 lg:py-16 relative'>
+    <div className='flex h-screen items-center justify-center bg-background px-4 py-4 overflow-y-auto relative'>
       {/* Custom Close Button */}
       <button
         onClick={handleClose}
-        className='absolute top-4 right-4 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 group'
+        className='fixed top-2 right-2 z-50 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors duration-200 group'
         aria-label='Close application'
         title='Close application'
       >
         <X className='h-5 w-5 text-gray-600 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-gray-100' />
       </button>
 
-      <div className='w-full max-w-md space-y-6 sm:space-y-8'>
+      <div className='w-full max-w-md space-y-3 sm:space-y-4 md:space-y-6 my-4'>
         {/* Logo and Title Section */}
         <div className='text-center'>
-          <div className='mb-6 flex justify-center sm:mb-8'>
+          <div className='mb-3 sm:mb-4 md:mb-6 flex justify-center'>
             <Image
               src='/the-elites-logo.png'
               alt='The Elites Logo'
               width={200}
               height={200}
-              className='h-auto w-24 sm:w-32 md:w-40 lg:w-48'
+              className='h-auto w-20 sm:w-24 md:w-32 lg:w-40'
               priority
             />
           </div>
-          <h1 className='mb-2 text-2xl font-bold text-gray-900 sm:mb-3 sm:text-3xl lg:text-4xl'>
+          <h1 className='mb-1 sm:mb-2 text-xl sm:text-2xl md:text-3xl font-bold text-gray-900'>
             The Elites POS
           </h1>
-          <p className='text-sm text-muted-foreground sm:text-base'>
+          <p className='text-xs sm:text-sm text-muted-foreground'>
             Restaurant Management System
           </p>
         </div>
 
         {/* Login Card */}
         <Card className='shadow-lg'>
-          <CardHeader className='space-y-1 px-4 py-5 sm:px-6 sm:py-6'>
-            <CardTitle className='text-xl sm:text-2xl'>
+          <CardHeader className='space-y-1 px-4 py-3 sm:py-4 md:px-6 md:py-5'>
+            <CardTitle className='text-lg sm:text-xl md:text-2xl'>
               Sign in to your account
             </CardTitle>
-            <CardDescription className='text-sm sm:text-base'>
+            <CardDescription className='text-xs sm:text-sm'>
               Enter your username and password to access The Elites POS
             </CardDescription>
           </CardHeader>
-          <CardContent className='px-4 pb-5 sm:px-6 sm:pb-6'>
-            <form onSubmit={handleSubmit(onSubmit)} className='space-y-4 sm:space-y-6'>
+          <CardContent className='px-4 pb-4 sm:pb-5 md:px-6 md:pb-6'>
+            <form onSubmit={handleSubmit(onSubmit)} className='space-y-3 sm:space-y-4'>
               {/* Username Field */}
-              <div className='space-y-2 sm:space-y-3'>
-                <Label htmlFor='username' className='text-sm font-medium sm:text-base'>
+              <div className='space-y-1.5 sm:space-y-2'>
+                <Label htmlFor='username' className='text-sm font-medium'>
                   Username
                 </Label>
                 <Input
@@ -145,21 +145,21 @@ export default function LoginPage() {
                   type='text'
                   placeholder='Enter your username'
                   {...register('username')}
-                  className={`h-10 text-sm sm:h-11 sm:text-base ${
+                  className={`h-9 sm:h-10 text-sm ${
                     errors.username ? 'border-destructive' : ''
                   }`}
                   disabled={isSubmitting}
                 />
                 {errors.username && (
-                  <p className='text-xs text-destructive sm:text-sm'>
+                  <p className='text-xs text-destructive'>
                     {errors.username.message}
                   </p>
                 )}
               </div>
 
               {/* Password Field */}
-              <div className='space-y-2 sm:space-y-3'>
-                <Label htmlFor='password' className='text-sm font-medium sm:text-base'>
+              <div className='space-y-1.5 sm:space-y-2'>
+                <Label htmlFor='password' className='text-sm font-medium'>
                   Password
                 </Label>
                 <Input
@@ -167,13 +167,13 @@ export default function LoginPage() {
                   type='password'
                   placeholder='Enter your password'
                   {...register('password')}
-                  className={`h-10 text-sm sm:h-11 sm:text-base ${
+                  className={`h-9 sm:h-10 text-sm ${
                     errors.password ? 'border-destructive' : ''
                   }`}
                   disabled={isSubmitting}
                 />
                 {errors.password && (
-                  <p className='text-xs text-destructive sm:text-sm'>
+                  <p className='text-xs text-destructive'>
                     {errors.password.message}
                   </p>
                 )}
@@ -181,7 +181,7 @@ export default function LoginPage() {
 
               {/* Error Message */}
               {error && (
-                <div className='rounded border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive sm:px-4 sm:py-3 sm:text-sm'>
+                <div className='rounded border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs text-destructive'>
                   {error}
                 </div>
               )}
@@ -189,7 +189,7 @@ export default function LoginPage() {
               {/* Submit Button */}
               <Button
                 type='submit'
-                className='h-10 w-full text-sm sm:h-11 sm:text-base'
+                className='h-9 sm:h-10 w-full text-sm'
                 disabled={isLoading || isSubmitting}
               >
                 {isLoading || isSubmitting ? 'Signing in...' : 'Sign in'}
@@ -197,7 +197,7 @@ export default function LoginPage() {
             </form>
 
             {/* Security Notice */}
-            <div className='mt-4 space-y-1 text-center text-xs text-muted-foreground sm:mt-6'>
+            <div className='mt-3 sm:mt-4 space-y-0.5 text-center text-xs text-muted-foreground'>
               <p>🔒 Secure login with enhanced protection</p>
               <p>Rate limited for security</p>
             </div>

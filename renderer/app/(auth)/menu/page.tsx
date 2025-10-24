@@ -326,18 +326,20 @@ export default function MenuManagementPage() {
                     <span className='sm:hidden'>Add Item</span>
                   </Button>
                 </DialogTrigger>
-                <DialogContent className='mx-4 max-h-[90dvh] max-w-4xl overflow-y-auto'>
+                <DialogContent className='mx-4 max-h-[80vh] max-w-4xl overflow-hidden flex flex-col'>
                   <DialogHeader>
                     <DialogTitle>
                       {editingItem ? 'Edit Menu Item' : 'Add New Menu Item'}
                     </DialogTitle>
                   </DialogHeader>
-                  <MenuItemForm
-                    key={`${showAddDialog}-${editingItem || 'new'}`}
-                    itemId={editingItem}
-                    onClose={handleCloseDialog}
-                    defaultCategory={selectedCategory || undefined}
-                  />
+                  <div className='flex-1 overflow-y-auto px-1'>
+                    <MenuItemForm
+                      key={`${showAddDialog}-${editingItem || 'new'}`}
+                      itemId={editingItem}
+                      onClose={handleCloseDialog}
+                      defaultCategory={selectedCategory || undefined}
+                    />
+                  </div>
                 </DialogContent>
               </Dialog>
             </div>

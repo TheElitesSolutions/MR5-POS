@@ -23,6 +23,7 @@ import { SupabaseSyncService } from '../services/supabaseSync';
 import { ServiceRegistry } from '../services/serviceRegistry';
 import { IPCResponse } from '../types/index';
 import { BaseController } from './baseController';
+import { EnhancedLogger, LogCategory } from '../utils/enhanced-logger';
 
 export class MenuItemController extends BaseController {
   private menuItemService: MenuItemService;
@@ -628,8 +629,13 @@ export class MenuItemController extends BaseController {
   private async getCategoryStats(
     _event: IpcMainInvokeEvent
   ): Promise<IPCResponse<any[]>> {
+    const logger = EnhancedLogger.getInstance();
+
     try {
-      console.log('MenuItemController: getCategoryStats called');
+      logger.info('========================================', LogCategory.BUSINESS, 'MenuItemController');
+      logger.info('🔍 getCategoryStats called', LogCategory.BUSINESS, 'MenuItemController', {
+        timestamp: new Date().toISOString(),
+      });
 
       // Get all active categories
       const categories = await prisma.category.findMany({
@@ -637,9 +643,23 @@ export class MenuItemController extends BaseController {
         orderBy: { sortOrder: 'asc' },
       });
 
+      logger.info('📊 Active Categories Found', LogCategory.BUSINESS, 'MenuItemController', {
+        count: categories.length,
+        categories: categories.map(c => ({
+          id: c.id,
+          name: c.name,
+          isActive: c.isActive,
+        })),
+      });
+
       // Get counts and stats for each category
       const categoryStats = await Promise.all(
-        categories.map(async category => {
+        categories.map(async (category, index) => {
+          logger.info(`🔍 Processing Category ${index + 1}/${categories.length}`, LogCategory.BUSINESS, 'MenuItemController', {
+            name: category.name,
+            id: category.id,
+          });
+
           // Get total items count
           const totalItems = await prisma.menuItem.count({
             where: {
@@ -655,6 +675,19 @@ export class MenuItemController extends BaseController {
             },
           });
 
+          // Get sample items for debugging
+          const sampleItems = await prisma.menuItem.findMany({
+            where: {
+              categoryId: category.id,
+            },
+            select: {
+              id: true,
+              name: true,
+              isActive: true,
+            },
+            take: 5,
+          });
+
           // Get average price
           const priceAggregate = await prisma.menuItem.aggregate({
             where: {
@@ -664,27 +697,44 @@ export class MenuItemController extends BaseController {
               price: true,
             },
           });
+          const avgPrice = priceAggregate._avg.price
+            ? Number(priceAggregate._avg.price)
+            : 0;
 
-          return {
+          const result = {
             categoryId: category.id,
             categoryName: category.name,
             totalItems,
             activeItems,
-            avgPrice: priceAggregate._avg.price
-              ? Number(priceAggregate._avg.price)
-              : 0,
+            avgPrice,
           };
+
+          logger.info(`✅ Category Stats Calculated`, LogCategory.BUSINESS, 'MenuItemController', {
+            category: category.name,
+            totalItems,
+            activeItems,
+            avgPrice: avgPrice.toFixed(2),
+            sampleItems: sampleItems.map(i => `${i.name}(${i.isActive ? 'active' : 'inactive'})`).join(', '),
+            result,
+          });
+
+          return result;
         })
       );
 
-      console.log('MenuItemController: getCategoryStats result:', {
-        statsCount: categoryStats.length,
-        stats: categoryStats,
+      logger.info('✅ Final Category Stats Summary', LogCategory.BUSINESS, 'MenuItemController', {
+        totalCategories: categoryStats.length,
+        summary: categoryStats.map(s => `${s.categoryName}: ${s.activeItems}/${s.totalItems}`).join(' | '),
+        fullStats: categoryStats,
       });
+      logger.info('========================================', LogCategory.BUSINESS, 'MenuItemController');
 
       return this.createSuccessResponse(categoryStats);
     } catch (error) {
-      console.error('MenuItemController: getCategoryStats error:', error);
+      logger.error('❌ getCategoryStats error', LogCategory.BUSINESS, 'MenuItemController', {
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
       return this.createErrorResponse(
         error instanceof Error ? error : String(error)
       );

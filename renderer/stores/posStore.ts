@@ -5,6 +5,7 @@ import { TableStatus, OrderType } from '../../shared/ipc-types';
 import type { Order as IPCOrder, Table as IPCTable } from '../../shared/ipc-types';
 import { useAuthStore } from './authStore';
 import type { SimpleOrderTracking } from '@/hooks/useSimpleOrderTracking';
+import { getMenuService } from '@/services/domain/MenuService';
 
 // Helper function to convert IPC Order to renderer Order
 function convertIPCOrderToRendererOrder(ipcOrder: IPCOrder): Order {
@@ -1098,6 +1099,15 @@ export const usePOSStore = create<PosState>((set, get) => ({
               ?.menuItemName || 'none',
         }
       );
+
+      // Invalidate menu cache to ensure category counts reflect updated availability
+      try {
+        getMenuService().invalidateMenuCaches();
+        console.log('🔄 POS Store: Menu cache invalidated after adding item');
+      } catch (cacheError) {
+        console.warn('⚠️ POS Store: Failed to invalidate menu cache:', cacheError);
+        // Don't fail the operation if cache invalidation fails
+      }
 
       // Refresh tables to update table status in UI
       // Only refresh if this is a table order (has tableId)

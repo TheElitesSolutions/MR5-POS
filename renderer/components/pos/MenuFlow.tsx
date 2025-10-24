@@ -53,7 +53,10 @@ const MenuFlow = ({
   selectedCategory: initialCategory,
 }: MenuFlowProps) => {
   // UI state only - no data fetching
-  const { isLoading: posLoading } = usePOSStore();
+  const { isLoading: posLoading, viewMode } = usePOSStore();
+
+  // Track previous view mode to detect transitions
+  const [previousViewMode, setPreviousViewMode] = useState<string>(viewMode);
 
   // Clear stale cache when POS MenuFlow mounts to ensure fresh data
   useEffect(() => {
@@ -63,7 +66,24 @@ const MenuFlow = ({
     });
   }, []);
 
+  // Smart refresh: Update menu data when switching from menu back to categories/tables view
+  // This ensures category counts reflect any availability changes from order operations
+  useEffect(() => {
+    // Detect transition from menu view back to tables/categories view
+    if (previousViewMode === 'menu' && viewMode === 'tables') {
+      console.log('🔄 MenuFlow: Detected return to categories, refreshing menu data');
+      const menuService = getMenuService();
+      menuService.refreshMenuData().catch((error) => {
+        console.warn('⚠️ MenuFlow: Failed to refresh menu data:', error);
+        // Silent fail - not critical for operation
+      });
+    }
+    // Update previous view mode for next comparison
+    setPreviousViewMode(viewMode);
+  }, [viewMode, previousViewMode]);
+
   // Data from new service layer - automatically cached and deduplicated
+  // ✅ FIX: Fetch ALL available items (no pagination) for POS filtering to work correctly
   const {
     menuItems,
     categories,
@@ -72,6 +92,8 @@ const MenuFlow = ({
   } = useAvailableMenuItems({
     search: '',
     category: '',
+    page: 1,
+    pageSize: 1000, // Large number to get all items (POS needs all for category filtering)
   });
 
   // Use shared stock data with memoization to prevent unnecessary rerenders
@@ -97,40 +119,162 @@ const MenuFlow = ({
   >({});
   const [addonSelections, setAddonSelections] = useState<AddonSelection[]>([]);
 
+  // State for category statistics from backend API (like MenuCategoryGrid)
+  const [categoryStats, setCategoryStats] = useState<
+    Array<{
+      categoryId: string;
+      name: string;
+      totalItems: number;
+      availableItems: number;
+      avgPrice: number;
+    }>
+  >([]);
+  const [isFetchingStats, setIsFetchingStats] = useState(false);
+
   // Combined loading state
-  const isLoading = posLoading || menuLoading || stockLoading;
+  const isLoading = posLoading || menuLoading || stockLoading || isFetchingStats;
+
+  // ✅ Helper functions (MUST be defined BEFORE filteredMenuItems to avoid hoisting errors)
+  // Get categoryId by name for matching
+  const getCategoryIdByName = useCallback((categoryName: string) => {
+    const stat = categoryStats.find(s => s.name === categoryName);
+    return stat?.categoryId;
+  }, [categoryStats]);
+
+  // Get category count from backend stats (replaces client-side filtering)
+  const getCategoryCount = useCallback((category: string) => {
+    const stat = categoryStats.find(s => s.name === category);
+    return stat?.availableItems || 0;
+  }, [categoryStats]);
 
   // Filter menu items based on search and category
   const filteredMenuItems = useMemo(() => {
-    return menuItems.filter(item => {
+    console.log('🔍 MenuFlow: Filtering menu items', {
+      totalItems: menuItems.length,
+      selectedCategory,
+      searchTerm,
+      sampleItem: menuItems[0],
+      allUniqueCategories: [...new Set(menuItems.map(i => i.category))],
+    });
+
+    const filtered = menuItems.filter(item => {
       const matchesSearch = item.name
         .toLowerCase()
         .includes(searchTerm.toLowerCase());
-      const matchesCategory =
-        !selectedCategory || item.category === selectedCategory;
-      return matchesSearch && matchesCategory && item.isAvailable;
-    });
-  }, [menuItems, searchTerm, selectedCategory]);
 
-  // Memoized category counts map - Only recalculates when menuItems or categories change
-  // Reduces operations from 275 filter operations per render to 11 O(1) Map lookups (96% improvement)
-  const categoryCountsMap = useMemo(() => {
-    const counts = new Map<string, number>();
-    categories.forEach(category => {
-      const categoryName =
-        typeof category === 'string' ? category : (category as any).name;
-      const count = menuItems.filter(
-        item => item.category === categoryName && item.isAvailable
-      ).length;
-      counts.set(categoryName, count);
-    });
-    return counts;
-  }, [menuItems, categories]);
+      // ✅ FIX: Match by categoryId for reliability, fallback to case-insensitive name matching
+      let matchesCategory = false;
+      if (!selectedCategory) {
+        matchesCategory = true;
+      } else {
+        const selectedCategoryId = getCategoryIdByName(selectedCategory);
+        if (selectedCategoryId && item.categoryId) {
+          // Preferred: Match by categoryId (most reliable)
+          matchesCategory = item.categoryId === selectedCategoryId;
+        } else {
+          // Fallback: Case-insensitive name matching
+          matchesCategory = item.category?.toLowerCase() === selectedCategory.toLowerCase();
+        }
+      }
 
-  // Get category count from memoized map - O(1) lookup instead of O(n) filter
-  const getCategoryCount = (category: string) => {
-    return categoryCountsMap.get(category) || 0;
-  };
+      const isAvailable = item.isAvailable;
+
+      // Debug log first few items
+      if (menuItems.indexOf(item) < 3) {
+        console.log(`  Item "${item.name}":`, {
+          itemCategory: item.category,
+          itemCategoryId: item.categoryId,
+          selectedCategory,
+          selectedCategoryId: getCategoryIdByName(selectedCategory),
+          categoryIdMatch: item.categoryId === getCategoryIdByName(selectedCategory),
+          categoryNameMatch: item.category?.toLowerCase() === selectedCategory?.toLowerCase(),
+          matchesCategory,
+          isAvailable,
+          willShow: matchesSearch && matchesCategory && isAvailable,
+        });
+      }
+
+      return matchesSearch && matchesCategory && isAvailable;
+    });
+
+    console.log('✅ MenuFlow: Filtered results', {
+      filteredCount: filtered.length,
+      firstItem: filtered[0]?.name,
+      debugInfo: {
+        selectedCategoryLower: selectedCategory?.toLowerCase(),
+        itemCategoriesLower: [...new Set(menuItems.map(i => i.category?.toLowerCase()))],
+      },
+    });
+
+    return filtered;
+  }, [menuItems, searchTerm, selectedCategory, getCategoryIdByName]);
+
+  // ✅ FIX: Fetch category statistics from backend API (same as MenuCategoryGrid)
+  // This ensures POS page and Menu page show consistent category counts
+  const fetchCategoryStats = useCallback(async () => {
+    try {
+      setIsFetchingStats(true);
+      console.log('🔄 MenuFlow: Fetching category stats from backend API');
+
+      const response = await window.electronAPI?.ipc.invoke(
+        'mr5pos:menu-items:get-category-stats'
+      );
+
+      if (response?.success && response.data) {
+        console.log('📦 MenuFlow: Backend Response Received', {
+          success: response.success,
+          dataLength: response.data.length,
+        });
+
+        // Transform backend data to match component format
+        // ✅ Include categoryId for reliable matching
+        const stats = response.data.map((stat: any) => ({
+          categoryId: stat.categoryId,
+          name: stat.categoryName,
+          totalItems: stat.totalItems,
+          availableItems: stat.activeItems, // Backend returns 'activeItems'
+          avgPrice: stat.avgPrice,
+        }));
+
+        const sortedStats = stats.sort((a, b) => b.totalItems - a.totalItems);
+
+        console.log('✅ MenuFlow: Category stats loaded', {
+          totalCategories: sortedStats.length,
+          categories: sortedStats.map(s => ({
+            name: s.name,
+            available: s.availableItems,
+            total: s.totalItems,
+          })),
+        });
+
+        setCategoryStats(sortedStats);
+      } else {
+        console.error('❌ MenuFlow: Failed to fetch category stats', response);
+        setCategoryStats([]);
+      }
+    } catch (error) {
+      console.error('❌ MenuFlow: Exception in fetchCategoryStats', error);
+      setCategoryStats([]);
+    } finally {
+      setIsFetchingStats(false);
+    }
+  }, []);
+
+  // Fetch category stats on mount and when categories change
+  useEffect(() => {
+    if (categories && categories.length > 0) {
+      console.log('🔄 MenuFlow: Categories available, fetching stats');
+      fetchCategoryStats();
+    }
+  }, [categories, fetchCategoryStats]);
+
+  // Refresh stats when returning to categories view
+  useEffect(() => {
+    if (currentStep === 'categories') {
+      console.log('🔄 MenuFlow: Returned to categories view, refreshing stats');
+      fetchCategoryStats();
+    }
+  }, [currentStep, fetchCategoryStats]);
 
   // Memoized handler - prevents re-renders when passed to child components
   const handleCategorySelect = useCallback((category: string) => {

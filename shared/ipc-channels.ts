@@ -230,6 +230,7 @@ export const LOGGING_CHANNELS = {
   GET_STATS: createChannel('logs', 'get-stats'),
   CLEAR: createChannel('logs', 'clear'),
   EXPORT: createChannel('logs', 'export'),
+  WRITE_LOG: createChannel('logs', 'write-log'), // For renderer to write logs to file
 };
 
 /**

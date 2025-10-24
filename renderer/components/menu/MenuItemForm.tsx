@@ -61,7 +61,7 @@ const ingredientSchema = z.object({
   stockItemId: z.string().min(1, 'Stock item is required'),
   quantityRequired: z.coerce
     .number()
-    .min(0.001, 'Quantity must be greater than 0'),
+    .min(0, 'Quantity cannot be negative'),
   unit: z.string().optional().nullable(), // Store unit for display purposes
 });
 
@@ -551,30 +551,31 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
 
   return (
     <Form {...form}>
-      <form 
+      <form
         onSubmit={(e) => {
           console.log('📝 Form onSubmit event triggered');
           form.handleSubmit(onSubmit as any)(e);
-        }} 
-        className='space-y-6'
+        }}
+        className='flex flex-col h-full'
       >
-        {form.formState.errors.root && (
-          <div className='rounded-md bg-red-50 p-4 dark:bg-red-900/20'>
-            <div className='flex'>
-              <div className='ml-3'>
-                <h3 className='text-sm font-medium text-red-800 dark:text-red-200'>
-                  {form.formState.errors.root.message}
-                </h3>
+        <div className='flex-1 space-y-4 pb-4'>
+          {form.formState.errors.root && (
+            <div className='rounded-md bg-red-50 p-4 dark:bg-red-900/20'>
+              <div className='flex'>
+                <div className='ml-3'>
+                  <h3 className='text-sm font-medium text-red-800 dark:text-red-200'>
+                    {form.formState.errors.root.message}
+                  </h3>
+                </div>
               </div>
             </div>
-          </div>
-        )}
-        {/* Basic Information */}
+          )}
+          {/* Basic Information */}
         <Card>
-          <CardHeader>
+          <CardHeader className='pb-3'>
             <CardTitle className='text-lg'>Basic Information</CardTitle>
           </CardHeader>
-          <CardContent className='space-y-4'>
+          <CardContent className='space-y-3'>
             {/* Name */}
             <FormField
               control={form.control}
@@ -759,7 +760,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
 
         {/* Ingredient Tracking */}
         <Card>
-          <CardHeader>
+          <CardHeader className='pb-3'>
             <CardTitle className='flex items-center justify-between text-lg'>
               <span className='flex items-center'>
                 <Calculator className='mr-2 h-5 w-5' />
@@ -776,7 +777,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
               </Button>
             </CardTitle>
           </CardHeader>
-          <CardContent className='space-y-4'>
+          <CardContent className='space-y-3'>
             {fields.length === 0 ? (
               <div className='py-8 text-center text-gray-500'>
                 <Calculator className='mx-auto mb-4 h-12 w-12 text-gray-400' />
@@ -786,11 +787,11 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
                 </p>
               </div>
             ) : (
-              <div className='space-y-4'>
+              <div className='space-y-2'>
                 {fields.map((field, index) => (
                   <div
                     key={field.id}
-                    className='flex items-end space-x-3 rounded-lg border p-3'
+                    className='flex items-end space-x-2 rounded-lg border p-2'
                   >
                     <FormField
                       control={form.control}
@@ -953,12 +954,12 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
             {fields.length > 0 && (
               <>
                 <Separator />
-                <div className='space-y-3 rounded-lg bg-gray-50 p-4'>
+                <div className='space-y-2 rounded-lg bg-gray-50 p-3'>
                   <h4 className='flex items-center font-medium text-gray-900'>
                     <DollarSign className='mr-2 h-4 w-4' />
                     Cost Analysis
                   </h4>
-                  <div className='grid grid-cols-1 gap-4 text-sm md:grid-cols-3'>
+                  <div className='grid grid-cols-1 gap-3 text-sm md:grid-cols-3'>
                     <div>
                       <span className='text-gray-600'>Ingredient Cost:</span>
                       <div className='font-semibold text-red-600'>
@@ -1018,10 +1019,10 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
 
         {/* Availability and Status */}
         <Card>
-          <CardHeader>
+          <CardHeader className='pb-3'>
             <CardTitle className='text-lg'>Availability Settings</CardTitle>
           </CardHeader>
-          <CardContent className='space-y-4'>
+          <CardContent className='space-y-3'>
             <FormField
               control={form.control}
               name='isAvailable'
@@ -1092,9 +1093,10 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
             />
           </CardContent>
         </Card>
+        </div>
 
         {/* Submit Buttons */}
-        <div className='flex justify-end space-x-2 pt-4'>
+        <div className='flex justify-end space-x-2 pt-4 border-t mt-4'>
           <Button type='button' variant='outline' onClick={onClose} disabled={isSubmitting}>
             Cancel
           </Button>

@@ -148,11 +148,15 @@ export class OrderControllerAddonExtensions {
           );
 
           for (const selection of data.item.addonSelections) {
-            // Get add-on details
+            // Get add-on details with correct inventoryItems relationship
             const addon = await tx.addon.findUnique({
               where: { id: selection.addonId },
               include: {
-                inventory: true,
+                inventoryItems: {
+                  include: {
+                    inventory: true,
+                  },
+                },
                 addonGroup: true,
               },
             });
@@ -161,15 +165,6 @@ export class OrderControllerAddonExtensions {
               throw new Error(
                 `Add-on ${selection.addonId} not found or inactive`
               );
-            }
-
-            // Check stock availability if linked to inventory
-            if (addon.inventory) {
-              if (addon.inventory.currentStock < selection.quantity) {
-                throw new Error(
-                  `Insufficient stock for add-on ${addon.name}. Available: ${addon.inventory.currentStock}, Required: ${selection.quantity}`
-                );
-              }
             }
 
             // Calculate add-on pricing
@@ -198,22 +193,62 @@ export class OrderControllerAddonExtensions {
 
             addonAssignments.push(assignment);
 
-            // Deduct add-on inventory if linked
-            if (addon.inventory) {
-              await tx.inventory.update({
-                where: { id: addon.inventory.id },
-                data: {
-                  currentStock: {
-                    decrement: selection.quantity,
-                  },
-                  updatedAt: new Date().toISOString(),
-                },
-              });
-
+            // Deduct add-on inventory if linked (using correct inventoryItems relationship)
+            if (addon.inventoryItems && addon.inventoryItems.length > 0) {
               logInfo(
-                `Deducted add-on inventory: ${addon.name} - ${selection.quantity}`,
+                `Processing ${addon.inventoryItems.length} inventory items for addon: ${addon.name}`,
                 'OrderController'
               );
+
+              for (const addonInvItem of addon.inventoryItems) {
+                // Calculate total quantity needed per addon
+                const quantityPerAddon = addonInvItem.quantity;
+                const totalQuantityNeeded = quantityPerAddon * selection.quantity;
+
+                // Get current inventory
+                const inventory = addonInvItem.inventory;
+                const currentStock = Number(inventory.currentStock);
+                const newStock = currentStock - totalQuantityNeeded;
+
+                // Check if we have enough stock
+                if (newStock < 0) {
+                  throw new Error(
+                    `Insufficient stock for addon ${addon.name} ingredient ${inventory.itemName}. Available: ${currentStock}, Required: ${totalQuantityNeeded}`
+                  );
+                }
+
+                // Update inventory atomically
+                await tx.inventory.update({
+                  where: { id: inventory.id },
+                  data: {
+                    currentStock: newStock,
+                    updatedAt: new Date(),
+                  },
+                });
+
+                // Log the transaction for audit
+                await tx.auditLog.create({
+                  data: {
+                    action: 'INVENTORY_DECREASE',
+                    tableName: 'inventory',
+                    recordId: inventory.id,
+                    newValues: {
+                      reason: 'Addon added to order item',
+                      addonId: addon.id,
+                      addonName: addon.name,
+                      orderItemId: orderItem.id,
+                      previousStock: currentStock,
+                      used: totalQuantityNeeded,
+                      newStock: newStock,
+                    },
+                  },
+                });
+
+                logInfo(
+                  `Deducted addon inventory: ${addon.name} -> ${inventory.itemName} - ${totalQuantityNeeded} ${inventory.unit}`,
+                  'OrderController'
+                );
+              }
             }
           }
         }
@@ -555,7 +590,11 @@ export class OrderControllerAddonExtensions {
               include: {
                 addon: {
                   include: {
-                    inventory: true,
+                    inventoryItems: {
+                      include: {
+                        inventory: true,
+                      },
+                    },
                   },
                 },
               },
@@ -567,23 +606,51 @@ export class OrderControllerAddonExtensions {
           throw new Error('Order item not found');
         }
 
-        // Step 2: Restore add-on inventory
+        // Step 2: Restore add-on inventory (using correct inventoryItems relationship)
         for (const addonAssignment of orderItem.orderItemAddons) {
-          if (addonAssignment.addon.inventory) {
-            await tx.inventory.update({
-              where: { id: addonAssignment.addon.inventory.id },
-              data: {
-                currentStock: {
-                  increment: addonAssignment.quantity,
-                },
-                updatedAt: new Date().toISOString(),
-              },
-            });
-
+          if (addonAssignment.addon.inventoryItems && addonAssignment.addon.inventoryItems.length > 0) {
             logInfo(
-              `Restored add-on inventory: ${addonAssignment.addon.name} + ${addonAssignment.quantity}`,
+              `Restoring ${addonAssignment.addon.inventoryItems.length} inventory items for addon: ${addonAssignment.addon.name}`,
               'OrderController'
             );
+
+            for (const addonInvItem of addonAssignment.addon.inventoryItems) {
+              // Calculate total quantity to restore
+              const quantityPerAddon = addonInvItem.quantity;
+              const totalQuantityToRestore = quantityPerAddon * addonAssignment.quantity;
+
+              // Restore inventory
+              await tx.inventory.update({
+                where: { id: addonInvItem.inventory.id },
+                data: {
+                  currentStock: {
+                    increment: totalQuantityToRestore,
+                  },
+                  updatedAt: new Date(),
+                },
+              });
+
+              // Log the transaction for audit
+              await tx.auditLog.create({
+                data: {
+                  action: 'INVENTORY_INCREASE',
+                  tableName: 'inventory',
+                  recordId: addonInvItem.inventory.id,
+                  newValues: {
+                    reason: 'Addon removed from order item',
+                    addonId: addonAssignment.addon.id,
+                    addonName: addonAssignment.addon.name,
+                    orderItemId: itemId,
+                    restored: totalQuantityToRestore,
+                  },
+                },
+              });
+
+              logInfo(
+                `Restored addon inventory: ${addonAssignment.addon.name} -> ${addonInvItem.inventory.itemName} + ${totalQuantityToRestore} ${addonInvItem.inventory.unit}`,
+                'OrderController'
+              );
+            }
           }
         }
 

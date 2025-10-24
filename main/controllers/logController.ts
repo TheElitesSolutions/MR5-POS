@@ -74,6 +74,10 @@ export class LogController extends BaseController {
     );
     this.registerHandler(LOGGING_CHANNELS.CLEAR, this.clearLogs.bind(this));
     this.registerHandler(LOGGING_CHANNELS.EXPORT, this.exportLogs.bind(this));
+    this.registerHandler(
+      LOGGING_CHANNELS.WRITE_LOG,
+      this.writeLog.bind(this)
+    );
   }
 
   public override unregisterHandlers(): void {
@@ -635,6 +639,96 @@ export class LogController extends BaseController {
         LogCategory.FILESYSTEM,
         'LogController',
         { outputPath: params.outputPath },
+        error instanceof Error ? error : undefined
+      );
+
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  /**
+   * Write a log entry from renderer process to file
+   */
+  private async writeLog(
+    _event: IpcMainInvokeEvent,
+    params: {
+      level: string;
+      message: string;
+      category?: string;
+      module?: string;
+      context?: any;
+    }
+  ): Promise<IPCResponse<boolean>> {
+    try {
+      const { level, message, category, module, context } = params;
+
+      // Map log level string to LogLevel enum
+      let logLevel: LogLevel;
+      switch (level.toUpperCase()) {
+        case 'DEBUG':
+          logLevel = LogLevel.DEBUG;
+          break;
+        case 'INFO':
+          logLevel = LogLevel.INFO;
+          break;
+        case 'WARN':
+          logLevel = LogLevel.WARN;
+          break;
+        case 'ERROR':
+          logLevel = LogLevel.ERROR;
+          break;
+        default:
+          logLevel = LogLevel.INFO;
+      }
+
+      // Write log using EnhancedLogger
+      if (logLevel === LogLevel.ERROR) {
+        enhancedLogger.error(
+          message,
+          (category as LogCategory) || LogCategory.UI,
+          module || 'Renderer',
+          context
+        );
+      } else if (logLevel === LogLevel.WARN) {
+        enhancedLogger.warn(
+          message,
+          (category as LogCategory) || LogCategory.UI,
+          module || 'Renderer',
+          context
+        );
+      } else if (logLevel === LogLevel.DEBUG) {
+        enhancedLogger.debug(
+          message,
+          (category as LogCategory) || LogCategory.UI,
+          module || 'Renderer',
+          context
+        );
+      } else {
+        enhancedLogger.info(
+          message,
+          (category as LogCategory) || LogCategory.UI,
+          module || 'Renderer',
+          context
+        );
+      }
+
+      return {
+        success: true,
+        data: true,
+        message: 'Log written successfully',
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      // Fallback error logging if something goes wrong
+      enhancedLogger.error(
+        'Failed to write renderer log',
+        LogCategory.SYSTEM,
+        'LogController',
+        { params },
         error instanceof Error ? error : undefined
       );
 
