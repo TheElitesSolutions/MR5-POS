@@ -130,6 +130,19 @@ export const UpdateOrderStatusSchema = z.object({
 /**
  * Menu Item Validation Schemas
  */
+// Ingredient schema for menu items
+export const IngredientSchema = z.object({
+  id: z.string().min(1, 'Ingredient ID is required'),
+  name: z.string().min(1, 'Ingredient name is required'),
+  quantityRequired: nonNegativeNumberSchema,
+  currentStock: nonNegativeNumberSchema.optional(),
+  unit: z.string().min(1, 'Unit is required'),
+  costPerUnit: nonNegativeNumberSchema.optional(),
+  isRequired: z.boolean().optional(),
+  isSelected: z.boolean().optional(),
+  canAdjust: z.boolean().optional(),
+});
+
 export const CreateMenuItemSchema = z.object({
   menuItem: z.object({
     name: z.string().min(1, 'Menu item name is required'),
@@ -151,6 +164,7 @@ export const CreateMenuItemSchema = z.object({
     }).pipe(z.boolean()).optional(),
     imageUrl: z.string().url('Invalid image URL').optional(),
     preparationTime: nonNegativeNumberSchema.int().optional(),
+    ingredients: z.array(IngredientSchema).optional(), // ✅ ADDED
     allergens: z.array(z.string()).optional(),
     nutritionalInfo: z.record(z.string(), z.any()).optional(),
   }),
@@ -180,6 +194,7 @@ export const UpdateMenuItemSchema = z.object({
     }).pipe(z.boolean()).optional(),
     imageUrl: z.string().url().optional(),
     preparationTime: nonNegativeNumberSchema.int().optional(),
+    ingredients: z.array(IngredientSchema).optional(), // ✅ ADDED
     allergens: z.array(z.string()).optional(),
     nutritionalInfo: z.record(z.string(), z.any()).optional(),
     _lastKnownUpdatedAt: z.union([z.string(), z.date()]).optional(),

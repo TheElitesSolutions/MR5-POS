@@ -897,19 +897,151 @@ export class OrderModel {
 
   async cancel(id: string, reason?: string): Promise<IPCResponse<Order>> {
     try {
-      const order = await this.prisma.order.update({
-        where: { id },
-        data: {
-          status: 'CANCELLED',
-          notes: reason || null,
-        },
-        include: {
-          table: true,
-          customer: true,
-          user: true,
-          items: true,
-          payments: true,
-        },
+      // Use transaction to ensure atomicity of cancellation + stock restoration
+      const order = await this.prisma.$transaction(async (tx: any) => {
+        // 1. Get order with all items and addons
+        const existingOrder = await tx.order.findUnique({
+          where: { id },
+          include: {
+            items: {
+              include: {
+                menuItem: true,
+                orderItemAddons: {
+                  include: {
+                    addon: {
+                      include: {
+                        inventoryItems: {
+                          include: {
+                            inventory: true,
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        });
+
+        if (!existingOrder) {
+          throw new AppError('Order not found', true);
+        }
+
+        // Check if order is already cancelled or completed
+        if (existingOrder.status === 'CANCELLED') {
+          throw new AppError('Order is already cancelled', true);
+        }
+
+        if (existingOrder.status === 'COMPLETED') {
+          throw new AppError('Cannot cancel a completed order', true);
+        }
+
+        // 2. Restore inventory for all order items
+        for (const orderItem of existingOrder.items) {
+          // 2a. Restore menu item inventory
+          const menuItemInventory = await tx.menuItemInventory.findMany({
+            where: { menuItemId: orderItem.menuItemId },
+            include: { inventory: true },
+          });
+
+          if (menuItemInventory && menuItemInventory.length > 0) {
+            for (const link of menuItemInventory) {
+              const amountToRestore = link.quantity * orderItem.quantity;
+
+              await tx.inventory.update({
+                where: { id: link.inventoryId },
+                data: {
+                  currentStock: {
+                    increment: amountToRestore,
+                  },
+                  updatedAt: new Date().toISOString(),
+                },
+              });
+
+              // Audit log for menu item inventory restoration
+              await tx.auditLog.create({
+                data: {
+                  action: 'INVENTORY_INCREASE',
+                  tableName: 'inventory',
+                  recordId: link.inventoryId,
+                  newValues: {
+                    reason: 'Order cancelled',
+                    orderId: id,
+                    orderItemId: orderItem.id,
+                    menuItemId: orderItem.menuItemId,
+                    quantityRestored: amountToRestore,
+                  },
+                },
+              });
+            }
+          }
+
+          // 2b. Restore addon inventory
+          if (orderItem.orderItemAddons && orderItem.orderItemAddons.length > 0) {
+            for (const addonAssignment of orderItem.orderItemAddons) {
+              const addon = addonAssignment.addon;
+
+              if (addon.inventoryItems && addon.inventoryItems.length > 0) {
+                for (const addonInvItem of addon.inventoryItems) {
+                  if (addonInvItem.inventory && addonInvItem.quantity > 0) {
+                    const totalToRestore = addonInvItem.quantity * addonAssignment.quantity;
+
+                    await tx.inventory.update({
+                      where: { id: addonInvItem.inventoryId },
+                      data: {
+                        currentStock: {
+                          increment: totalToRestore,
+                        },
+                        updatedAt: new Date().toISOString(),
+                      },
+                    });
+
+                    // Audit log for addon inventory restoration
+                    await tx.auditLog.create({
+                      data: {
+                        action: 'INVENTORY_INCREASE',
+                        tableName: 'inventory',
+                        recordId: addonInvItem.inventoryId,
+                        newValues: {
+                          reason: 'Order cancelled - addon restored',
+                          orderId: id,
+                          orderItemId: orderItem.id,
+                          addonId: addon.id,
+                          quantityRestored: totalToRestore,
+                        },
+                      },
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        // 3. Cancel the order
+        const cancelledOrder = await tx.order.update({
+          where: { id },
+          data: {
+            status: 'CANCELLED',
+            notes: reason || null,
+            updatedAt: new Date().toISOString(),
+          },
+          include: {
+            table: true,
+            customer: true,
+            user: true,
+            items: true,
+            payments: true,
+          },
+        });
+
+        logger.info(
+          `Order cancelled successfully with stock restoration`,
+          `orderId: ${id}, itemsRestored: ${existingOrder.items.length}`
+        );
+
+        return cancelledOrder;
       });
 
       return {
@@ -918,6 +1050,9 @@ export class OrderModel {
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
+      if (error instanceof AppError) {
+        throw error;
+      }
       logger.error(
         `Failed to cancel order ${id}: ${
           error instanceof Error ? error.message : error
@@ -1251,21 +1386,20 @@ export class OrderModel {
     try {
       // FIXED: Use transaction to ensure atomicity between order changes and stock deduction
       const result = await this.prisma.$transaction(async tx => {
-        // First get the menu item with its inventory dependencies
+        // First get the menu item
         const menuItem = await tx.menuItem.findUnique({
           where: { id: item.menuItemId },
-          include: {
-            inventoryItems: {
-              include: {
-                inventory: true,
-              },
-            },
-          },
         });
 
         if (!menuItem) {
           throw new AppError('Menu item not found', true);
         }
+
+        // ✅ CRITICAL FIX: Query inventory items directly (relation doesn't exist in Prisma schema)
+        const inventoryItems = await (tx as any).menuItemInventory.findMany({
+          where: { menuItemId: item.menuItemId },
+          include: { inventory: true },
+        });
 
         // Determine unit price: use provided one if valid, otherwise fallback to menu item's price
         // ✅ CRITICAL FIX: Convert menuItem.price to Decimal (it comes from SQLite as a number)
@@ -1296,7 +1430,7 @@ export class OrderModel {
         });
 
         // CRITICAL FIX: Deduct stock BEFORE modifying order items
-        if (menuItem.inventoryItems && menuItem.inventoryItems.length > 0) {
+        if (inventoryItems && inventoryItems.length > 0) {
           logger.info(
             `🔍 STOCK DEDUCTION: Processing for ${menuItem.name} (quantity: ${item.quantity})`
           );
@@ -1304,7 +1438,7 @@ export class OrderModel {
           const inventoryUpdates: Map<string, number> = new Map();
 
           // Calculate total required quantities per inventory item
-          for (const inventoryLink of menuItem.inventoryItems) {
+          for (const inventoryLink of inventoryItems) {
             const inventoryId = inventoryLink.inventoryId;
             const requiredQuantity =
               Number(inventoryLink.quantity) * item.quantity;
@@ -1457,19 +1591,11 @@ export class OrderModel {
     try {
       // FIXED: Use transaction to ensure atomicity between order changes and stock restoration
       const result = await this.prisma.$transaction(async tx => {
-        // Get the order item with its menu item and inventory dependencies
+        // Get the order item with its menu item
         const orderItem = await tx.orderItem.findUnique({
           where: { id: orderItemId },
           include: {
-            menuItem: {
-              include: {
-                inventoryItems: {
-                  include: {
-                    inventory: true,
-                  },
-                },
-              },
-            },
+            menuItem: true,
           },
         });
 
@@ -1477,11 +1603,14 @@ export class OrderModel {
           throw new AppError('Order item not found', true);
         }
 
+        // ✅ CRITICAL FIX: Query inventory items directly (relation doesn't exist in Prisma schema)
+        const inventoryItems = await (tx as any).menuItemInventory.findMany({
+          where: { menuItemId: orderItem.menuItemId },
+          include: { inventory: true },
+        });
+
         // CRITICAL FIX: Restore stock BEFORE removing the order item
-        if (
-          orderItem.menuItem?.inventoryItems &&
-          orderItem.menuItem.inventoryItems.length > 0
-        ) {
+        if (inventoryItems && inventoryItems.length > 0) {
           logger.info(
             `🔄 STOCK RESTORATION: Processing for ${orderItem.menuItem.name} (quantity: ${orderItem.quantity})`
           );
@@ -1489,7 +1618,7 @@ export class OrderModel {
           const inventoryUpdates: Map<string, number> = new Map();
 
           // Calculate total quantities to restore per inventory item
-          for (const inventoryLink of orderItem.menuItem.inventoryItems) {
+          for (const inventoryLink of inventoryItems) {
             const inventoryId = inventoryLink.inventoryId;
             const restoreQuantity =
               Number(inventoryLink.quantity) * orderItem.quantity;
@@ -1602,25 +1731,23 @@ export class OrderModel {
 
       // FIXED: Use transaction to ensure atomicity between quantity changes and stock adjustments
       const result = await this.prisma.$transaction(async tx => {
-        // Find the order item with its current values and inventory dependencies
+        // Find the order item with its current values
         const orderItem = await tx.orderItem.findUnique({
           where: { id: orderItemId },
           include: {
-            menuItem: {
-              include: {
-                inventoryItems: {
-                  include: {
-                    inventory: true,
-                  },
-                },
-              },
-            },
+            menuItem: true,
           },
         });
 
         if (!orderItem) {
           throw new AppError('Order item not found', true);
         }
+
+        // ✅ CRITICAL FIX: Query inventory items directly (relation doesn't exist in Prisma schema)
+        const inventoryItems = await (tx as any).menuItemInventory.findMany({
+          where: { menuItemId: orderItem.menuItemId },
+          include: { inventory: true },
+        });
 
         const currentQuantity = orderItem.quantity;
         const quantityDifference = newQuantity - currentQuantity;
@@ -1629,15 +1756,15 @@ export class OrderModel {
         // CRITICAL FIX: Adjust stock based on quantity change
         if (
           quantityDifference !== 0 &&
-          orderItem.menuItem?.inventoryItems &&
-          orderItem.menuItem.inventoryItems.length > 0
+          inventoryItems &&
+          inventoryItems.length > 0
         ) {
           logger.info(
             `🔄 STOCK ADJUSTMENT: Processing for ${orderItem.menuItem.name} (${currentQuantity} → ${newQuantity})`
           );
 
           // Calculate stock adjustments needed per inventory item
-          for (const inventoryLink of orderItem.menuItem.inventoryItems) {
+          for (const inventoryLink of inventoryItems) {
             const inventoryId = inventoryLink.inventoryId;
             const adjustmentQuantity =
               Number(inventoryLink.quantity) * Math.abs(quantityDifference);
@@ -1725,6 +1852,106 @@ export class OrderModel {
             logger.info(
               `${actionEmoji} STOCK ADJUSTED: ${inventoryItem.itemName} (${currentStock} → ${newStock} ${inventoryItem.unit})`
             );
+          }
+        }
+
+        // NEW: Adjust addon stock based on quantity change
+        if (quantityDifference !== 0) {
+          // Fetch all addons for this order item
+          const orderItemAddons = await tx.orderItemAddon.findMany({
+            where: { orderItemId },
+            include: {
+              addon: {
+                include: {
+                  inventoryItems: {
+                    include: {
+                      inventory: true,
+                    },
+                  },
+                },
+              },
+            },
+          });
+
+          if (orderItemAddons && orderItemAddons.length > 0) {
+            logger.info(
+              `🔄 ADDON STOCK ADJUSTMENT: Processing ${orderItemAddons.length} addons for order item quantity change (${currentQuantity} → ${newQuantity})`
+            );
+
+            for (const addonAssignment of orderItemAddons) {
+              const addon = addonAssignment.addon;
+
+              if (addon.inventoryItems && addon.inventoryItems.length > 0) {
+                for (const addonInvItem of addon.inventoryItems) {
+                  if (addonInvItem.inventory && addonInvItem.quantity > 0) {
+                    // Calculate adjustment: addon quantity per item * quantity difference
+                    const addonQuantityPerItem = addonInvItem.quantity * addonAssignment.quantity;
+                    const totalAdjustment = addonQuantityPerItem * Math.abs(quantityDifference);
+
+                    const currentStock = Number(addonInvItem.inventory.currentStock);
+                    let newStock: number;
+                    let action: string;
+                    let reason: string;
+
+                    if (quantityDifference > 0) {
+                      // Quantity increased - deduct additional addon stock
+                      newStock = currentStock - totalAdjustment;
+                      action = 'INVENTORY_DECREASE';
+                      reason = 'Order item quantity increased - addon stock deducted';
+
+                      if (newStock < 0) {
+                        throw new AppError(
+                          `Insufficient addon stock for ${addon.name}. Available: ${currentStock}, Required: ${totalAdjustment}`,
+                          true
+                        );
+                      }
+                    } else {
+                      // Quantity decreased - restore excess addon stock
+                      newStock = currentStock + totalAdjustment;
+                      action = 'INVENTORY_INCREASE';
+                      reason = 'Order item quantity decreased - addon stock restored';
+                    }
+
+                    // Apply addon stock adjustment
+                    await tx.inventory.update({
+                      where: { id: addonInvItem.inventoryId },
+                      data: {
+                        currentStock: newStock,
+                        updatedAt: new Date().toISOString(),
+                      },
+                    });
+
+                    // Audit log for addon inventory adjustment
+                    await tx.auditLog.create({
+                      data: {
+                        action: action,
+                        tableName: 'inventory',
+                        recordId: addonInvItem.inventoryId,
+                        newValues: {
+                          reason: reason,
+                          orderId: orderItem.orderId,
+                          orderItemId: orderItemId,
+                          addonId: addon.id,
+                          addonName: addon.name,
+                          previousStock: currentStock,
+                          adjustment: quantityDifference > 0 ? -totalAdjustment : totalAdjustment,
+                          newStock: newStock,
+                          oldItemQuantity: currentQuantity,
+                          newItemQuantity: newQuantity,
+                          addonQuantityPerItem: addonQuantityPerItem,
+                          timestamp: new Date().toISOString(),
+                        },
+                      },
+                    });
+
+                    const actionEmoji = quantityDifference > 0 ? '📉' : '📈';
+                    logger.info(
+                      `${actionEmoji} ADDON STOCK ADJUSTED: ${addon.name} → ${addonInvItem.inventory.itemName} (${currentStock} → ${newStock})`
+                    );
+                  }
+                }
+              }
+            }
           }
         }
 
