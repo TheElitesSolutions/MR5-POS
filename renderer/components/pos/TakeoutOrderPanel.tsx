@@ -61,6 +61,18 @@ interface TakeoutOrderPanelProps {
 const TakeoutOrderPanel = ({
   pendingCustomization,
 }: TakeoutOrderPanelProps) => {
+  // Parse SQLite datetime as local time (not UTC)
+  const parseLocalDateTime = (dateString: string): Date => {
+    // SQLite format: "YYYY-MM-DD HH:MM:SS"
+    // We need to parse this as local time, not UTC
+    const [datePart, timePart] = dateString.replace('T', ' ').split(' ');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hours, minutes, seconds] = (timePart || '00:00:00').split(':').map(Number);
+
+    // Create date in local timezone (month is 0-indexed)
+    return new Date(year, month - 1, day, hours || 0, minutes || 0, seconds || 0);
+  };
+
   const {
     currentOrder,
     removeOrderItem,
@@ -361,43 +373,13 @@ const TakeoutOrderPanel = ({
         quantity
       );
 
-      // Immediately print removal notification to kitchen
-      try {
-        const printerAPI = await import('@/lib/printer-api');
-        const user = useAuthStore.getState().user;
-
-        if (user?.id && currentOrder) {
-          const printers = await printerAPI.PrinterAPI.getPrinters();
-          const defaultPrinter = printers.find(p => p.isDefault) || printers[0];
-
-          if (defaultPrinter) {
-            // Print removal ticket using cancelledItems parameter
-            const result = await printerAPI.PrinterAPI.printKitchenOrder(
-              currentOrder.id,
-              defaultPrinter.name,
-              1,
-              user.id,
-              false, // Not using onlyUnprinted flag
-              [{ id: orderItemId, name: itemName, quantity }], // Pass as cancelled item
-              [], // No specific updated items
-              [] // No change information needed for removals
-            );
-
-            if (result.success) {
-              orderLogger.debug('Printed removal notification to kitchen', {
-                item: itemName,
-              });
-            }
-          }
-        }
-      } catch (printError) {
-        orderLogger.error('Failed to print removal notification:', printError);
-        // Don't block the removal workflow if printing fails
-      }
+      // ❌ REMOVED: No longer print removal notifications to kitchen
+      // Kitchen staff doesn't need to know about removed items
+      // Only additions and increases should be printed
 
       toast({
         title: 'Item Removed',
-        description: `${itemName} has been removed from the order and kitchen notified`,
+        description: `${itemName} has been removed from the order`,
       });
     } catch (error) {
       orderLogger.error('Failed to remove item:', error);
@@ -885,7 +867,7 @@ const TakeoutOrderPanel = ({
             <Clock className='h-4 w-4' />
             <span>
               {currentOrder.createdAt
-                ? new Date(currentOrder.createdAt).toLocaleTimeString([], {
+                ? parseLocalDateTime(currentOrder.createdAt).toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
                   })
@@ -1138,11 +1120,15 @@ const TakeoutOrderPanel = ({
                         });
 
                         const newItems = changesSummary.filter(c => c.changeType === 'NEW');
-                        const updates = changesSummary.filter(c => c.changeType === 'UPDATE');
-                        const filteredChangesSummary = changesSummary.filter(c => c.changeType !== 'REMOVE');
+                        // Only include quantity INCREASES (netChange > 0), not decreases
+                        const updates = changesSummary.filter(c => c.changeType === 'UPDATE' && c.netChange > 0);
+                        // Filter out removals AND quantity decreases
+                        const filteredChangesSummary = changesSummary.filter(
+                          c => c.changeType !== 'REMOVE' && (c.changeType !== 'UPDATE' || c.netChange > 0)
+                        );
 
                         if (filteredChangesSummary.length === 0) {
-                          orderLogger.debug('Skip printing: Only removals occurred');
+                          orderLogger.debug('Skip printing: Only removals/decreases occurred');
                           clearTracking();
                           switchToTables();
                           return;
@@ -1251,7 +1237,8 @@ const TakeoutOrderPanel = ({
                         });
 
                         const newItems = changesSummary.filter(c => c.changeType === 'NEW');
-                        const updates = changesSummary.filter(c => c.changeType === 'UPDATE');
+                        // Only include quantity INCREASES (netChange > 0), not decreases
+                        const updates = changesSummary.filter(c => c.changeType === 'UPDATE' && c.netChange > 0);
                         const removals = changesSummary.filter(c => c.changeType === 'REMOVE');
 
                         const result = await printerAPI.PrinterAPI.printKitchenOrder(

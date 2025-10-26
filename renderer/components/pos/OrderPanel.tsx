@@ -92,6 +92,18 @@ function areAddonsEqual(
 }
 
 const OrderPanel = ({ pendingCustomization }: OrderPanelProps) => {
+  // Parse SQLite datetime as local time (not UTC)
+  const parseLocalDateTime = (dateString: string): Date => {
+    // SQLite format: "YYYY-MM-DD HH:MM:SS"
+    // We need to parse this as local time, not UTC
+    const [datePart, timePart] = dateString.replace('T', ' ').split(' ');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hours, minutes, seconds] = (timePart || '00:00:00').split(':').map(Number);
+
+    // Create date in local timezone (month is 0-indexed)
+    return new Date(year, month - 1, day, hours || 0, minutes || 0, seconds || 0);
+  };
+
   const {
     selectedTable,
     currentOrder,
@@ -338,57 +350,13 @@ const OrderPanel = ({ pendingCustomization }: OrderPanelProps) => {
             result.quantity
           );
 
-          // Print removal notification to kitchen (async, non-blocking)
-          (async () => {
-            try {
-              const printerAPI = await import('@/lib/printer-api');
-              const user = useAuthStore.getState().user;
-
-              if (user?.id && currentOrder) {
-                const printers = await printerAPI.PrinterAPI.getPrinters();
-                const defaultPrinter =
-                  printers.find(p => p.isDefault) || printers[0];
-
-                if (defaultPrinter) {
-                  const printResult =
-                    await printerAPI.PrinterAPI.printKitchenOrder(
-                      currentOrder.id,
-                      defaultPrinter.name,
-                      1,
-                      user.id,
-                      false,
-                      [
-                        {
-                          id: result.orderItemId,
-                          name: result.itemName,
-                          quantity: result.quantity,
-                        },
-                      ],
-                      [],
-                      []
-                    );
-
-                  if (printResult.success) {
-                    orderLogger.debug(
-                      'Printed removal notification to kitchen',
-                      {
-                        item: result.itemName,
-                      }
-                    );
-                  }
-                }
-              }
-            } catch (printError) {
-              orderLogger.error(
-                'Failed to print removal notification:',
-                printError
-              );
-            }
-          })();
+          // ❌ REMOVED: No longer print removal notifications to kitchen
+          // Kitchen staff doesn't need to know about removed items
+          // Only additions and increases should be printed
 
           toast({
             title: 'Item Removed',
-            description: `${itemName} has been removed from the order and kitchen notified`,
+            description: `${itemName} has been removed from the order`,
           });
         },
         onError: error => {
@@ -1066,7 +1034,7 @@ const OrderPanel = ({ pendingCustomization }: OrderPanelProps) => {
             <Clock className='h-4 w-4' />
             <span>
               {currentOrder.createdAt
-                ? new Date(currentOrder.createdAt).toLocaleTimeString([], {
+                ? parseLocalDateTime(currentOrder.createdAt).toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
                   })
@@ -1295,11 +1263,15 @@ const OrderPanel = ({ pendingCustomization }: OrderPanelProps) => {
 
                       if (defaultPrinter) {
                         const newItems = changesSummary.filter(c => c.changeType === 'NEW');
-                        const updates = changesSummary.filter(c => c.changeType === 'UPDATE');
-                        const filteredChangesSummary = changesSummary.filter(c => c.changeType !== 'REMOVE');
+                        // Only include quantity INCREASES (netChange > 0), not decreases
+                        const updates = changesSummary.filter(c => c.changeType === 'UPDATE' && c.netChange > 0);
+                        // Filter out removals AND quantity decreases
+                        const filteredChangesSummary = changesSummary.filter(
+                          c => c.changeType !== 'REMOVE' && (c.changeType !== 'UPDATE' || c.netChange > 0)
+                        );
 
                         if (filteredChangesSummary.length === 0) {
-                          orderLogger.debug('Skip printing: Only removals occurred, already printed');
+                          orderLogger.debug('Skip printing: Only removals/decreases occurred');
                           clearTracking();
                           return;
                         }
@@ -1390,7 +1362,8 @@ const OrderPanel = ({ pendingCustomization }: OrderPanelProps) => {
                         });
 
                         const newItems = changesSummary.filter(c => c.changeType === 'NEW');
-                        const updates = changesSummary.filter(c => c.changeType === 'UPDATE');
+                        // Only include quantity INCREASES (netChange > 0), not decreases
+                        const updates = changesSummary.filter(c => c.changeType === 'UPDATE' && c.netChange > 0);
                         const removals = changesSummary.filter(c => c.changeType === 'REMOVE');
 
                         const result = await printerAPI.PrinterAPI.printKitchenOrder(
