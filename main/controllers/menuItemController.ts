@@ -24,6 +24,7 @@ import { ServiceRegistry } from '../services/serviceRegistry';
 import { IPCResponse } from '../types/index';
 import { BaseController } from './baseController';
 import { EnhancedLogger, LogCategory } from '../utils/enhanced-logger';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 export class MenuItemController extends BaseController {
   private menuItemService: MenuItemService;
@@ -634,7 +635,7 @@ export class MenuItemController extends BaseController {
     try {
       logger.info('========================================', LogCategory.BUSINESS, 'MenuItemController');
       logger.info('🔍 getCategoryStats called', LogCategory.BUSINESS, 'MenuItemController', {
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       });
 
       // Get all active categories

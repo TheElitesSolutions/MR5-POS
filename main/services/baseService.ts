@@ -7,6 +7,7 @@ import { logError, logInfo } from '../error-handler';
 import { ExtendedPrismaClient } from '../prisma';
 import { IPCResponse } from '../types';
 import { ServiceRegistry } from './serviceRegistry';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 export abstract class BaseService {
   /**
@@ -33,7 +34,7 @@ export abstract class BaseService {
     const response: IPCResponse<T> = {
       success: true,
       data,
-      timestamp: new Date().toISOString(),
+      timestamp: getCurrentLocalDateTime(),
     };
 
     if (message) {
@@ -63,7 +64,7 @@ export abstract class BaseService {
     return {
       success: false,
       error: errorMessage,
-      timestamp: new Date().toISOString(),
+      timestamp: getCurrentLocalDateTime(),
     };
   }
 

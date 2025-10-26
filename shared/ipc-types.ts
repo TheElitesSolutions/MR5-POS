@@ -258,6 +258,7 @@ export interface Order {
   id: string;
   orderNumber: string;
   tableId?: string;
+  tableName?: string; // Denormalized table name for historical preservation
   table?: Table; // Added to include table information for kitchen tickets
   customerId?: string;
   userId: string;

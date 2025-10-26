@@ -14,6 +14,7 @@ try {
 import { PrismaClient } from '../db/prisma-wrapper';
 import { logInfo, logError } from '../error-handler';
 import Decimal from 'decimal.js';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 /**
  * Supabase Sync Service

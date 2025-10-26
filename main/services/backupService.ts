@@ -14,6 +14,7 @@ import { promisify } from 'util';
 import { app } from 'electron';
 import { logInfo, logError, logWarning } from '../error-handler';
 import { DatabaseService } from '../utils/databaseService';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 const execAsync = promisify(exec);
 
@@ -135,7 +136,7 @@ export class BackupService {
 
     try {
       this.isRunning = true;
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const timestamp = getCurrentLocalDateTime().replace(/[:.]/g, '-');
       const backupId = `backup-${timestamp}`;
       const filename = `${backupId}.sql`;
       const backupFilePath = path.join(this.backupPath, filename);
@@ -167,7 +168,7 @@ export class BackupService {
 
       const backupInfo: BackupInfo = {
         id: backupId,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
         filename,
         size: stats.size,
         path: backupFilePath,

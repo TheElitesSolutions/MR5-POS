@@ -21,7 +21,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { posLogger } from '@/utils/logger';
 import { Input } from '@/components/ui/input';
@@ -35,6 +34,18 @@ import { Clock, DollarSign, MapPin, Plus, Trash2 } from 'lucide-react';
 import React, { memo, useCallback, useState } from 'react';
 
 const TableGrid = memo(() => {
+  // Parse SQLite datetime as local time (not UTC)
+  const parseLocalDateTime = (dateString: string): Date => {
+    // SQLite format: "YYYY-MM-DD HH:MM:SS"
+    // We need to parse this as local time, not UTC
+    const [datePart, timePart] = dateString.replace('T', ' ').split(' ');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hours, minutes, seconds] = (timePart || '00:00:00').split(':').map(Number);
+
+    // Create date in local timezone (month is 0-indexed)
+    return new Date(year, month - 1, day, hours || 0, minutes || 0, seconds || 0);
+  };
+
   // Atomic selectors to prevent unnecessary re-renders
   const tables = usePOSStore(state => state.tables);
   const selectedTable = usePOSStore(state => state.selectedTable);
@@ -112,7 +123,7 @@ const TableGrid = memo(() => {
   const formatElapsedTime = (createdAt: string | Date) => {
     const now = new Date();
     const created =
-      typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
+      typeof createdAt === 'string' ? parseLocalDateTime(createdAt) : createdAt;
     const diffInMinutes = Math.floor(
       (now.getTime() - created.getTime()) / (1000 * 60)
     );
@@ -175,6 +186,60 @@ const TableGrid = memo(() => {
 
   return (
     <div className='space-y-4 sm:space-y-6'>
+      {/* Single Dialog Component - Controlled by state */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className='mx-4 sm:max-w-md'>
+          <DialogHeader>
+            <DialogTitle>Create New Table</DialogTitle>
+            <DialogDescription>
+              Add a new table to your restaurant floor plan with a unique
+              number or name.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleSubmitNewTable} className='space-y-4'>
+            <div className='grid gap-4 py-4'>
+              <div className='grid grid-cols-4 items-center gap-4'>
+                <Label htmlFor='name' className='text-right'>
+                  Table Name
+                </Label>
+                <Input
+                  id='name'
+                  type='text'
+                  placeholder='Enter name or number (e.g., Table 1, VIP, Corner)'
+                  value={newTable.name}
+                  onChange={e =>
+                    setNewTable({ ...newTable, name: e.target.value })
+                  }
+                  className='col-span-3'
+                  required
+                  autoFocus
+                />
+              </div>
+              <p className='col-span-4 text-xs text-gray-500 dark:text-gray-400'>
+                Use any name or number that makes sense for your layout
+              </p>
+            </div>
+            <DialogFooter>
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => setShowCreateDialog(false)}
+                className='touch-manipulation'
+              >
+                Cancel
+              </Button>
+              <Button
+                type='submit'
+                disabled={!newTable.name.trim() || isCreating}
+                className='touch-manipulation'
+              >
+                {isCreating ? 'Creating...' : 'Create Table'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Header with Create Table Button */}
       <div className='flex items-center justify-between'>
         <div className='flex items-center space-x-2'>
@@ -191,46 +256,13 @@ const TableGrid = memo(() => {
         </div>
 
         {(permissions.isAdmin || permissions.isManager) && (
-          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-            <DialogTrigger asChild>
-              <Button size='sm' className='touch-manipulation'>
-                <Plus className='mr-1 h-4 w-4' /> Add Table
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create New Table</DialogTitle>
-                <DialogDescription>
-                  Add a new table to your restaurant floor plan with a unique
-                  number or name.
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleSubmitNewTable} className='space-y-4'>
-                <div className='grid gap-4 py-4'>
-                  <div className='grid grid-cols-4 items-center gap-4'>
-                    <Label htmlFor='name' className='text-right'>
-                      Table Name
-                    </Label>
-                    <Input
-                      id='name'
-                      type='text'
-                      value={newTable.name}
-                      onChange={e =>
-                        setNewTable({ ...newTable, name: e.target.value })
-                      }
-                      className='col-span-3'
-                      required
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button type='submit' disabled={isCreating}>
-                    {isCreating ? 'Creating...' : 'Create Table'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Button
+            size='sm'
+            className='touch-manipulation'
+            onClick={() => setShowCreateDialog(true)}
+          >
+            <Plus className='mr-1 h-4 w-4' /> Add Table
+          </Button>
         )}
       </div>
 
@@ -253,7 +285,7 @@ const TableGrid = memo(() => {
               {/* Table Header with Name and Delete Button */}
               <div className='flex items-start justify-between'>
                 <div className='min-w-0 flex-1 pr-2'>
-                  <h3 className='truncate text-lg font-bold text-gray-900 dark:text-white'>
+                  <h3 className='break-words text-sm font-bold leading-tight text-gray-900 dark:text-white sm:text-base'>
                     {table.name}
                   </h3>
                 </div>
@@ -402,59 +434,14 @@ const TableGrid = memo(() => {
             </p>
           </div>
           {(permissions.isAdmin || permissions.isManager) && (
-            <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-              <DialogTrigger asChild>
-                <Button className='mt-4 touch-manipulation' size='lg'>
-                  <Plus className='mr-2 h-5 w-5' />
-                  Create Your First Table
-                </Button>
-              </DialogTrigger>
-              <DialogContent className='mx-4 sm:max-w-md'>
-                <DialogHeader>
-                  <DialogTitle>Create New Table</DialogTitle>
-                  <DialogDescription>
-                    Add a new table to your restaurant floor plan with a unique
-                    number or name.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className='space-y-4'>
-                  <div>
-                    <label className='text-sm font-medium text-gray-700 dark:text-gray-300'>
-                      Table Name/Number
-                    </label>
-                    <Input
-                      type='text'
-                      placeholder='Enter name or number (e.g., Table 1, VIP, Corner)'
-                      value={newTable.name}
-                      onChange={e =>
-                        setNewTable({ ...newTable, name: e.target.value })
-                      }
-                      className='mt-1 touch-manipulation'
-                      autoFocus
-                    />
-                    <p className='mt-1 text-xs text-gray-500 dark:text-gray-400'>
-                      Use any name or number that makes sense for your layout
-                    </p>
-                  </div>
-                  <div className='flex justify-end space-x-2'>
-                    <Button
-                      variant='outline'
-                      onClick={() => setShowCreateDialog(false)}
-                      className='touch-manipulation'
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={handleSubmitNewTable}
-                      disabled={!newTable.name.trim() || isCreating}
-                      className='touch-manipulation'
-                    >
-                      {isCreating ? 'Creating...' : 'Create Table'}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <Button
+              className='mt-4 touch-manipulation'
+              size='lg'
+              onClick={() => setShowCreateDialog(true)}
+            >
+              <Plus className='mr-2 h-5 w-5' />
+              Create Your First Table
+            </Button>
           )}
         </div>
       )}

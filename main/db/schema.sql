@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS users (
   phone TEXT,
   isActive INTEGER DEFAULT 1,
   lastLogin TEXT,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now'))
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX idx_users_username ON users(username);
@@ -37,8 +37,8 @@ CREATE TABLE IF NOT EXISTS tables (
   notes TEXT,
   currentOrderId TEXT,
   lastStatusChange TEXT,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now'))
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX idx_tables_status ON tables(status);
@@ -54,8 +54,8 @@ CREATE TABLE IF NOT EXISTS categories (
   sortOrder INTEGER DEFAULT 0,
   isActive INTEGER DEFAULT 1,
   parentId TEXT,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now')),
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (parentId) REFERENCES categories(id) ON DELETE SET NULL
 );
 
@@ -79,8 +79,8 @@ CREATE TABLE IF NOT EXISTS menu_items (
   allergens TEXT DEFAULT '[]', -- JSON array
   nutritionalInfo TEXT, -- JSON object
   sortOrder INTEGER DEFAULT 0,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now')),
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE CASCADE
 );
 
@@ -105,8 +105,8 @@ CREATE TABLE IF NOT EXISTS customers (
   totalSpent REAL DEFAULT 0,
   visitCount INTEGER DEFAULT 0,
   lastVisit TEXT,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now'))
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX idx_customers_email ON customers(email);
@@ -119,6 +119,7 @@ CREATE TABLE IF NOT EXISTS orders (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
   orderNumber TEXT UNIQUE NOT NULL,
   tableId TEXT,
+  tableName TEXT,
   customerId TEXT,
   userId TEXT NOT NULL,
   status TEXT DEFAULT 'DRAFT' CHECK(status IN ('DRAFT', 'PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED', 'CANCELLED')),
@@ -132,8 +133,8 @@ CREATE TABLE IF NOT EXISTS orders (
   customerName TEXT,
   customerPhone TEXT,
   deliveryAddress TEXT,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now')),
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime')),
   completedAt TEXT,
   FOREIGN KEY (tableId) REFERENCES tables(id) ON DELETE SET NULL,
   FOREIGN KEY (customerId) REFERENCES customers(id) ON DELETE SET NULL,
@@ -142,6 +143,7 @@ CREATE TABLE IF NOT EXISTS orders (
 
 CREATE INDEX idx_orders_orderNumber ON orders(orderNumber);
 CREATE INDEX idx_orders_tableId ON orders(tableId);
+CREATE INDEX idx_orders_tableName ON orders(tableName);
 CREATE INDEX idx_orders_customerId ON orders(customerId);
 CREATE INDEX idx_orders_userId ON orders(userId);
 CREATE INDEX idx_orders_status ON orders(status);
@@ -165,8 +167,8 @@ CREATE TABLE IF NOT EXISTS order_items (
   notes TEXT,
   status TEXT DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'PREPARING', 'READY', 'SERVED', 'CANCELLED')),
   printed INTEGER DEFAULT 0,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now')),
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (orderId) REFERENCES orders(id) ON DELETE CASCADE,
   FOREIGN KEY (menuItemId) REFERENCES menu_items(id) ON DELETE RESTRICT
 );
@@ -189,8 +191,8 @@ CREATE TABLE IF NOT EXISTS payments (
   status TEXT DEFAULT 'PENDING' CHECK(status IN ('PENDING', 'COMPLETED', 'FAILED', 'REFUNDED')),
   reference TEXT,
   processedAt TEXT,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now')),
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (orderId) REFERENCES orders(id) ON DELETE CASCADE
 );
 
@@ -211,8 +213,8 @@ CREATE TABLE IF NOT EXISTS inventory (
   supplier TEXT,
   lastRestocked TEXT,
   expiryDate TEXT,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now'))
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX idx_inventory_category ON inventory(category);
@@ -245,8 +247,8 @@ CREATE TABLE IF NOT EXISTS expenses (
   date TEXT NOT NULL,
   receipt TEXT,
   notes TEXT,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now'))
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX idx_expenses_category ON expenses(category);
@@ -261,8 +263,8 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL,
   type TEXT DEFAULT 'string',
   category TEXT DEFAULT 'general',
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now'))
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX idx_settings_key ON settings(key);
@@ -281,7 +283,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   newValues TEXT, -- JSON object
   ipAddress TEXT,
   userAgent TEXT,
-  createdAt TEXT DEFAULT (datetime('now'))
+  createdAt TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX idx_audit_logs_userId ON audit_logs(userId);
@@ -299,8 +301,8 @@ CREATE TABLE IF NOT EXISTS addon_groups (
   maxSelections INTEGER,
   isActive INTEGER DEFAULT 1,
   sortOrder INTEGER DEFAULT 0,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now'))
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX idx_addon_groups_isActive ON addon_groups(isActive);
@@ -317,8 +319,8 @@ CREATE TABLE IF NOT EXISTS addons (
   imageUrl TEXT,
   isActive INTEGER DEFAULT 1,
   sortOrder INTEGER DEFAULT 0,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now')),
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (addonGroupId) REFERENCES addon_groups(id) ON DELETE CASCADE
 );
 
@@ -332,8 +334,8 @@ CREATE TABLE IF NOT EXISTS addon_inventory_items (
   addonId TEXT NOT NULL,
   inventoryId TEXT NOT NULL,
   quantity REAL DEFAULT 0,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now')),
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (addonId) REFERENCES addons(id) ON DELETE CASCADE,
   FOREIGN KEY (inventoryId) REFERENCES inventory(id) ON DELETE CASCADE,
   UNIQUE (addonId, inventoryId)
@@ -351,8 +353,8 @@ CREATE TABLE IF NOT EXISTS category_addon_groups (
   addonGroupId TEXT NOT NULL,
   isActive INTEGER DEFAULT 1,
   sortOrder INTEGER DEFAULT 0,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now')),
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE CASCADE,
   FOREIGN KEY (addonGroupId) REFERENCES addon_groups(id) ON DELETE CASCADE,
   UNIQUE (categoryId, addonGroupId)
@@ -371,8 +373,8 @@ CREATE TABLE IF NOT EXISTS order_item_addons (
   quantity INTEGER DEFAULT 1,
   unitPrice REAL NOT NULL,
   totalPrice REAL NOT NULL,
-  createdAt TEXT DEFAULT (datetime('now')),
-  updatedAt TEXT DEFAULT (datetime('now')),
+  createdAt TEXT DEFAULT (datetime('now', 'localtime')),
+  updatedAt TEXT DEFAULT (datetime('now', 'localtime')),
   FOREIGN KEY (orderItemId) REFERENCES order_items(id) ON DELETE CASCADE,
   FOREIGN KEY (addonId) REFERENCES addons(id) ON DELETE RESTRICT
 );
@@ -386,110 +388,110 @@ CREATE TRIGGER update_users_timestamp
   AFTER UPDATE ON users
   FOR EACH ROW
   BEGIN
-    UPDATE users SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE users SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_tables_timestamp
   AFTER UPDATE ON tables
   FOR EACH ROW
   BEGIN
-    UPDATE tables SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE tables SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_categories_timestamp
   AFTER UPDATE ON categories
   FOR EACH ROW
   BEGIN
-    UPDATE categories SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE categories SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_menu_items_timestamp
   AFTER UPDATE ON menu_items
   FOR EACH ROW
   BEGIN
-    UPDATE menu_items SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE menu_items SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_customers_timestamp
   AFTER UPDATE ON customers
   FOR EACH ROW
   BEGIN
-    UPDATE customers SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE customers SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_orders_timestamp
   AFTER UPDATE ON orders
   FOR EACH ROW
   BEGIN
-    UPDATE orders SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE orders SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_order_items_timestamp
   AFTER UPDATE ON order_items
   FOR EACH ROW
   BEGIN
-    UPDATE order_items SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE order_items SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_payments_timestamp
   AFTER UPDATE ON payments
   FOR EACH ROW
   BEGIN
-    UPDATE payments SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE payments SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_inventory_timestamp
   AFTER UPDATE ON inventory
   FOR EACH ROW
   BEGIN
-    UPDATE inventory SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE inventory SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_expenses_timestamp
   AFTER UPDATE ON expenses
   FOR EACH ROW
   BEGIN
-    UPDATE expenses SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE expenses SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_settings_timestamp
   AFTER UPDATE ON settings
   FOR EACH ROW
   BEGIN
-    UPDATE settings SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE settings SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_addon_groups_timestamp
   AFTER UPDATE ON addon_groups
   FOR EACH ROW
   BEGIN
-    UPDATE addon_groups SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE addon_groups SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_addons_timestamp
   AFTER UPDATE ON addons
   FOR EACH ROW
   BEGIN
-    UPDATE addons SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE addons SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_addon_inventory_items_timestamp
   AFTER UPDATE ON addon_inventory_items
   FOR EACH ROW
   BEGIN
-    UPDATE addon_inventory_items SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE addon_inventory_items SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_category_addon_groups_timestamp
   AFTER UPDATE ON category_addon_groups
   FOR EACH ROW
   BEGIN
-    UPDATE category_addon_groups SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE category_addon_groups SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;
 
 CREATE TRIGGER update_order_item_addons_timestamp
   AFTER UPDATE ON order_item_addons
   FOR EACH ROW
   BEGIN
-    UPDATE order_item_addons SET updatedAt = datetime('now') WHERE id = NEW.id;
+    UPDATE order_item_addons SET updatedAt = datetime('now', 'localtime') WHERE id = NEW.id;
   END;

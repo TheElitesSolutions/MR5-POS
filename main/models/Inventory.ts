@@ -12,6 +12,7 @@ import {
 } from '../utils/decimal';
 import { Decimal as DecimalJS } from 'decimal.js';
 import { logger } from '../utils/logger';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 /**
  * Helper to convert Date or string to ISO string
@@ -68,7 +69,7 @@ export class InventoryModel {
 
       if (filters?.expired) {
         where.expiryDate = {
-          lte: new Date().toISOString(),
+          lte: getCurrentLocalDateTime(),
         };
       }
 
@@ -93,7 +94,7 @@ export class InventoryModel {
       return {
         success: true,
         data: inventory.map(item => this.mapPrismaInventory(item)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -108,7 +109,7 @@ export class InventoryModel {
           error instanceof Error
             ? error.message
             : 'Failed to get inventory items',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -122,7 +123,7 @@ export class InventoryModel {
       return {
         success: true,
         data: inventory ? this.mapPrismaInventory(inventory) : null,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -137,7 +138,7 @@ export class InventoryModel {
           error instanceof Error
             ? error.message
             : 'Failed to get inventory item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -151,7 +152,7 @@ export class InventoryModel {
       return {
         success: true,
         data: inventory ? this.mapPrismaInventory(inventory) : null,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -166,7 +167,7 @@ export class InventoryModel {
           error instanceof Error
             ? error.message
             : 'Failed to get inventory item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -218,7 +219,7 @@ export class InventoryModel {
           costPerUnit: inventoryData.costPerUnit,
           supplier: inventoryData.supplier || null,
           expiryDate: inventoryData.expiryDate || null,
-          lastRestocked: new Date().toISOString(),
+          lastRestocked: getCurrentLocalDateTime(),
         } as any, // Type assertion to bypass schema mismatch issues
       });
 
@@ -230,7 +231,7 @@ export class InventoryModel {
       return {
         success: true,
         data: this.mapPrismaInventory(inventory),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       if (error instanceof AppError) {
@@ -248,7 +249,7 @@ export class InventoryModel {
           error instanceof Error
             ? error.message
             : 'Failed to create inventory item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -310,7 +311,7 @@ export class InventoryModel {
       return {
         success: true,
         data: this.mapPrismaInventory(inventory),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       if (error instanceof AppError) {
@@ -328,7 +329,7 @@ export class InventoryModel {
           error instanceof Error
             ? error.message
             : 'Failed to update inventory item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -368,7 +369,7 @@ export class InventoryModel {
       return {
         success: true,
         data: this.mapPrismaInventory(inventory),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       if (error instanceof AppError) {
@@ -384,7 +385,7 @@ export class InventoryModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to adjust stock',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -415,7 +416,7 @@ export class InventoryModel {
 
       const updateData: any = {
         currentStock: newStock,
-        lastRestocked: new Date().toISOString(),
+        lastRestocked: getCurrentLocalDateTime(),
       };
 
       if (costPerUnit) {
@@ -435,7 +436,7 @@ export class InventoryModel {
       return {
         success: true,
         data: this.mapPrismaInventory(inventory),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       if (error instanceof AppError) {
@@ -451,7 +452,7 @@ export class InventoryModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to restock item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -467,7 +468,7 @@ export class InventoryModel {
       return {
         success: true,
         data: lowStockItems.map(item => this.mapPrismaInventory(item)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -482,7 +483,7 @@ export class InventoryModel {
           error instanceof Error
             ? error.message
             : 'Failed to get low stock items',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -499,14 +500,14 @@ export class InventoryModel {
       // Using raw query to bypass TypeScript schema mismatch for expiryDate
       const expiredItems = await this.prisma.$queryRaw<Array<any>>`
         SELECT * FROM inventory
-        WHERE expiryDate <= ${new Date().toISOString()}
+        WHERE expiryDate <= ${getCurrentLocalDateTime()}
         ORDER BY expiryDate ASC
       `;
 
       return {
         success: true,
         data: expiredItems.map(item => this.mapPrismaInventory(item)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -521,7 +522,7 @@ export class InventoryModel {
           error instanceof Error
             ? error.message
             : 'Failed to get expired items',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -536,7 +537,7 @@ export class InventoryModel {
       // Using raw query to bypass TypeScript schema mismatch for expiryDate
       const expiringItems = await this.prisma.$queryRaw<Array<any>>`
         SELECT * FROM inventory
-        WHERE expiryDate >= ${new Date().toISOString()}
+        WHERE expiryDate >= ${getCurrentLocalDateTime()}
         AND expiryDate <= ${futureDate.toISOString()}
         ORDER BY expiryDate ASC
       `;
@@ -544,7 +545,7 @@ export class InventoryModel {
       return {
         success: true,
         data: expiringItems.map(item => this.mapPrismaInventory(item)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -559,7 +560,7 @@ export class InventoryModel {
           error instanceof Error
             ? error.message
             : 'Failed to get expiring items',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -613,7 +614,7 @@ export class InventoryModel {
           totalValue,
           categoryBreakdown,
         },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -628,7 +629,7 @@ export class InventoryModel {
           error instanceof Error
             ? error.message
             : 'Failed to calculate inventory value',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -644,7 +645,7 @@ export class InventoryModel {
       return {
         success: true,
         data: true,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -659,7 +660,7 @@ export class InventoryModel {
           error instanceof Error
             ? error.message
             : 'Failed to delete inventory item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -684,7 +685,7 @@ export class InventoryModel {
       return {
         success: true,
         data: uniqueCategories,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -697,7 +698,7 @@ export class InventoryModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to get categories',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -714,7 +715,7 @@ export class InventoryModel {
       return {
         success: true,
         data: items as any as InventoryItem[],
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -729,7 +730,7 @@ export class InventoryModel {
           error instanceof Error
             ? error.message
             : 'Failed to get inventory by category',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -762,7 +763,7 @@ export class InventoryModel {
       return {
         success: true,
         data: true,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -777,7 +778,7 @@ export class InventoryModel {
           error instanceof Error
             ? error.message
             : 'Failed to update category name',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }

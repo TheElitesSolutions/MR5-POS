@@ -14,6 +14,7 @@ import { generateToken, verifyToken } from '../utils/auth';
 import { BaseController } from './baseController';
 import { prisma } from '../db/prisma-wrapper';
 import { createDefaultAdminUser } from '../utils/create-default-admin';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 // Token blacklist for logout invalidation
 const tokenBlacklist = new Set<string>();
@@ -118,7 +119,7 @@ export class AuthController extends BaseController {
 
         // Gather diagnostic information
         const diagnosticInfo = {
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
           userModelAvailable: !!this.userModel,
           activeSessionsCount: this.activeSessions.size,
           prismaConnected: false,
@@ -247,7 +248,7 @@ export class AuthController extends BaseController {
             reason: 'invalid_credentials',
             ipAddress: clientInfo.ipAddress,
             userAgent: clientInfo.userAgent,
-            timestamp: new Date().toISOString(),
+            timestamp: getCurrentLocalDateTime(),
           },
           'medium'
         );
@@ -278,7 +279,7 @@ export class AuthController extends BaseController {
           username: user.username,
           role: user.role,
           sessionId,
-          loginTime: new Date().toISOString(),
+          loginTime: getCurrentLocalDateTime(),
         },
         clientInfo.ipAddress,
         clientInfo.userAgent
@@ -360,7 +361,7 @@ export class AuthController extends BaseController {
           userId,
           'logout',
           {
-            logoutTime: new Date().toISOString(),
+            logoutTime: getCurrentLocalDateTime(),
             tokenBlacklisted: true,
           },
           '127.0.0.1',
@@ -508,7 +509,7 @@ export class AuthController extends BaseController {
             {
               userId: payload.userId,
               reason: result.error,
-              timestamp: new Date().toISOString(),
+              timestamp: getCurrentLocalDateTime(),
             },
             'medium'
           );
@@ -523,7 +524,7 @@ export class AuthController extends BaseController {
           'password_changed',
           {
             userId: payload.userId,
-            timestamp: new Date().toISOString(),
+            timestamp: getCurrentLocalDateTime(),
           },
           'medium'
         );
@@ -700,7 +701,7 @@ export class AuthController extends BaseController {
   public getSecurityStats(): { activeSessions: number; timestamp: string } {
     return {
       activeSessions: this.activeSessions.size,
-      timestamp: new Date().toISOString(),
+      timestamp: getCurrentLocalDateTime(),
     };
   }
 

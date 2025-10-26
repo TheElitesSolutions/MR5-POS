@@ -17,6 +17,7 @@ import { ReportService } from '../services/reportService';
 import { enhancedLogger, LogCategory } from '../utils/enhanced-logger';
 import { ServiceRegistry } from '../services/serviceRegistry';
 import { prisma } from '../db/prisma-wrapper';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 export class ReportController extends BaseController {
   private reportService: ReportService;
@@ -129,7 +130,7 @@ export class ReportController extends BaseController {
       // Show save dialog
       const result = await dialog.showSaveDialog({
         title: 'Export Sales Report',
-        defaultPath: `sales-report-${new Date().toISOString().split('T')[0]}.xlsx`,
+        defaultPath: `sales-report-${getCurrentLocalDateTime().split('T')[0]}.xlsx`,
         filters: [
           { name: 'Excel Files', extensions: ['xlsx'] },
           { name: 'All Files', extensions: ['*'] },
@@ -140,7 +141,7 @@ export class ReportController extends BaseController {
         return {
           success: false,
           error: 'Export cancelled by user',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -159,7 +160,7 @@ export class ReportController extends BaseController {
       return {
         success: true,
         data: { filepath: result.filePath },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       enhancedLogger.error(
@@ -170,7 +171,7 @@ export class ReportController extends BaseController {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to export sales report',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -199,7 +200,7 @@ export class ReportController extends BaseController {
       // Show save dialog
       const result = await dialog.showSaveDialog({
         title: 'Export Inventory Report',
-        defaultPath: `inventory-report-${new Date().toISOString().split('T')[0]}.xlsx`,
+        defaultPath: `inventory-report-${getCurrentLocalDateTime().split('T')[0]}.xlsx`,
         filters: [
           { name: 'Excel Files', extensions: ['xlsx'] },
           { name: 'All Files', extensions: ['*'] },
@@ -210,7 +211,7 @@ export class ReportController extends BaseController {
         return {
           success: false,
           error: 'Export cancelled by user',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -229,7 +230,7 @@ export class ReportController extends BaseController {
       return {
         success: true,
         data: { filepath: result.filePath },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       enhancedLogger.error(
@@ -240,7 +241,7 @@ export class ReportController extends BaseController {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to export inventory report',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -285,7 +286,7 @@ export class ReportController extends BaseController {
       // Show save dialog
       const result = await dialog.showSaveDialog({
         title: 'Export Profit Report',
-        defaultPath: `profit-report-${new Date().toISOString().split('T')[0]}.xlsx`,
+        defaultPath: `profit-report-${getCurrentLocalDateTime().split('T')[0]}.xlsx`,
         filters: [
           { name: 'Excel Files', extensions: ['xlsx'] },
           { name: 'All Files', extensions: ['*'] },
@@ -296,7 +297,7 @@ export class ReportController extends BaseController {
         return {
           success: false,
           error: 'Export cancelled by user',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -315,7 +316,7 @@ export class ReportController extends BaseController {
       return {
         success: true,
         data: { filepath: result.filePath },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       enhancedLogger.error(
@@ -326,7 +327,7 @@ export class ReportController extends BaseController {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to export profit report',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }

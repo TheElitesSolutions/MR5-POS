@@ -10,6 +10,7 @@ import { decimalToNumber, validateCurrencyAmount } from '../utils/decimal';
 import { logger } from '../utils/logger';
 import { getPrismaClient } from '../db/prisma-wrapper';
 import { Decimal } from 'decimal.js';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 /**
  * Helper to convert Date or string to ISO string
@@ -233,7 +234,7 @@ export class ExpenseModel {
         where: { id },
         data: {
           ...validUpdateData,
-          updatedAt: new Date().toISOString(),
+          updatedAt: getCurrentLocalDateTime(),
         },
       });
 
@@ -284,7 +285,7 @@ export class ExpenseModel {
       const expense = await getPrismaClient().expense.update({
         where: { id },
         data: {
-          notes: `Approved by: ${approverId} at ${new Date().toISOString()}`,
+          notes: `Approved by: ${approverId} at ${getCurrentLocalDateTime()}`,
         },
       });
 

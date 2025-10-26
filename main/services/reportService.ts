@@ -8,6 +8,7 @@ import { BaseService } from './baseService';
 import { IPCResponse } from '../../shared/ipc-types';
 import { decimalToNumber } from '../utils/decimal';
 import { enhancedLogger, LogCategory } from '../utils/enhanced-logger';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 // Report Types
 export interface SalesReportData {
@@ -176,7 +177,7 @@ export class ReportService extends BaseService {
           type: order.type as 'DINE_IN' | 'TAKEOUT' | 'DELIVERY',
           itemCount,
           total: decimalToNumber(new Decimal(order.total || 0)),
-          tableName: order.table?.name,
+          tableName: order.table?.name || order.tableName,
         };
       });
 

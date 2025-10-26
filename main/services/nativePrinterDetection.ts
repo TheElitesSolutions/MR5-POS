@@ -12,6 +12,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { promisify } from 'util';
 import { enhancedLogger, LogCategory } from '../utils/enhanced-logger';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 const execAsync = promisify(exec);
 

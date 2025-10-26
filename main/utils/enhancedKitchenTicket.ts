@@ -221,7 +221,7 @@ function generateEnhancedStandardTicket(
 
   // Location information
   if (orderType === 'DINE_IN') {
-    const tableName = order?.table?.name || order?.table?.number || 'N/A';
+    const tableName = order?.table?.name || order?.tableName || 'N/A';
     printData.push({
       type: 'text',
       value: `Table: ${tableName}`,
@@ -534,7 +534,7 @@ function generateEnhancedRemovalTicket(
     {
       type: 'text',
       value: order?.type === 'DINE_IN'
-        ? `Table: ${order?.table?.name || 'N/A'}`
+        ? `Table: ${order?.table?.name || order?.tableName || 'N/A'}`
         : `Customer: ${order?.customerName || 'N/A'}`,
       style: {
         fontSize: '16px',
@@ -738,7 +738,7 @@ function generateEnhancedUpdateTicket(
     {
       type: 'text',
       value: order?.type === 'DINE_IN'
-        ? `Table: ${order?.table?.name || 'N/A'}`
+        ? `Table: ${order?.table?.name || order?.tableName || 'N/A'}`
         : `Customer: ${order?.customerName || 'N/A'}`,
       style: {
         fontSize: '16px',

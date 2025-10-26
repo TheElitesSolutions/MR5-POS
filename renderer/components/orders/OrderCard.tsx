@@ -26,8 +26,20 @@ const OrderCard = ({
   onViewDetails,
   showActions = true,
 }: OrderCardProps) => {
+  // Parse SQLite datetime as local time (not UTC)
+  const parseLocalDateTime = (dateString: string): Date => {
+    // SQLite format: "YYYY-MM-DD HH:MM:SS"
+    // We need to parse this as local time, not UTC
+    const [datePart, timePart] = dateString.replace('T', ' ').split(' ');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hours, minutes, seconds] = (timePart || '00:00:00').split(':').map(Number);
+
+    // Create date in local timezone (month is 0-indexed)
+    return new Date(year, month - 1, day, hours || 0, minutes || 0, seconds || 0);
+  };
+
   const formatTimeOnly = (dateString: string) => {
-    return new Date(dateString).toLocaleTimeString('en-US', {
+    return parseLocalDateTime(dateString).toLocaleTimeString('en-US', {
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
@@ -35,7 +47,7 @@ const OrderCard = ({
   };
 
   const formatDateOnly = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return parseLocalDateTime(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
@@ -98,67 +110,46 @@ const OrderCard = ({
           </div>
         </div>
 
-        {/* Date and Time */}
-        <div className='mb-3 flex items-center justify-between rounded-lg bg-gray-50 dark:bg-gray-800/50 px-3 py-2'>
-          <div className='flex items-center gap-2 text-xs'>
-            <Calendar className='h-3.5 w-3.5 text-gray-400' />
-            <span className='text-gray-600 dark:text-gray-400'>
-              {formatDateOnly(order.createdAt)}
-            </span>
-          </div>
-          <div className='flex items-center gap-2 text-xs'>
-            <Clock className='h-3.5 w-3.5 text-gray-400' />
-            <span className='font-medium text-gray-700 dark:text-gray-300'>
-              {formatTimeOnly(order.createdAt)}
-            </span>
-          </div>
-        </div>
-
-        {/* Quick Info */}
-        <div className='mb-3 grid grid-cols-2 gap-3'>
-          {order.tableId && (
-            <div className='flex items-center gap-2'>
-              <MapPin className='h-3.5 w-3.5 text-gray-400' />
-              <span className='text-xs text-gray-600 dark:text-gray-400'>Table:</span>
-              <span className='text-xs font-medium text-gray-900 dark:text-white'>
-                {(order as any).table?.name || order.tableId}
+        {/* Order Info - 2x2 Grid with second column right-aligned */}
+        <div className='mb-3 space-y-2 text-xs'>
+          {/* First Row: Date on left, Time on right */}
+          <div className='flex items-center justify-between gap-2'>
+            <div className='flex items-center gap-1.5'>
+              <Calendar className='h-3.5 w-3.5 text-gray-400' />
+              <span className='text-gray-600 dark:text-gray-400'>
+                {formatDateOnly(order.createdAt)}
               </span>
             </div>
-          )}
-          <div className='flex items-center gap-2'>
-            <ShoppingBag className='h-3.5 w-3.5 text-gray-400' />
-            <span className='text-xs text-gray-600 dark:text-gray-400'>Items:</span>
-            <span className='text-xs font-medium text-gray-900 dark:text-white'>
-              {totalQuantity} ({order.items?.length || 0} unique)
-            </span>
-          </div>
-        </div>
-
-        {/* Items Preview - Show first 3 items */}
-        {order.items && order.items.length > 0 && (
-          <div className='mb-3 border-t dark:border-gray-700 pt-3'>
-            <div className='space-y-1'>
-              {order.items.slice(0, 3).map((item, index) => (
-                <div
-                  key={item.id || index}
-                  className='flex justify-between text-xs'
-                >
-                  <span className='text-gray-600 dark:text-gray-400 truncate max-w-[60%]'>
-                    {item.quantity}x {item.name || item.menuItemName || 'Unknown Item'}
-                  </span>
-                  <span className='font-medium text-gray-900 dark:text-white'>
-                    ${formatCurrency(item.totalPrice || item.price * item.quantity || 0)}
-                  </span>
-                </div>
-              ))}
-              {order.items.length > 3 && (
-                <div className='text-xs text-gray-500 dark:text-gray-400 italic'>
-                  +{order.items.length - 3} more items...
-                </div>
-              )}
+            <div className='flex items-center gap-1.5'>
+              <Clock className='h-3.5 w-3.5 text-gray-400' />
+              <span className='text-gray-600 dark:text-gray-400'>
+                {formatTimeOnly(order.createdAt)}
+              </span>
             </div>
           </div>
-        )}
+
+          {/* Second Row: Table on left, Items on right */}
+          <div className='flex items-center justify-between gap-2'>
+            {/* Table */}
+            {(order.tableId || order.tableName) && (
+              <div className='flex items-center gap-1.5'>
+                <MapPin className='h-3.5 w-3.5 text-gray-400' />
+                <span className='text-gray-600 dark:text-gray-400'>Table:</span>
+                <span className='font-medium text-gray-900 dark:text-white'>
+                  {(order as any).table?.name || order.tableName || 'N/A'}
+                </span>
+              </div>
+            )}
+            {/* Items */}
+            <div className='flex items-center gap-1.5'>
+              <ShoppingBag className='h-3.5 w-3.5 text-gray-400' />
+              <span className='text-gray-600 dark:text-gray-400'>Items:</span>
+              <span className='font-medium text-gray-900 dark:text-white'>
+                {totalQuantity}
+              </span>
+            </div>
+          </div>
+        </div>
 
         {/* Actions */}
         {showActions && (

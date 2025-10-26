@@ -59,6 +59,7 @@ export interface Order {
   id: string;
   orderNumber: string;
   tableId?: string;
+  tableName?: string; // Denormalized table name for historical preservation
   tableNumber?: number;
   type?: 'DINE_IN' | 'TAKEOUT' | 'DELIVERY'; // Order type
   status: 'PENDING' | 'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';

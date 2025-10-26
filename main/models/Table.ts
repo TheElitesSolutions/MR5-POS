@@ -8,6 +8,7 @@ import {
   OrderItemStatus,
 } from '../types';
 import { logger } from '../utils/logger';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 export class TableModel {
   constructor(private prisma: ExtendedPrismaClient) {}
@@ -33,11 +34,11 @@ export class TableModel {
         total: parseFloat(table.orderTotal || '0'),
         tax: 0, // Will be calculated when needed
         subtotal: parseFloat(table.orderTotal || '0'),
-        createdAt: table.orderCreatedAt || new Date().toISOString(),
+        createdAt: table.orderCreatedAt || getCurrentLocalDateTime(),
         updatedAt:
           table.orderUpdatedAt ||
           table.orderCreatedAt ||
-          new Date().toISOString(),
+          getCurrentLocalDateTime(),
       } as Order;
 
       // Create mock items array with correct length for UI display
@@ -54,8 +55,8 @@ export class TableModel {
           quantity: 1,
           notes: '',
           status: OrderItemStatus.PENDING,
-          createdAt: new Date(),
-          updatedAt: new Date(),
+          createdAt: getCurrentLocalDateTime(),
+          updatedAt: getCurrentLocalDateTime(),
         }));
     }
 
@@ -156,7 +157,7 @@ export class TableModel {
       return {
         success: true,
         data: tablesArray.map(table => this.mapPrismaTable(table)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -169,7 +170,7 @@ export class TableModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to retrieve tables',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -199,7 +200,7 @@ export class TableModel {
       return {
         success: true,
         data: table ? this.mapPrismaTable(table) : null,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -212,7 +213,7 @@ export class TableModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to retrieve table',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -234,7 +235,7 @@ export class TableModel {
         return {
           success: false,
           error: `Table name "${tableData.name}" already exists`,
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -253,7 +254,7 @@ export class TableModel {
       return {
         success: true,
         data: this.mapPrismaTable(table),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -266,7 +267,7 @@ export class TableModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to create table',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -283,7 +284,7 @@ export class TableModel {
         where: { id },
         data: {
           status,
-          updatedAt: new Date().toISOString(),
+          updatedAt: getCurrentLocalDateTime(),
         },
         include: {
           orders: {
@@ -308,7 +309,7 @@ export class TableModel {
       return {
         success: true,
         data: this.mapPrismaTable(table),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -323,7 +324,7 @@ export class TableModel {
           error instanceof Error
             ? error.message
             : 'Failed to update table status',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -353,7 +354,7 @@ export class TableModel {
           return {
             success: false,
             error: `Table name "${updateData.name}" already exists`,
-            timestamp: new Date().toISOString(),
+            timestamp: getCurrentLocalDateTime(),
           };
         }
       }
@@ -379,38 +380,55 @@ export class TableModel {
       return {
         success: true,
         data: this.mapPrismaTable(table),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       return {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to update table',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
 
   /**
-   * Delete table (hard delete with cascading delete of orders)
+   * Delete table (preserves completed/cancelled orders, deletes active orders only)
    */
   async deleteTable(id: string): Promise<IPCResponse<boolean>> {
     try {
-      // Use transaction to ensure data consistency during cascading delete
+      // Use transaction to ensure data consistency
       await this.prisma.$transaction(async tx => {
-        // First, delete all order items associated with orders for this table
-        await tx.orderItem.deleteMany({
+        // PRESERVE COMPLETED/CANCELLED ORDERS: Set tableId = NULL (tableName stays intact)
+        const preservedOrders = await tx.order.updateMany({
           where: {
-            order: {
-              tableId: id,
-            },
+            tableId: id,
+            status: { in: ['COMPLETED', 'CANCELLED'] },
           },
+          data: { tableId: null }, // tableName is already stored, so it's preserved
         });
 
-        // Then, delete all orders associated with this table
+        // DELETE ACTIVE ORDERS: Get active order IDs first
+        const activeOrders = await tx.order.findMany({
+          where: {
+            tableId: id,
+            status: { notIn: ['COMPLETED', 'CANCELLED'] },
+          },
+          select: { id: true },
+        });
+
+        // Delete order items for active orders
+        if (activeOrders.length > 0) {
+          await tx.orderItem.deleteMany({
+            where: { orderId: { in: activeOrders.map(o => o.id) } },
+          });
+        }
+
+        // Delete active orders
         const deletedOrders = await tx.order.deleteMany({
           where: {
             tableId: id,
+            status: { notIn: ['COMPLETED', 'CANCELLED'] },
           },
         });
 
@@ -419,21 +437,17 @@ export class TableModel {
           where: { id },
         });
 
-        // Log the cascading deletion
-        if (deletedOrders.count > 0) {
-          logger.info(
-            `Table deleted with cascading delete of ${deletedOrders.count} orders`,
-            `tableId: ${id}`
-          );
-        } else {
-          logger.info('Table deleted (no associated orders)', `tableId: ${id}`);
-        }
+        // Log the operations
+        logger.info(
+          `Table ${id} deleted: Preserved ${preservedOrders.count} completed/cancelled orders, deleted ${deletedOrders.count} active orders`,
+          'TableModel'
+        );
       });
 
       return {
         success: true,
         data: true,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -446,7 +460,7 @@ export class TableModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to delete table',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -468,7 +482,7 @@ export class TableModel {
       return {
         success: true,
         data: tables.map(table => this.mapPrismaTable(table)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -483,7 +497,7 @@ export class TableModel {
           error instanceof Error
             ? error.message
             : 'Failed to retrieve available tables',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -523,7 +537,7 @@ export class TableModel {
           outOfOrder,
           reserved,
         },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -538,7 +552,7 @@ export class TableModel {
           error instanceof Error
             ? error.message
             : 'Failed to retrieve table statistics',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }

@@ -11,6 +11,7 @@ import { AddonService, ServiceResponse } from './AddonService';
 import { AddonErrorFactory } from '../errors/AddonError';
 import type { z } from 'zod';
 import { AddonGroupSchema } from '../../shared/validation/addon-schemas';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 type AddonGroupData = z.infer<typeof AddonGroupSchema>;
 
@@ -284,7 +285,7 @@ export class AddonCacheService {
         const cacheData: CategoryAddonsCache = {
           groups: result.data.groups,
           totalAddons: result.data.totalAddons,
-          cachedAt: new Date().toISOString(),
+          cachedAt: getCurrentLocalDateTime(),
           ttl: this.config.ttl!.categoryAddons,
         };
 

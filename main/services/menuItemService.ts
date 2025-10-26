@@ -13,6 +13,7 @@ import {
 import { AppError } from '../error-handler';
 import { IPCResponse, MenuItem } from '../types';
 import { decimalToNumber, validateCurrencyAmount } from '../utils/decimal';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 import { BaseService } from './baseService';
 
 // Define Ingredient type locally to match what's used in the code
@@ -237,8 +238,8 @@ export class MenuItemService extends BaseService {
         ingredients: [],
         allergens: [],
         nutritionalInfo: {},
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: getCurrentLocalDateTime(),
+        updatedAt: getCurrentLocalDateTime(),
       } as any);
     }
   }

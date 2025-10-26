@@ -1,6 +1,7 @@
 import PDFDocument from 'pdfkit';
 import { format } from 'date-fns';
 import { Order, OrderItem, Table, User } from '../types/index';
+import { getCurrentLocalDateTime } from './dateTime';
 
 interface ReceiptData {
   order: Order & {
@@ -142,7 +143,7 @@ export class LebanesReceiptGenerator {
       .font('Helvetica')
       .text(`Receipt No: ${order.orderNumber || order.id.slice(-8)}`)
       .text(`Date/Time: ${receiptDate}`)
-      .text(`Table: ${order.table?.number || 'N/A'}`)
+      .text(`Table: ${order.table?.name || order.tableName || 'N/A'}`)
       .text(
         `Server: ${order.user?.firstName || 'N/A'} ${
           order.user?.lastName || ''
@@ -339,7 +340,7 @@ export class LebanesReceiptGenerator {
     // Timestamp
     doc
       .fontSize(7)
-      .text(`Generated: ${new Date().toISOString()}`, { align: 'center' });
+      .text(`Generated: ${getCurrentLocalDateTime()}`, { align: 'center' });
   }
 
   /**

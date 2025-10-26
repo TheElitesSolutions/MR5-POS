@@ -5,6 +5,7 @@ import { app, dialog } from 'electron';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { logger } from './logger';
+import { getCurrentLocalDateTime } from './dateTime';
 
 const BACKUP_DIR_NAME = 'backups';
 const DATABASE_FILE_NAME = 'mr5-pos.db'; // Actual database file name

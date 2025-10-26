@@ -11,16 +11,17 @@ import { AddonService, AddonSelection } from '../services/AddonService';
 import { AddonErrorHandler, isAddonError } from '../errors/AddonError';
 import { logError, logInfo } from '../error-handler';
 import { AdvancedLogger } from '../utils/advancedLogger';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 /**
  * Safely convert a date to ISO string
  * Handles both Date objects and string inputs
  */
 function toISOString(date: Date | string | null | undefined): string {
-  if (!date) return new Date().toISOString();
+  if (!date) return getCurrentLocalDateTime();
   if (typeof date === 'string') return date;
   if (date instanceof Date) return date.toISOString();
-  return new Date().toISOString();
+  return getCurrentLocalDateTime();
 }
 
 // Enhanced order item interface with add-on support
@@ -222,7 +223,7 @@ export class OrderControllerAddonExtensions {
                   where: { id: inventory.id },
                   data: {
                     currentStock: newStock,
-                    updatedAt: new Date(),
+                    updatedAt: getCurrentLocalDateTime(),
                   },
                 });
 
@@ -260,7 +261,7 @@ export class OrderControllerAddonExtensions {
           where: { id: orderItem.id },
           data: {
             totalPrice: finalItemPrice,
-            updatedAt: new Date(),
+            updatedAt: getCurrentLocalDateTime(),
           },
           include: { menuItem: true },
         });
@@ -279,7 +280,7 @@ export class OrderControllerAddonExtensions {
           data: {
             subtotal: orderSubtotal,
             total: orderSubtotal, // Assuming no tax for simplicity
-            updatedAt: new Date(),
+            updatedAt: getCurrentLocalDateTime(),
           },
         });
 
@@ -342,7 +343,7 @@ export class OrderControllerAddonExtensions {
         success: true,
         data: result,
         message: 'Order item with add-ons added successfully',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logError(error, 'OrderController.addOrderItemWithAddons');
@@ -362,7 +363,7 @@ export class OrderControllerAddonExtensions {
           error instanceof Error
             ? error.message
             : 'Failed to add order item with add-ons',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -388,7 +389,7 @@ export class OrderControllerAddonExtensions {
         return {
           success: false,
           error: (result as any).error.message,
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -396,7 +397,7 @@ export class OrderControllerAddonExtensions {
         success: true,
         data: result.data,
         message: 'Add-ons added to order item successfully',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logError(error, 'OrderController.addAddonsToExistingOrderItem');
@@ -406,7 +407,7 @@ export class OrderControllerAddonExtensions {
           error instanceof Error
             ? error.message
             : 'Failed to add add-ons to order item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -432,7 +433,7 @@ export class OrderControllerAddonExtensions {
         return {
           success: false,
           error: (result as any).error.message,
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -440,7 +441,7 @@ export class OrderControllerAddonExtensions {
         success: true,
         data: result.data,
         message: 'Add-on removed from order item successfully',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logError(error, 'OrderController.removeAddonFromOrderItem');
@@ -450,7 +451,7 @@ export class OrderControllerAddonExtensions {
           error instanceof Error
             ? error.message
             : 'Failed to remove add-on from order item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -466,14 +467,14 @@ export class OrderControllerAddonExtensions {
         return {
           success: false,
           error: (result as any).error.message,
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
       return {
         success: true,
         data: result.data,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logError(error, 'OrderController.getOrderItemAddons');
@@ -483,7 +484,7 @@ export class OrderControllerAddonExtensions {
           error instanceof Error
             ? error.message
             : 'Failed to get order item add-ons',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -626,7 +627,7 @@ export class OrderControllerAddonExtensions {
                   currentStock: {
                     increment: totalQuantityToRestore,
                   },
-                  updatedAt: new Date(),
+                  updatedAt: getCurrentLocalDateTime(),
                 },
               });
 
@@ -680,7 +681,7 @@ export class OrderControllerAddonExtensions {
                 currentStock: {
                   increment: amountToRestore,
                 },
-                updatedAt: new Date().toISOString(),
+                updatedAt: getCurrentLocalDateTime(),
               },
             });
           }
@@ -706,7 +707,7 @@ export class OrderControllerAddonExtensions {
           data: {
             subtotal: orderSubtotal,
             total: orderSubtotal,
-            updatedAt: new Date(),
+            updatedAt: getCurrentLocalDateTime(),
           },
         });
 
@@ -717,7 +718,7 @@ export class OrderControllerAddonExtensions {
         success: true,
         data: result,
         message: 'Order item and add-ons removed successfully',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logError(error, 'OrderController.removeOrderItemWithAddons');
@@ -727,7 +728,7 @@ export class OrderControllerAddonExtensions {
           error instanceof Error
             ? error.message
             : 'Failed to remove order item with add-ons',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }

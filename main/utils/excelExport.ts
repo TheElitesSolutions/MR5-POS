@@ -12,6 +12,7 @@ import type {
   Order,
 } from '../../shared/ipc-types';
 import { enhancedLogger, LogCategory } from './enhanced-logger';
+import { getCurrentLocalDateTime } from './dateTime';
 
 /**
  * Export sales report to Excel with formatting
@@ -97,7 +98,7 @@ export async function exportSalesReportToExcel(
         orderDate,
         orderDate,
         order.type,
-        order.tableName || '-',
+        (order as any).table?.name || order.tableName || '-',
         order.itemCount,
         order.total,
       ]);

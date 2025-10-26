@@ -9,6 +9,7 @@ import {
 } from '../utils/decimal';
 import { Decimal as DecimalJS } from 'decimal.js';
 import { logger } from '../utils/logger';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 /**
  * Helper to convert Date or string to ISO string
@@ -55,7 +56,7 @@ export class OrderItemModel {
       return {
         success: true,
         data: orderItem ? this.mapPrismaOrderItem(orderItem) : null,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -68,7 +69,7 @@ export class OrderItemModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to get order item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -86,7 +87,7 @@ export class OrderItemModel {
       return {
         success: true,
         data: orderItems.map(item => this.mapPrismaOrderItem(item)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -99,7 +100,7 @@ export class OrderItemModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to get order items',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -149,7 +150,7 @@ export class OrderItemModel {
       return {
         success: true,
         data: this.mapPrismaOrderItem(orderItem),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       if (error instanceof AppError) {
@@ -167,7 +168,7 @@ export class OrderItemModel {
           error instanceof Error
             ? error.message
             : 'Failed to create order item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -231,7 +232,7 @@ export class OrderItemModel {
       return {
         success: true,
         data: this.mapPrismaOrderItem(orderItem),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       if (error instanceof AppError) {
@@ -249,7 +250,7 @@ export class OrderItemModel {
           error instanceof Error
             ? error.message
             : 'Failed to update order item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -275,7 +276,7 @@ export class OrderItemModel {
       return {
         success: true,
         data: this.mapPrismaOrderItem(orderItem),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -290,7 +291,7 @@ export class OrderItemModel {
           error instanceof Error
             ? error.message
             : 'Failed to update order item status',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -306,7 +307,7 @@ export class OrderItemModel {
       return {
         success: true,
         data: true,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -321,7 +322,7 @@ export class OrderItemModel {
           error instanceof Error
             ? error.message
             : 'Failed to delete order item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -346,7 +347,7 @@ export class OrderItemModel {
       return {
         success: true,
         data: orderItems.map(item => this.mapPrismaOrderItem(item)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -361,7 +362,7 @@ export class OrderItemModel {
           error instanceof Error
             ? error.message
             : 'Failed to get order items by status',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -388,7 +389,7 @@ export class OrderItemModel {
       return {
         success: true,
         data: orderItems.map(item => this.mapPrismaOrderItem(item)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -403,7 +404,7 @@ export class OrderItemModel {
           error instanceof Error
             ? error.message
             : 'Failed to get kitchen queue',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }

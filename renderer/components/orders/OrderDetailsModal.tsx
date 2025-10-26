@@ -52,9 +52,21 @@ const OrderDetailsModal = ({
   }
 
   if (!order) return null;
+  // Parse SQLite datetime as local time (not UTC)
+  const parseLocalDateTime = (dateString: string): Date => {
+    // SQLite format: "YYYY-MM-DD HH:MM:SS"
+    // We need to parse this as local time, not UTC
+    const [datePart, timePart] = dateString.replace('T', ' ').split(' ');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hours, minutes, seconds] = (timePart || '00:00:00').split(':').map(Number);
+
+    // Create date in local timezone (month is 0-indexed)
+    return new Date(year, month - 1, day, hours || 0, minutes || 0, seconds || 0);
+  };
+
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = parseLocalDateTime(dateString);
     return (
       date.toLocaleDateString('en-US', {
         month: 'short',

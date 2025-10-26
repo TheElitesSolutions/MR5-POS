@@ -13,6 +13,7 @@ import { TableService } from '../services/tableService';
 import { enhancedLogger, LogCategory } from '../utils/enhanced-logger';
 import { ServiceRegistry } from '../services/serviceRegistry';
 import { prisma } from '../db/prisma-wrapper';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 // Removed unused import: Decimal
 
 /**
@@ -236,7 +237,7 @@ export class DashboardController extends BaseController {
       return {
         success: true,
         data: dashboardData,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -256,7 +257,7 @@ export class DashboardController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }

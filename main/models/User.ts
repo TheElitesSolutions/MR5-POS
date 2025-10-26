@@ -20,6 +20,7 @@ type PrismaUser = {
 };
 import { comparePassword, hashPassword } from '../utils/auth';
 import { logger } from '../utils/logger';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 export type UserWithoutPassword = Omit<User, 'password'>;
 
@@ -135,14 +136,14 @@ export class UserModel {
         return {
           success: false,
           error: 'User not found',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
       return {
         success: true,
         data: mapPrismaUserToDTO(user),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -154,7 +155,7 @@ export class UserModel {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to find user',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -189,7 +190,7 @@ export class UserModel {
         return {
           success: false,
           error: 'Invalid username or email',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -206,7 +207,7 @@ export class UserModel {
         return {
           success: false,
           error: 'Invalid password',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -214,7 +215,7 @@ export class UserModel {
       logger.info(`Updating last login time for user: ${user.id}`, 'UserModel');
       await this.prisma.user.update({
         where: { id: user.id },
-        data: { lastLogin: new Date().toISOString() },
+        data: { lastLogin: getCurrentLocalDateTime() },
       });
 
       logger.info(
@@ -224,7 +225,7 @@ export class UserModel {
       return {
         success: true,
         data: mapPrismaUserToDTO(user),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       // Enhanced error logging with more details
@@ -241,7 +242,7 @@ export class UserModel {
       return {
         success: false,
         error: `Authentication error: ${errorMessage}`,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -274,13 +275,13 @@ export class UserModel {
       return {
         success: true,
         data: mapPrismaUserToDTO(user),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to create user',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -312,13 +313,13 @@ export class UserModel {
       return {
         success: true,
         data: mapPrismaUserToDTO(user),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to update user',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -338,7 +339,7 @@ export class UserModel {
         return {
           success: false,
           error: 'User not found',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -350,7 +351,7 @@ export class UserModel {
         return {
           success: false,
           error: 'Current password is incorrect',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -363,14 +364,14 @@ export class UserModel {
       return {
         success: true,
         data: true,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       return {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to change password',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -418,13 +419,13 @@ export class UserModel {
       return {
         success: true,
         data: users.map(user => mapPrismaUserToDTO(user)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to fetch users',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -439,14 +440,14 @@ export class UserModel {
       return {
         success: true,
         data: true,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       return {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to deactivate user',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }

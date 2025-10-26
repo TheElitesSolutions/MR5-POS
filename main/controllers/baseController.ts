@@ -6,6 +6,7 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import { logError, logInfo } from '../error-handler';
 import { IPCHandlerFunction, IPCResponse } from '../types/index';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 /**
  * Base controller interface
@@ -96,7 +97,7 @@ export abstract class BaseController implements Controller {
     const response: IPCResponse<T> = {
       success: true,
       data,
-      timestamp: new Date().toISOString(),
+      timestamp: getCurrentLocalDateTime(),
     };
 
     if (message) {
@@ -118,7 +119,7 @@ export abstract class BaseController implements Controller {
     return {
       success: false,
       error: errorMessage,
-      timestamp: new Date().toISOString(),
+      timestamp: getCurrentLocalDateTime(),
     };
   }
 

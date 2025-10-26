@@ -16,6 +16,7 @@ import {
   LogLevel,
 } from '../utils/enhanced-logger';
 import { BaseController } from './baseController';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 interface LogFile {
   name: string;
@@ -136,7 +137,7 @@ export class LogController extends BaseController {
         success: true,
         data: logFiles,
         message: `Found ${logFiles.length} log files`,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       enhancedLogger.error(
@@ -150,7 +151,7 @@ export class LogController extends BaseController {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -206,7 +207,7 @@ export class LogController extends BaseController {
         success: true,
         data: lines,
         message: `Retrieved ${lines.length} log entries`,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       enhancedLogger.error(
@@ -220,7 +221,7 @@ export class LogController extends BaseController {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -340,7 +341,7 @@ export class LogController extends BaseController {
         success: true,
         data: paginatedResults,
         message: `Found ${paginatedResults.length} matching log entries`,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       enhancedLogger.error(
@@ -354,7 +355,7 @@ export class LogController extends BaseController {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -493,7 +494,7 @@ export class LogController extends BaseController {
         success: true,
         data: stats,
         message: 'Log statistics generated',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       enhancedLogger.error(
@@ -507,7 +508,7 @@ export class LogController extends BaseController {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -560,7 +561,7 @@ export class LogController extends BaseController {
         success: true,
         data: { deletedCount },
         message: `Deleted ${deletedCount} log files`,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       enhancedLogger.error(
@@ -574,7 +575,7 @@ export class LogController extends BaseController {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -631,7 +632,7 @@ export class LogController extends BaseController {
         success: true,
         data: { filePath: normalizedPath },
         message: `Exported ${logs.length} logs to ${path.basename(normalizedPath)}`,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       enhancedLogger.error(
@@ -645,7 +646,7 @@ export class LogController extends BaseController {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -720,7 +721,7 @@ export class LogController extends BaseController {
         success: true,
         data: true,
         message: 'Log written successfully',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       // Fallback error logging if something goes wrong
@@ -735,7 +736,7 @@ export class LogController extends BaseController {
       return {
         success: false,
         error: error instanceof Error ? error.message : String(error),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }

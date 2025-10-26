@@ -21,16 +21,17 @@ import {
 import { Decimal as DecimalJS } from 'decimal.js';
 import { logger } from '../utils/logger';
 import { TableModel } from './Table';
+import { getCurrentLocalDateTime, dateToLocalDateTime } from '../utils/dateTime';
 
 /**
- * Safely convert a date to ISO string
+ * Safely convert a date to local datetime string
  * Handles both Date objects and string inputs
  */
 function toISOString(date: Date | string | null | undefined): string {
-  if (!date) return new Date().toISOString();
+  if (!date) return getCurrentLocalDateTime();
   if (typeof date === 'string') return date;
-  if (date instanceof Date) return date.toISOString();
-  return new Date().toISOString();
+  if (date instanceof Date) return dateToLocalDateTime(date); // FIXED: Use local time, not UTC
+  return getCurrentLocalDateTime();
 }
 
 /**
@@ -392,12 +393,12 @@ export class OrderModel {
         quantity: item.quantity,
         notes: item.notes || '',
         status: mappedStatus,
-        createdAt: item.createdAt
-          ? new Date(item.createdAt)
-          : new Date(),
-        updatedAt: item.updatedAt
-          ? new Date(item.updatedAt)
-          : new Date(),
+        createdAt: item.createdAt instanceof Date
+          ? dateToLocalDateTime(item.createdAt)
+          : (item.createdAt || getCurrentLocalDateTime()),
+        updatedAt: item.updatedAt instanceof Date
+          ? dateToLocalDateTime(item.updatedAt)
+          : (item.updatedAt || getCurrentLocalDateTime()),
         // ✅ FIX: Include addons if present with addonGroup for invoice generation
         ...(item.addons && item.addons.length > 0 ? { addons: item.addons.map((addon: any) => ({
           id: addon.id,
@@ -453,8 +454,8 @@ export class OrderModel {
         quantity: item?.quantity || 1,
         notes: item?.notes || '',
         status: OrderItemStatus.PENDING,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: getCurrentLocalDateTime(),
+        updatedAt: getCurrentLocalDateTime(),
       };
     }
   }
@@ -500,13 +501,16 @@ export class OrderModel {
       // Handle completedAt safely
       let completedAt: string | null = null;
       if (order.completedAt) {
-        completedAt = new Date(order.completedAt).toISOString();
+        completedAt = order.completedAt instanceof Date
+          ? dateToLocalDateTime(order.completedAt)
+          : order.completedAt;
       }
 
       const mapped: Order = {
         id: order.id,
         orderNumber: order.orderNumber || `ORD-${order.id.slice(-8)}`,
         tableId: order.tableId,
+        tableName: order.tableName || table?.name || undefined, // Denormalized table name
         table: table || undefined, // Include table information
         customerId: order.customerId || undefined,
         userId: order.userId || '',
@@ -517,12 +521,12 @@ export class OrderModel {
         subtotal,
         discount: order.discount ? decimalToNumber(order.discount) : undefined,
         notes: order.notes || undefined,
-        createdAt: order.createdAt
-          ? new Date(order.createdAt)
-          : new Date(),
-        updatedAt: order.updatedAt
-          ? new Date(order.updatedAt)
-          : new Date(),
+        createdAt: order.createdAt instanceof Date
+          ? dateToLocalDateTime(order.createdAt)
+          : (order.createdAt || getCurrentLocalDateTime()),
+        updatedAt: order.updatedAt instanceof Date
+          ? dateToLocalDateTime(order.updatedAt)
+          : (order.updatedAt || getCurrentLocalDateTime()),
         // Customer fields for takeout/delivery orders
         customerName: order.customerName || null,
         customerPhone: order.customerPhone || null,
@@ -560,8 +564,8 @@ export class OrderModel {
         customerName: order?.customerName || undefined,
         customerPhone: order?.customerPhone || undefined,
         deliveryAddress: order?.deliveryAddress || undefined,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        createdAt: getCurrentLocalDateTime(),
+        updatedAt: getCurrentLocalDateTime(),
         customerId: order?.customerId || undefined,
         userId: order?.userId || '',
         items: [],
@@ -601,14 +605,14 @@ export class OrderModel {
       return {
         success: true,
         data: ordersWithItems.map(order => this.mapPrismaOrder(order)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       return {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to fetch orders',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -638,7 +642,7 @@ export class OrderModel {
         return {
           success: true,
           data: null,
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -678,7 +682,7 @@ export class OrderModel {
       return {
         success: true,
         data: orderWithItems ? this.mapPrismaOrder(orderWithItems, table) : null,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -690,7 +694,7 @@ export class OrderModel {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get order',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -795,15 +799,23 @@ export class OrderModel {
         }
       }
 
-      // Build the order data object conditionally
+      // Fetch table name for denormalization
+      let tableName: string | null = null;
+      if (orderData.tableId) {
+        const tableResponse = await this.tableModel.getTableById(orderData.tableId);
+        if (tableResponse.success && tableResponse.data) {
+          tableName = tableResponse.data.name;
+        }
+      }
+
+      // Build the order data object with direct foreign key IDs
+      // NOTE: The Prisma wrapper doesn't support 'connect' syntax - use direct IDs
       const orderCreateData: any = {
         orderNumber: orderData.orderNumber,
-        table: {
-          connect: { id: orderData.tableId },
-        },
-        user: {
-          connect: { id: validUserId },
-        },
+        tableId: orderData.tableId || null, // Direct foreign key ID
+        tableName: tableName, // Store denormalized table name
+        customerId: orderData.customerId || null, // Direct foreign key ID
+        userId: validUserId, // Direct foreign key ID
         type: orderData.type || OrderType.DINE_IN,
         status: 'PENDING',
         subtotal: orderData.subtotal,
@@ -811,13 +823,6 @@ export class OrderModel {
         discount: orderData.discount || new DecimalJS(0),
         total: orderData.total,
         notes: orderData.notes || null,
-      };
-
-      // Only add customer if customerId is provided
-      if (orderData.customerId) {
-        orderCreateData.customer = {
-          connect: { id: orderData.customerId },
-        };
       }
 
       const order = await this.prisma.order.create({
@@ -838,7 +843,7 @@ export class OrderModel {
       return {
         success: true,
         data: this.mapPrismaOrder(order),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -851,7 +856,7 @@ export class OrderModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to create order',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -877,7 +882,7 @@ export class OrderModel {
       return {
         success: true,
         data: this.mapPrismaOrder(order),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -890,7 +895,7 @@ export class OrderModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to update order',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -955,7 +960,7 @@ export class OrderModel {
                   currentStock: {
                     increment: amountToRestore,
                   },
-                  updatedAt: new Date().toISOString(),
+                  updatedAt: getCurrentLocalDateTime(),
                 },
               });
 
@@ -993,7 +998,7 @@ export class OrderModel {
                         currentStock: {
                           increment: totalToRestore,
                         },
-                        updatedAt: new Date().toISOString(),
+                        updatedAt: getCurrentLocalDateTime(),
                       },
                     });
 
@@ -1025,7 +1030,7 @@ export class OrderModel {
           data: {
             status: 'CANCELLED',
             notes: reason || null,
-            updatedAt: new Date().toISOString(),
+            updatedAt: getCurrentLocalDateTime(),
           },
           include: {
             table: true,
@@ -1047,7 +1052,7 @@ export class OrderModel {
       return {
         success: true,
         data: this.mapPrismaOrder(order),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       if (error instanceof AppError) {
@@ -1063,7 +1068,7 @@ export class OrderModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to cancel order',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1087,7 +1092,7 @@ export class OrderModel {
       return {
         success: true,
         data: this.mapPrismaOrder(order),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -1100,7 +1105,7 @@ export class OrderModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to complete order',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1123,7 +1128,7 @@ export class OrderModel {
       return {
         success: true,
         data: ordersWithItems.map(order => this.mapPrismaOrder(order)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -1138,7 +1143,7 @@ export class OrderModel {
           error instanceof Error
             ? error.message
             : 'Failed to get orders by table',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1161,7 +1166,7 @@ export class OrderModel {
       return {
         success: true,
         data: ordersWithItems.map(order => this.mapPrismaOrder(order)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -1176,7 +1181,7 @@ export class OrderModel {
           error instanceof Error
             ? error.message
             : 'Failed to get orders by type',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1202,7 +1207,7 @@ export class OrderModel {
       return {
         success: true,
         data: ordersWithItems.map(order => this.mapPrismaOrder(order)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -1217,7 +1222,7 @@ export class OrderModel {
           error instanceof Error
             ? error.message
             : 'Failed to get orders by status',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1254,7 +1259,7 @@ export class OrderModel {
       return {
         success: true,
         data: this.mapPrismaOrder(order),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -1269,7 +1274,7 @@ export class OrderModel {
           error instanceof Error
             ? error.message
             : 'Failed to update order status',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1362,14 +1367,14 @@ export class OrderModel {
       return {
         success: true,
         data: ordersWithItems.map(order => this.mapPrismaOrder(order)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       return {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to fetch orders',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1494,7 +1499,7 @@ export class OrderModel {
                   used: requiredQuantity,
                   newStock: newStock,
                   unit: inventoryItem.unit,
-                  timestamp: new Date().toISOString(),
+                  timestamp: getCurrentLocalDateTime(),
                 },
               },
             });
@@ -1570,7 +1575,7 @@ export class OrderModel {
       return {
         success: true,
         data: this.mapPrismaOrderItem(result),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -1582,7 +1587,7 @@ export class OrderModel {
           error instanceof Error
             ? error.message
             : 'Failed to add item to order',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1668,7 +1673,7 @@ export class OrderModel {
                   restored: restoreQuantity,
                   newStock: newStock,
                   unit: inventoryItem.unit,
-                  timestamp: new Date().toISOString(),
+                  timestamp: getCurrentLocalDateTime(),
                 },
               },
             });
@@ -1693,7 +1698,7 @@ export class OrderModel {
       return {
         success: true,
         data: true,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -1705,7 +1710,7 @@ export class OrderModel {
           error instanceof Error
             ? error.message
             : 'Failed to remove item from order',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1725,7 +1730,7 @@ export class OrderModel {
         return {
           success: false,
           error: 'Quantity must be greater than zero',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -1843,7 +1848,7 @@ export class OrderModel {
                   oldQuantity: currentQuantity,
                   newQuantity: newQuantity,
                   unit: inventoryItem.unit,
-                  timestamp: new Date().toISOString(),
+                  timestamp: getCurrentLocalDateTime(),
                 },
               },
             });
@@ -1917,7 +1922,7 @@ export class OrderModel {
                       where: { id: addonInvItem.inventoryId },
                       data: {
                         currentStock: newStock,
-                        updatedAt: new Date().toISOString(),
+                        updatedAt: getCurrentLocalDateTime(),
                       },
                     });
 
@@ -1939,7 +1944,7 @@ export class OrderModel {
                           oldItemQuantity: currentQuantity,
                           newItemQuantity: newQuantity,
                           addonQuantityPerItem: addonQuantityPerItem,
-                          timestamp: new Date().toISOString(),
+                          timestamp: getCurrentLocalDateTime(),
                         },
                       },
                     });
@@ -1986,7 +1991,7 @@ export class OrderModel {
               oldQuantity: orderItem.quantity,
               newQuantity: newQuantity,
               stockAdjusted: inventoryUpdates.size > 0,
-              timestamp: new Date().toISOString(),
+              timestamp: getCurrentLocalDateTime(),
             },
           },
         });
@@ -2019,7 +2024,7 @@ export class OrderModel {
               }
             : null,
         },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -2031,7 +2036,7 @@ export class OrderModel {
           error instanceof Error
             ? error.message
             : 'Failed to update order item quantity',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -2085,7 +2090,7 @@ export class OrderModel {
       return {
         success: true,
         data: ordersWithItems.map(order => this.mapPrismaOrder(order)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       return {
@@ -2094,7 +2099,7 @@ export class OrderModel {
           error instanceof Error
             ? error.message
             : "Failed to fetch today's orders",
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -2159,7 +2164,11 @@ export function mapPrismaOrderToDTO(
     customerName: order.customerName || undefined,
     customerPhone: order.customerPhone || undefined,
     deliveryAddress: order.deliveryAddress || undefined,
-    createdAt: new Date(order.createdAt),
-    updatedAt: new Date(order.updatedAt),
+    createdAt: order.createdAt instanceof Date
+      ? dateToLocalDateTime(order.createdAt)
+      : (order.createdAt || getCurrentLocalDateTime()),
+    updatedAt: order.updatedAt instanceof Date
+      ? dateToLocalDateTime(order.updatedAt)
+      : (order.updatedAt || getCurrentLocalDateTime()),
   };
 }

@@ -1,6 +1,7 @@
 import { app } from "electron";
 import * as path from "path";
 import * as fs from "fs";
+import { getCurrentLocalDateTime } from './dateTime';
 
 class Logger {
   private logPath: string = "";
@@ -61,7 +62,7 @@ class Logger {
   }
 
   private writeLog(level: string, message: string, context?: string): void {
-    const timestamp = new Date().toISOString();
+    const timestamp = getCurrentLocalDateTime();
     const contextStr = context ? ` [${context}]` : "";
     const logEntry = `${timestamp} [${level.toUpperCase()}]${contextStr}: ${message}\n`;
 

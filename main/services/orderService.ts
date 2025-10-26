@@ -25,6 +25,7 @@ import {
   PaymentMethod,
 } from '../types';
 import { decimalToNumber } from '../utils/decimal';
+import { getCurrentLocalDateTime, dateToLocalDateTime } from '../utils/dateTime';
 import { BaseService } from './baseService';
 import { InventoryService } from './inventoryService';
 
@@ -235,9 +236,9 @@ interface OrderDTO {
   paymentMethod?: PaymentMethod | undefined;
   notes?: string | undefined;
   items: OrderItemDTO[];
-  createdAt: Date;
-  updatedAt: Date;
-  completedAt?: Date | undefined;
+  createdAt: Date | string; // Can be Date from Prisma or string from mapping
+  updatedAt: Date | string; // Can be Date from Prisma or string from mapping
+  completedAt?: Date | string | undefined; // Can be Date from Prisma or string from mapping
   // Customer fields for takeaway/delivery orders
   customerName?: string | undefined;
   customerPhone?: string | undefined;
@@ -405,9 +406,15 @@ export class OrderService extends BaseService {
             notes: item.notes,
           };
         }) || [],
-      createdAt: order.createdAt,
-      updatedAt: order.updatedAt,
-      completedAt: order.completedAt || undefined,
+      createdAt: order.createdAt instanceof Date
+        ? dateToLocalDateTime(order.createdAt)
+        : order.createdAt,
+      updatedAt: order.updatedAt instanceof Date
+        ? dateToLocalDateTime(order.updatedAt)
+        : order.updatedAt,
+      completedAt: order.completedAt
+        ? (order.completedAt instanceof Date ? dateToLocalDateTime(order.completedAt) : order.completedAt)
+        : undefined,
       // Customer fields for takeaway/delivery orders
       customerName: order.customerName || undefined,
       customerPhone: order.customerPhone || undefined,
@@ -722,11 +729,22 @@ export class OrderService extends BaseService {
           total,
           notes: orderData.notes || null,
           type: prismaOrderType,
+          createdAt: getCurrentLocalDateTime(), // Explicitly set local time
+          updatedAt: getCurrentLocalDateTime(), // Explicitly set local time
         };
 
         // Only include tableId if it's provided and not empty (for DINE_IN orders)
         if (orderData.tableId && orderData.tableId.trim() !== '') {
           orderCreateData.tableId = orderData.tableId;
+
+          // Fetch and store table name for denormalization (historical preservation)
+          const table = await tx.table.findUnique({
+            where: { id: orderData.tableId },
+            select: { name: true },
+          });
+          if (table) {
+            orderCreateData.tableName = table.name;
+          }
         }
 
         // Add customer information for takeaway/delivery orders
@@ -778,6 +796,8 @@ export class OrderService extends BaseService {
                 subtotal: item.subtotal || item.totalPrice,
                 notes: item.notes,
                 status: item.status,
+                createdAt: getCurrentLocalDateTime(), // Explicitly set local time
+                updatedAt: getCurrentLocalDateTime(), // Explicitly set local time
               })),
             },
           };
@@ -1063,6 +1083,8 @@ export class OrderService extends BaseService {
               subtotal: item.subtotal || item.totalPrice,
               notes: item.notes,
               status: item.status,
+              createdAt: getCurrentLocalDateTime(), // Explicitly set local time
+              updatedAt: getCurrentLocalDateTime(), // Explicitly set local time
             })),
           });
         }
@@ -1074,7 +1096,7 @@ export class OrderService extends BaseService {
           prismaOrderStatus === 'COMPLETED' &&
           existingOrder.status !== 'COMPLETED'
         ) {
-          completedAt = new Date();
+          completedAt = getCurrentLocalDateTime() as any;
 
           // If order is completed and has a table, update table status
           if (existingOrder.tableId) {
@@ -1102,7 +1124,7 @@ export class OrderService extends BaseService {
                 ? updateData.updates.notes || null
                 : existingOrder.notes,
             ...(completedAt !== existingCompletedAt ? { completedAt } : {}),
-            updatedAt: new Date(),
+            updatedAt: getCurrentLocalDateTime(),
           },
           include: {
             items: true,
@@ -1344,7 +1366,7 @@ export class OrderService extends BaseService {
                           restoredQuantity: restoreQuantity,
                           newStock: newStock,
                           unit: ingredientLink.inventory.unit,
-                          timestamp: new Date().toISOString(),
+                          timestamp: getCurrentLocalDateTime(),
                         },
                       },
                     });
@@ -1394,7 +1416,7 @@ export class OrderService extends BaseService {
                       ? restorationError.message
                       : 'Unknown error',
                   completedRestorations: restorationProgress.length,
-                  failureTimestamp: new Date().toISOString(),
+                  failureTimestamp: getCurrentLocalDateTime(),
                 },
               },
             });
@@ -1437,7 +1459,7 @@ export class OrderService extends BaseService {
             data: {
               status: prismaOrderStatus,
               ...(completedAt !== existingCompletedAt ? { completedAt } : {}),
-              updatedAt: new Date(),
+              updatedAt: getCurrentLocalDateTime(),
             },
             include: {
               items: true,
@@ -1462,7 +1484,7 @@ export class OrderService extends BaseService {
                 completedAt: completedAt?.toISOString(),
                 tableId: existingOrder.tableId,
                 itemCount: existingOrder.items?.length || 0,
-                timestamp: new Date().toISOString(),
+                timestamp: getCurrentLocalDateTime(),
                 ...(prismaOrderStatus === 'CANCELLED' && {
                   stockRestorationCompleted: true,
                   restoredItemsCount: (existingOrder.items || []).filter(
@@ -1503,7 +1525,7 @@ export class OrderService extends BaseService {
                   updateError instanceof Error
                     ? updateError.message
                     : 'Unknown error',
-                timestamp: new Date().toISOString(),
+                timestamp: getCurrentLocalDateTime(),
               },
             },
           });

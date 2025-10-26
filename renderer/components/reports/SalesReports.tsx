@@ -255,7 +255,7 @@ const SalesReports = () => {
                         </span>
                       </td>
                       <td className='p-3 text-gray-600 dark:text-gray-400'>
-                        {order.tableName || '-'}
+                        {(order as any).table?.name || order.tableName || '-'}
                       </td>
                       <td className='p-3 text-right font-medium'>
                         {order.itemCount}

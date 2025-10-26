@@ -30,6 +30,7 @@ import { validateWithSchema } from '../utils/validation-helpers';
 import { Decimal } from 'decimal.js';
 import { exportOrdersToExcel } from '../utils/excelExport';
 import * as path from 'path';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 // Extended Order interface with additional properties needed in this controller
 interface Order extends BaseOrder {
@@ -42,10 +43,10 @@ interface Order extends BaseOrder {
  * Handles both Date objects and string inputs
  */
 function toISOString(date: Date | string | null | undefined): string {
-  if (!date) return new Date().toISOString();
+  if (!date) return getCurrentLocalDateTime();
   if (typeof date === 'string') return date;
   if (date instanceof Date) return date.toISOString();
-  return new Date().toISOString();
+  return getCurrentLocalDateTime();
 }
 
 /**
@@ -223,7 +224,7 @@ export class OrderController extends BaseController {
           {
             count: result.data?.length || 0,
             filters: filters || {},
-            timestamp: new Date().toISOString(),
+            timestamp: getCurrentLocalDateTime(),
           }
         );
 
@@ -236,13 +237,13 @@ export class OrderController extends BaseController {
           success: result.success,
           data: safeData,
           ...(result.error && { error: result.error }),
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       } else {
         return {
           success: false,
           error: result.error || 'Unknown order fetch error',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
     } catch (error) {
@@ -264,7 +265,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -315,7 +316,7 @@ export class OrderController extends BaseController {
         AdvancedLogger.userAction('system', 'orders_searched', {
           count: filteredData.length,
           params: params || {},
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         });
 
         // Fast shallow copy for IPC safety
@@ -325,13 +326,13 @@ export class OrderController extends BaseController {
           success: result.success,
           data: safeData,
           ...(result.error && { error: result.error }),
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       } else {
         return {
           success: false,
           error: result.error || 'Unknown search error',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
     } catch (error) {
@@ -353,7 +354,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -374,7 +375,7 @@ export class OrderController extends BaseController {
         AdvancedLogger.userAction('system', 'order_viewed', {
           orderId: id,
           orderNumber: (result.data as any).orderNumber,
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         });
       }
 
@@ -382,7 +383,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data as any as Order,
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -403,7 +404,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -474,7 +475,7 @@ export class OrderController extends BaseController {
             orderType: order.type || 'DINE_IN',
             total: order.total,
             itemCount: validatedRequest.items.length,
-            createdAt: new Date(),
+            createdAt: getCurrentLocalDateTime(),
           },
           '127.0.0.1',
           'Electron-Desktop-App'
@@ -500,7 +501,7 @@ export class OrderController extends BaseController {
             amount: order.total,
             orderType: order.type || 'DINE_IN',
             ...(order.tableId && { tableId: order.tableId }),
-            timestamp: new Date().toISOString(),
+            timestamp: getCurrentLocalDateTime(),
           },
           'low'
         );
@@ -564,7 +565,7 @@ export class OrderController extends BaseController {
             changes: data.updates,
             previousState: currentOrder.data || {},
             newState: order,
-            updatedAt: new Date(),
+            updatedAt: getCurrentLocalDateTime(),
           },
           '127.0.0.1',
           'Electron-Desktop-App'
@@ -599,7 +600,7 @@ export class OrderController extends BaseController {
               changes: data.updates,
               previousTotal: currentOrder.data?.total,
               newTotal: order.total,
-              timestamp: new Date().toISOString(),
+              timestamp: getCurrentLocalDateTime(),
             },
             'medium'
           );
@@ -614,7 +615,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data as Order,
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -636,7 +637,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -687,7 +688,7 @@ export class OrderController extends BaseController {
             orderId: data.id,
             reason: data.reason,
             cancelledAmount: order.total,
-            timestamp: new Date().toISOString(),
+            timestamp: getCurrentLocalDateTime(),
           },
           'medium'
         );
@@ -701,7 +702,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data as Order,
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -723,7 +724,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -751,7 +752,7 @@ export class OrderController extends BaseController {
             orderId: data.id,
             orderNumber: order.orderNumber,
             finalAmount: order.total,
-            completedAt: new Date(),
+            completedAt: getCurrentLocalDateTime(),
           },
           '127.0.0.1',
           'Electron-Desktop-App'
@@ -772,7 +773,7 @@ export class OrderController extends BaseController {
             userId: data.userId,
             orderId: data.id,
             finalAmount: order.total,
-            timestamp: new Date().toISOString(),
+            timestamp: getCurrentLocalDateTime(),
           },
           'low'
         );
@@ -806,14 +807,14 @@ export class OrderController extends BaseController {
         return {
           success: true,
           data: { order, ...(receiptData && { receiptData }) },
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
       return {
         success: result.success,
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -835,7 +836,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -856,7 +857,7 @@ export class OrderController extends BaseController {
         return {
           success: false,
           error: 'Order not found',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -893,7 +894,7 @@ export class OrderController extends BaseController {
           userId: data.userId,
           orderId: data.orderId,
           format,
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         },
         'low'
       );
@@ -905,7 +906,7 @@ export class OrderController extends BaseController {
       return {
         success: true,
         data: { receiptData, format },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -927,7 +928,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -948,7 +949,7 @@ export class OrderController extends BaseController {
         AdvancedLogger.userAction('system', 'table_orders_fetched', {
           tableId,
           orderCount: result.data?.length || 0,
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         });
       }
 
@@ -956,7 +957,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data as Order[],
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -979,7 +980,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1000,7 +1001,7 @@ export class OrderController extends BaseController {
         AdvancedLogger.userAction('system', 'status_orders_fetched', {
           status,
           orderCount: result.data?.length || 0,
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         });
       }
 
@@ -1008,7 +1009,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data as Order[],
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -1033,7 +1034,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1063,7 +1064,7 @@ export class OrderController extends BaseController {
         AdvancedLogger.userAction('system', 'type_orders_fetched', {
           type: orderType,
           orderCount: result.data?.length || 0,
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         });
       }
 
@@ -1071,7 +1072,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data as unknown as Order[],
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -1094,7 +1095,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1153,7 +1154,7 @@ export class OrderController extends BaseController {
         AdvancedLogger.userAction(data.userId, 'order_deleted', {
           orderId: data.id,
           reason: data.reason || 'No reason provided',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         });
       }
 
@@ -1161,7 +1162,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.success,
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -1177,7 +1178,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1217,7 +1218,7 @@ export class OrderController extends BaseController {
         AdvancedLogger.userAction(validatedData.userId!, 'order_status_updated', {
           orderId: validatedData.id,
           newStatus: validatedData.status,
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         });
       }
 
@@ -1225,7 +1226,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data as Order,
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -1236,7 +1237,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1426,7 +1427,7 @@ export class OrderController extends BaseController {
                   }
                 : undefined,
             },
-            timestamp: new Date().toISOString(),
+            timestamp: getCurrentLocalDateTime(),
           };
         });
       } catch (error) {
@@ -1446,7 +1447,7 @@ export class OrderController extends BaseController {
             error instanceof Error
               ? error.message
               : 'Failed to add item and update inventory atomically',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -1454,7 +1455,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data, // Returns OrderItem, not Order
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -1463,7 +1464,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1527,7 +1528,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data || false, // Returns boolean
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -1538,7 +1539,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1566,7 +1567,7 @@ export class OrderController extends BaseController {
         return {
           success: false,
           error: 'Order item not found',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -1787,7 +1788,7 @@ export class OrderController extends BaseController {
               stockError instanceof Error
                 ? stockError.message
                 : 'Failed to check and update stock atomically',
-            timestamp: new Date().toISOString(),
+            timestamp: getCurrentLocalDateTime(),
           };
         }
       }
@@ -1808,7 +1809,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data,
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -1819,7 +1820,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1841,7 +1842,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data as Order[],
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -1852,7 +1853,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1874,7 +1875,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data as Order[],
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -1885,7 +1886,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1907,7 +1908,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data as Order[],
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -1918,7 +1919,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -1958,7 +1959,7 @@ export class OrderController extends BaseController {
       return {
         success: true,
         data: { total, subtotal, tax },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -1969,7 +1970,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -2034,7 +2035,7 @@ export class OrderController extends BaseController {
             paymentMethod: data.paymentMethod,
             amount: data.amount,
             tip: data.tip,
-            timestamp: new Date().toISOString(),
+            timestamp: getCurrentLocalDateTime(),
           },
           'low'
         );
@@ -2048,7 +2049,7 @@ export class OrderController extends BaseController {
         success: result.success,
         data: result.data as Order,
         ...(result.error && { error: result.error }),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -2070,7 +2071,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -2263,7 +2264,7 @@ export class OrderController extends BaseController {
       return {
         success: true,
         data: cashboxSummary,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -2281,7 +2282,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -2305,7 +2306,7 @@ export class OrderController extends BaseController {
         return {
           success: false,
           error: 'Failed to get cashbox summary for closing',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -2332,7 +2333,7 @@ export class OrderController extends BaseController {
           expectedCash: summary.totalCash,
           actualCash: data.actualCashAmount,
           totalRevenue: summary.totalRevenue,
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         },
         'medium'
       );
@@ -2360,7 +2361,7 @@ export class OrderController extends BaseController {
       const closedSummary = {
         ...summary,
         isClosed: true,
-        closedAt: new Date().toISOString(),
+        closedAt: getCurrentLocalDateTime(),
         closedBy: data.userId,
         actualCashAmount: data.actualCashAmount,
         variance: data.actualCashAmount
@@ -2371,7 +2372,7 @@ export class OrderController extends BaseController {
       return {
         success: true,
         data: closedSummary,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -2388,7 +2389,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -2425,7 +2426,7 @@ export class OrderController extends BaseController {
       return {
         success: true,
         data: { count },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -2434,7 +2435,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -2480,7 +2481,7 @@ export class OrderController extends BaseController {
         return {
           success: false,
           error: result.error || 'Failed to fetch orders for export',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -2499,7 +2500,7 @@ export class OrderController extends BaseController {
       }
 
       // Generate filename with timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const timestamp = getCurrentLocalDateTime().replace(/[:.]/g, '-').slice(0, -5);
       const filename = `orders-export-${timestamp}.xlsx`;
 
       // Use dialog to let user choose save location
@@ -2520,7 +2521,7 @@ export class OrderController extends BaseController {
         return {
           success: false,
           error: 'Export cancelled by user',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -2541,7 +2542,7 @@ export class OrderController extends BaseController {
       return {
         success: true,
         data: { filePath },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       const errorMessage =
@@ -2552,7 +2553,7 @@ export class OrderController extends BaseController {
       return {
         success: false,
         error: errorMessage,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }

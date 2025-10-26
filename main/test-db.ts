@@ -120,6 +120,7 @@ async function runTests() {
       data: {
         orderNumber,
         tableId: table.id,
+        tableName: table.name,  // Denormalized table name for historical preservation
         userId: testUser.id,
         status: OrderStatus.PENDING,
         type: OrderType.DINE_IN,

@@ -3,6 +3,7 @@ import { AppError, logInfo } from '../error-handler';
 import { BaseController } from './baseController';
 import * as path from 'path';
 import * as fs from 'fs';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 export class SystemController extends BaseController {
   private appVersion: string = '2.3.0'; // Default version
@@ -125,7 +126,7 @@ export class SystemController extends BaseController {
 
         for (let i = 0; i < actualLimit; i++) {
           mockLogs.push({
-            timestamp: new Date().toISOString(),
+            timestamp: getCurrentLocalDateTime(),
             level: 'INFO',
             message: `Mock log entry ${i + 1}`,
           });

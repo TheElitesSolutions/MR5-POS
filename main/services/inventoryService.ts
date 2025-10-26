@@ -26,6 +26,7 @@ interface Inventory {
 }
 import { AdvancedLogger } from '../utils/advancedLogger';
 import { decimalToNumber } from '../utils/decimal';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 /**
  * Service for managing inventory and stock levels
@@ -147,7 +148,7 @@ export class InventoryService extends BaseService {
               ),
               reason: 'Order item removed',
             },
-            createdAt: new Date().toISOString(),
+            createdAt: getCurrentLocalDateTime(),
           },
         });
       });
@@ -337,7 +338,7 @@ export class InventoryService extends BaseService {
                 Object.fromEntries(inventoryUpdates)
               ),
             },
-            createdAt: new Date(),
+            createdAt: getCurrentLocalDateTime(),
           },
         });
       });

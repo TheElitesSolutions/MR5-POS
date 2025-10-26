@@ -7,6 +7,7 @@
 
 import { AddonService } from '../services/AddonService';
 import * as path from 'path';
+import { getCurrentLocalDateTime } from './dateTime';
 
 /**
  * Enhanced invoice generation with add-on support
@@ -647,7 +648,7 @@ export class AddonInvoiceGenerator {
     thermal += '========================================\n';
     thermal += `Invoice #: INV-${order.orderNumber}\n`;
     thermal += `Date: ${new Date().toLocaleString()}\n`;
-    thermal += `Table: ${order.table?.name || 'N/A'}\n`;
+    thermal += `Table: ${order.table?.name || order.tableName || 'N/A'}\n`;
     thermal += `Order: ${order.orderNumber}\n`;
     thermal += '========================================\n\n';
 
@@ -727,7 +728,7 @@ export class AddonInvoiceGenerator {
       <div class="invoice-info">
         <strong>Invoice #:</strong> INV-${order.orderNumber}<br>
         <strong>Date:</strong> ${new Date().toLocaleString()}<br>
-        <strong>Table:</strong> ${order.table?.name || 'N/A'}<br>
+        <strong>Table:</strong> ${order.table?.name || order.tableName || 'N/A'}<br>
         <strong>Order:</strong> ${order.orderNumber}
       </div>
       

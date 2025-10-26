@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs-extra';
 import { logInfo, logError, logWarning } from '../error-handler';
 import { getDatabaseIntegrityChecker, HealthCheckResult } from './databaseIntegrityChecker';
+import { getCurrentLocalDateTime } from './dateTime';
 
 /**
  * Update safety result interface
@@ -95,7 +96,7 @@ export class UpdateSafety {
       }
 
       // 2. Create backup filename with timestamp
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const timestamp = getCurrentLocalDateTime().replace(/[:.]/g, '-');
       const backupFileName = `pre-update-v${newVersion}-${timestamp}.zip`;
       const backupPath = path.join(this.preUpdateBackupDir, backupFileName);
 
@@ -125,7 +126,7 @@ export class UpdateSafety {
       await this.saveBackupMetadata({
         version: newVersion,
         backupPath,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
         databaseSize: (await fs.stat(dbPath)).size,
         healthCheck: healthCheck.isHealthy,
       });

@@ -12,6 +12,7 @@ import {
 } from '../../shared/ipc-types';
 import { AppError } from '../error-handler';
 import { IPCResponse } from '../types';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 import { BaseService } from './baseService';
 
 // Define our own Table interface that matches what we're returning
@@ -129,7 +130,7 @@ export class TableService extends BaseService {
           ...(updateData.updates.status && {
             status: updateData.updates.status,
           }),
-          updatedAt: new Date().toISOString(),
+          updatedAt: getCurrentLocalDateTime(),
         },
       });
 
@@ -160,28 +161,45 @@ export class TableService extends BaseService {
   }
 
   /**
-   * Delete a table (hard delete with cascading delete of orders)
+   * Delete a table (preserves completed/cancelled orders, deletes active orders only)
    */
   async delete(id: string): Promise<IPCResponse<boolean>> {
     return this.wrapMethod(async () => {
       // Ensure the table exists
       await this.validateEntityExists(this.prisma.table, id, 'Table not found');
 
-      // Use transaction to ensure data consistency during cascading delete
+      // Use transaction to ensure data consistency
       await this.prisma.$transaction(async tx => {
-        // First, delete all order items associated with orders for this table
-        await tx.orderItem.deleteMany({
+        // PRESERVE COMPLETED/CANCELLED ORDERS: Set tableId = NULL (tableName stays intact)
+        const preservedOrders = await tx.order.updateMany({
           where: {
-            order: {
-              tableId: id,
-            },
+            tableId: id,
+            status: { in: ['COMPLETED', 'CANCELLED'] },
           },
+          data: { tableId: null }, // tableName is already stored, so it's preserved
         });
 
-        // Then, delete all orders associated with this table
+        // DELETE ACTIVE ORDERS: Get active order IDs first
+        const activeOrders = await tx.order.findMany({
+          where: {
+            tableId: id,
+            status: { notIn: ['COMPLETED', 'CANCELLED'] },
+          },
+          select: { id: true },
+        });
+
+        // Delete order items for active orders
+        if (activeOrders.length > 0) {
+          await tx.orderItem.deleteMany({
+            where: { orderId: { in: activeOrders.map(o => o.id) } },
+          });
+        }
+
+        // Delete active orders
         const deletedOrders = await tx.order.deleteMany({
           where: {
             tableId: id,
+            status: { notIn: ['COMPLETED', 'CANCELLED'] },
           },
         });
 
@@ -190,12 +208,10 @@ export class TableService extends BaseService {
           where: { id },
         });
 
-        // Log the cascading deletion for audit purposes
-        if (deletedOrders.count > 0) {
-          console.log(
-            `Table ${id} deleted with cascading delete of ${deletedOrders.count} orders`
-          );
-        }
+        // Log the operations for audit purposes
+        console.log(
+          `Table ${id} deleted: Preserved ${preservedOrders.count} completed/cancelled orders, deleted ${deletedOrders.count} active orders`
+        );
       });
 
       return true;

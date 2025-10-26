@@ -5,6 +5,7 @@
 
 import * as bcrypt from 'bcryptjs';
 import { UserRole, prisma } from '../prisma';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 export interface LoginRequest {
   username: string;
@@ -70,7 +71,7 @@ export class AuthService {
       // Update last login
       await this.prisma.user.update({
         where: { id: user.id },
-        data: { lastLogin: new Date().toISOString() }
+        data: { lastLogin: getCurrentLocalDateTime() }
       });
 
       // Return success with user data (excluding password)

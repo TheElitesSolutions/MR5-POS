@@ -1202,6 +1202,20 @@ export const usePOSStore = create<PosState>((set, get) => ({
         isLoading: false,
       });
 
+      // Refresh tables to update table status in UI
+      // Only refresh if this is a table order (has tableId)
+      if (updatedOrder.tableId) {
+        try {
+          await get().fetchTables();
+        } catch (refreshError) {
+          // Log but don't fail the operation for table refresh errors
+          console.warn(
+            'POS Store: Failed to refresh tables after removing item:',
+            refreshError
+          );
+        }
+      }
+
       if (process.env.NODE_ENV === 'development') {
         console.log('POS Store: Removed order item successfully', orderItemId);
       }
@@ -1297,6 +1311,20 @@ export const usePOSStore = create<PosState>((set, get) => ({
         activeOrder: updatedOrder,
         isLoading: false,
       });
+
+      // Refresh tables to update table status in UI
+      // Only refresh if this is a table order (has tableId)
+      if (updatedOrder.tableId) {
+        try {
+          await get().fetchTables();
+        } catch (refreshError) {
+          // Log but don't fail the operation for table refresh errors
+          console.warn(
+            'POS Store: Failed to refresh tables after updating item:',
+            refreshError
+          );
+        }
+      }
 
       if (process.env.NODE_ENV === 'development') {
         console.log('POS Store: Updated order item successfully', {

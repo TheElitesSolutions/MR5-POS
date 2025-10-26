@@ -59,6 +59,7 @@ import { RONGTAConnectionUtility } from './utils/rongta-connection-utility';
 
 // Import native printer detection service (Phase 2)
 import { nativePrinterDetection } from '../services/nativePrinterDetection';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 // Promisify exec for async execution
 const execAsync = promisify(exec);
@@ -344,7 +345,7 @@ export class PrinterController extends BaseController {
             method_used: 'Direct Bypass Test',
             details:
               'Direct test successful - printer works despite any status issues',
-            timestamp: new Date().toISOString(),
+            timestamp: getCurrentLocalDateTime(),
             bypassed_all_checks: true,
           });
         } else {
@@ -502,7 +503,7 @@ Output: OK | Encoding: OK
         success,
         method_used: methodUsed,
         details,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
         diagnostics,
       };
 
@@ -530,7 +531,7 @@ Output: OK | Encoding: OK
             success: true,
             method_used: `${bypassResult.method_used} (bypassed pending deletion)`,
             details: 'Print successful despite pending deletion status',
-            timestamp: new Date().toISOString(),
+            timestamp: getCurrentLocalDateTime(),
             bypassed_status_check: true,
           });
         }
@@ -559,7 +560,7 @@ Output: OK | Encoding: OK
               success: true,
               method_used: `${retryResult.method_used} (after spooler reset)`,
               details: 'Print successful after automatic spooler reset',
-              timestamp: new Date().toISOString(),
+              timestamp: getCurrentLocalDateTime(),
               spooler_reset_performed: true,
             });
           }
@@ -3465,7 +3466,7 @@ Output: OK | Encoding: OK
     const testContent = `
 === MR5-POS RONGTA TEST ===
 Printer: ${request.printerName}
-Date: ${new Date().toISOString()}
+Date: ${getCurrentLocalDateTime()}
 Test Type: ${request.testType || 'standard'}
 =========================
 RONGTA/thermal printer test.

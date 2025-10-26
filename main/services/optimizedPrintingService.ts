@@ -16,6 +16,7 @@ import { PRINTER_CHANNELS } from '../../shared/ipc-channels';
 import { PrintReceiptRequest } from '../../shared/ipc-types';
 import { IPCResponse } from '../types';
 import { enhancedLogger, LogCategory } from '../utils/enhanced-logger';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 interface PrintJob {
   id: string;
@@ -135,7 +136,7 @@ export class OptimizedPrintingService {
         return {
           success: false,
           error: 'Missing required parameters: orderId, printerName, or userId',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
@@ -205,7 +206,7 @@ export class OptimizedPrintingService {
           jobId,
           queued: true,
         },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       this.logger.error('❌ Failed to queue print job:', error);
@@ -213,7 +214,7 @@ export class OptimizedPrintingService {
         success: false,
         error:
           error instanceof Error ? error.message : 'Unknown error occurred',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -357,7 +358,7 @@ export class OptimizedPrintingService {
             jobId: (job as any).id,
             orderId: (orderData.order as any).id || (orderData.order as any).orderNumber,
             error: 'Invoice generation failed - no print data generated. Please check order items and try again.',
-            timestamp: new Date().toISOString()
+            timestamp: getCurrentLocalDateTime()
           });
         }
 
@@ -784,7 +785,7 @@ export class OptimizedPrintingService {
         processing: this.isProcessingQueue,
         totalProcessed: 0, // You could track this
       },
-      timestamp: new Date().toISOString(),
+      timestamp: getCurrentLocalDateTime(),
     };
   }
 
@@ -799,7 +800,7 @@ export class OptimizedPrintingService {
     return {
       success: true,
       data: { cleared: true },
-      timestamp: new Date().toISOString(),
+      timestamp: getCurrentLocalDateTime(),
     };
   }
 }

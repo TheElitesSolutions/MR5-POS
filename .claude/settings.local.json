@@ -10,7 +10,9 @@
       "Bash(cat:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(node scripts/check-tablename-orders.js:*)",
+      "Bash(sqlite3:*)"
     ],
     "deny": [],
     "ask": []

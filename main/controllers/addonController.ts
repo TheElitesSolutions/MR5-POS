@@ -26,6 +26,7 @@ import {
 import { prisma } from '../db/prisma-wrapper';
 import { logInfo, logError } from '../error-handler';
 import type { z } from 'zod';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 // Type definitions for API requests
 type CreateAddonRequest = z.infer<typeof CreateAddonSchema>;

@@ -25,6 +25,7 @@ import {
   AddonErrorCodes,
   isAddonError,
 } from '../errors/AddonError';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 import type { z } from 'zod';
 
 // Type definitions
@@ -274,7 +275,7 @@ export class AddonService {
         where: { id },
         data: {
           ...validatedData,
-          updatedAt: new Date(),
+          updatedAt: getCurrentLocalDateTime(),
         },
       });
 
@@ -335,7 +336,7 @@ export class AddonService {
         where: { id },
         data: {
           isActive: false,
-          updatedAt: new Date(),
+          updatedAt: getCurrentLocalDateTime(),
         },
       });
 
@@ -696,7 +697,7 @@ export class AddonService {
           where: { id },
           data: {
             ...addonData,
-            updatedAt: new Date(),
+            updatedAt: getCurrentLocalDateTime(),
           },
         });
 
@@ -796,7 +797,7 @@ export class AddonService {
         where: { id },
         data: {
           isActive: false,
-          updatedAt: new Date(),
+          updatedAt: getCurrentLocalDateTime(),
         },
       });
 
@@ -967,7 +968,7 @@ export class AddonService {
                     currentStock: {
                       decrement: totalToDeduct,
                     },
-                    updatedAt: new Date(),
+                    updatedAt: getCurrentLocalDateTime(),
                   },
                 });
               }
@@ -991,7 +992,7 @@ export class AddonService {
           where: { id: orderItemId },
           data: {
             totalPrice: newItemTotal,
-            updatedAt: new Date(),
+            updatedAt: getCurrentLocalDateTime(),
           },
         });
 
@@ -1007,7 +1008,7 @@ export class AddonService {
           data: {
             total: newOrderTotal,
             subtotal: newOrderSubtotal,
-            updatedAt: new Date(),
+            updatedAt: getCurrentLocalDateTime(),
           },
         });
 
@@ -1080,7 +1081,7 @@ export class AddonService {
                   currentStock: {
                     increment: totalToRestore,
                   },
-                  updatedAt: new Date(),
+                  updatedAt: getCurrentLocalDateTime(),
                 },
               });
 
@@ -1109,7 +1110,7 @@ export class AddonService {
             totalPrice: {
               decrement: assignment.totalPrice,
             },
-            updatedAt: new Date(),
+            updatedAt: getCurrentLocalDateTime(),
           },
         });
 
@@ -1123,7 +1124,7 @@ export class AddonService {
             subtotal: {
               decrement: assignment.totalPrice,
             },
-            updatedAt: new Date(),
+            updatedAt: getCurrentLocalDateTime(),
           },
         });
 
@@ -1229,7 +1230,7 @@ export class AddonService {
                       currentStock: {
                         decrement: totalToDeduct,
                       },
-                      updatedAt: new Date(),
+                      updatedAt: getCurrentLocalDateTime(),
                     },
                   });
                 }
@@ -1249,7 +1250,7 @@ export class AddonService {
             data: {
               quantity: newQuantity,
               totalPrice: addonAssignment.unitPrice * newQuantity,
-              updatedAt: new Date(),
+              updatedAt: getCurrentLocalDateTime(),
             },
           });
         }
@@ -1285,7 +1286,7 @@ export class AddonService {
           where: { id: orderItemId },
           data: {
             totalPrice: correctTotalPrice,
-            updatedAt: new Date(),
+            updatedAt: getCurrentLocalDateTime(),
           },
         });
 
@@ -1299,7 +1300,7 @@ export class AddonService {
             subtotal: {
               increment: totalPriceChange,
             },
-            updatedAt: new Date(),
+            updatedAt: getCurrentLocalDateTime(),
           },
         });
 
@@ -1411,7 +1412,7 @@ export class AddonService {
           data: {
             sortOrder,
             isActive: true,
-            updatedAt: new Date(),
+            updatedAt: getCurrentLocalDateTime(),
           },
         });
 

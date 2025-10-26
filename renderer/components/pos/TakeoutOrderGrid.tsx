@@ -233,6 +233,18 @@ interface CustomerDetails {
  * Shows existing takeout/delivery orders similar to how TableGrid shows tables
  */
 const TakeoutOrderGrid = memo(() => {
+  // Parse SQLite datetime as local time (not UTC)
+  const parseLocalDateTime = (dateString: string): Date => {
+    // SQLite format: "YYYY-MM-DD HH:MM:SS"
+    // We need to parse this as local time, not UTC
+    const [datePart, timePart] = dateString.replace('T', ' ').split(' ');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hours, minutes, seconds] = (timePart || '00:00:00').split(':').map(Number);
+
+    // Create date in local timezone (month is 0-indexed)
+    return new Date(year, month - 1, day, hours || 0, minutes || 0, seconds || 0);
+  };
+
   const {
     createTakeawayDeliveryOrder,
     selectTakeawayDeliveryOrder,
@@ -299,7 +311,7 @@ const TakeoutOrderGrid = memo(() => {
 
         // Then sort by creation date (newest first)
         return (
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          parseLocalDateTime(b.createdAt).getTime() - parseLocalDateTime(a.createdAt).getTime()
         );
       });
   }, [allOrders]);
@@ -451,7 +463,7 @@ const TakeoutOrderGrid = memo(() => {
   };
 
   const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = parseLocalDateTime(dateString);
     const minutes = Math.floor((Date.now() - date.getTime()) / (1000 * 60));
     if (minutes < 60) return `${minutes}m ago`;
     const hours = Math.floor(minutes / 60);

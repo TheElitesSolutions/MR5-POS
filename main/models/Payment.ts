@@ -10,6 +10,7 @@ import {
 } from '../utils/decimal';
 import { Decimal as DecimalJS } from 'decimal.js';
 import { logger } from '../utils/logger';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 export class PaymentModel {
   constructor(private prisma: PrismaClient) {}
@@ -48,7 +49,7 @@ export class PaymentModel {
       return {
         success: true,
         data: payment ? this.mapPrismaPayment(payment) : null,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -60,7 +61,7 @@ export class PaymentModel {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to get payment',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -78,7 +79,7 @@ export class PaymentModel {
       return {
         success: true,
         data: payments.map(payment => this.mapPrismaPayment(payment)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -91,7 +92,7 @@ export class PaymentModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to get payments',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -171,7 +172,7 @@ export class PaymentModel {
       return {
         success: true,
         data: this.mapPrismaPayment(payment),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       if (error instanceof AppError) {
@@ -187,7 +188,7 @@ export class PaymentModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to create payment',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -224,7 +225,7 @@ export class PaymentModel {
       return {
         success: true,
         data: this.mapPrismaPayment(payment),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -239,7 +240,7 @@ export class PaymentModel {
           error instanceof Error
             ? error.message
             : 'Failed to update payment status',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -250,7 +251,7 @@ export class PaymentModel {
         where: { id },
         data: {
           status: PaymentStatus.COMPLETED,
-          processedAt: new Date().toISOString(),
+          processedAt: getCurrentLocalDateTime(),
         },
         include: {
           order: true,
@@ -265,7 +266,7 @@ export class PaymentModel {
       return {
         success: true,
         data: this.mapPrismaPayment(payment),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -278,7 +279,7 @@ export class PaymentModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to process payment',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -304,7 +305,7 @@ export class PaymentModel {
       return {
         success: true,
         data: this.mapPrismaPayment(payment),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -317,7 +318,7 @@ export class PaymentModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to refund payment',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -366,7 +367,7 @@ export class PaymentModel {
           payments: payments.map(payment => this.mapPrismaPayment(payment)),
           isFullyPaid,
         },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       if (error instanceof AppError) {
@@ -384,7 +385,7 @@ export class PaymentModel {
           error instanceof Error
             ? error.message
             : 'Failed to get payment summary',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -417,7 +418,7 @@ export class PaymentModel {
       return {
         success: true,
         data: payments.map(payment => this.mapPrismaPayment(payment)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -432,7 +433,7 @@ export class PaymentModel {
           error instanceof Error
             ? error.message
             : 'Failed to get payments by status',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -495,7 +496,7 @@ export class PaymentModel {
           totalTransactions: payments.length,
           paymentMethodBreakdown,
         },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -510,7 +511,7 @@ export class PaymentModel {
           error instanceof Error
             ? error.message
             : 'Failed to get daily payment summary',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }

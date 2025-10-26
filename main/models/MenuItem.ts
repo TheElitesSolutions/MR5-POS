@@ -3,6 +3,7 @@ import { AppError } from '../error-handler';
 import { IPCResponse, MenuItem } from '../types';
 import { decimalToNumber, validateCurrencyAmount } from '../utils/decimal';
 import { logger } from '../utils/logger';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 /**
  * Helper to convert Date or string to ISO string
@@ -111,7 +112,7 @@ export class MenuItemModel {
       return {
         success: true,
         data: menuItems.map(item => this.mapPrismaMenuItem(item)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -124,7 +125,7 @@ export class MenuItemModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to get menu items',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -140,14 +141,14 @@ export class MenuItemModel {
         return {
           success: false,
           error: 'Menu item not found',
-          timestamp: new Date().toISOString(),
+          timestamp: getCurrentLocalDateTime(),
         };
       }
 
       return {
         success: true,
         data: this.mapPrismaMenuItem(menuItem),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -160,7 +161,7 @@ export class MenuItemModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to get menu item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -206,7 +207,7 @@ export class MenuItemModel {
       return {
         success: true,
         data: this.mapPrismaMenuItem(menuItem),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -219,7 +220,7 @@ export class MenuItemModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to create menu item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -271,7 +272,7 @@ export class MenuItemModel {
       return {
         success: true,
         data: this.mapPrismaMenuItem(menuItem),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -284,7 +285,7 @@ export class MenuItemModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to update menu item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -299,7 +300,7 @@ export class MenuItemModel {
       return {
         success: true,
         data: true,
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -312,7 +313,7 @@ export class MenuItemModel {
         success: false,
         error:
           error instanceof Error ? error.message : 'Failed to delete menu item',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -331,7 +332,7 @@ export class MenuItemModel {
       return {
         success: true,
         data: menuItems.map(item => this.mapPrismaMenuItem(item)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -346,7 +347,7 @@ export class MenuItemModel {
           error instanceof Error
             ? error.message
             : 'Failed to get menu items by category',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -366,7 +367,7 @@ export class MenuItemModel {
       return {
         success: true,
         data: menuItems.map(item => this.mapPrismaMenuItem(item)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -381,7 +382,7 @@ export class MenuItemModel {
           error instanceof Error
             ? error.message
             : 'Failed to get available menu items',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -409,7 +410,7 @@ export class MenuItemModel {
       return {
         success: true,
         data: menuItems.map(item => this.mapPrismaMenuItem(item)),
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -424,7 +425,7 @@ export class MenuItemModel {
           error instanceof Error
             ? error.message
             : 'Failed to search menu items',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }
@@ -462,7 +463,7 @@ export class MenuItemModel {
           minPrice,
           maxPrice,
         },
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
       logger.error(
@@ -477,7 +478,7 @@ export class MenuItemModel {
           error instanceof Error
             ? error.message
             : 'Failed to get menu statistics',
-        timestamp: new Date().toISOString(),
+        timestamp: getCurrentLocalDateTime(),
       };
     }
   }

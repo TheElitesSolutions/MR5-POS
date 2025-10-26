@@ -20,6 +20,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as zlib from 'zlib';
 import { getIsDev, initializeEnvironment } from './environment';
+import { getCurrentLocalDateTime } from './dateTime';
 
 // Log levels with numeric values for filtering
 export enum LogLevel {

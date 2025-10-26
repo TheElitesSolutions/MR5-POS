@@ -2,7 +2,9 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import { Toaster } from '@/components/ui/toaster';
-import StateCleanupProvider from '@/components/StateCleanupProvider';
+// TEMPORARILY DISABLED: StateCleanupProvider causing order data loss during navigation
+// See: https://github.com/anthropics/claude-code/issues/order-state-disappearing
+// import StateCleanupProvider from '@/components/StateCleanupProvider';
 import DataLossPreventionProvider from '@/components/DataLossPreventionProvider';
 import PriceSystemProvider from '@/components/PriceSystemProvider';
 import AuthProvider from '@/components/AuthProvider';
@@ -29,14 +31,17 @@ export default function RootLayout({
           <ThemeProvider>
             <LoadingProvider>
               <AuthProvider>
-                <StateCleanupProvider>
+                {/* TEMPORARILY DISABLED: StateCleanupProvider causing order data loss
+                    Root cause: Overly aggressive stale data detection triggers resetAllStores()
+                    during navigation, clearing currentOrder even when order is valid.
+                <StateCleanupProvider> */}
                   <DataLossPreventionProvider>
                     <PriceSystemProvider>
                       {children}
                       <Toaster />
                     </PriceSystemProvider>
                   </DataLossPreventionProvider>
-                </StateCleanupProvider>
+                {/* </StateCleanupProvider> */}
               </AuthProvider>
             </LoadingProvider>
           </ThemeProvider>

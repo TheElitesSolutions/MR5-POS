@@ -2,6 +2,7 @@ import { AppError } from '../error-handler';
 import { Setting, SettingType } from '../types';
 import { logger } from '../utils/logger';
 import { getPrismaClient } from '../prisma';
+import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 export class SettingModel {
   /**
@@ -91,7 +92,7 @@ export class SettingModel {
         update: {
           value,
           ...(type && { type }),
-          updatedAt: new Date().toISOString(),
+          updatedAt: getCurrentLocalDateTime(),
         },
         create: {
           key,
@@ -141,7 +142,7 @@ export class SettingModel {
           update: {
             value: settingData.value,
             ...(settingData.type && { type: settingData.type }),
-            updatedAt: new Date().toISOString(),
+            updatedAt: getCurrentLocalDateTime(),
           },
           create: {
             key: settingData.key,
