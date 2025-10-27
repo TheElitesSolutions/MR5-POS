@@ -9,14 +9,11 @@
 
 import fs from 'fs';
 import path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { app } from 'electron';
 import { logInfo, logError, logWarning } from '../error-handler';
 import { DatabaseService } from '../utils/databaseService';
 import { getCurrentLocalDateTime } from '../utils/dateTime';
-
-const execAsync = promisify(exec);
+import { getDatabase } from '../db';
 
 // Backup configuration
 const BACKUP_INTERVAL_MS = 3 * 60 * 60 * 1000; // 3 hours
@@ -118,14 +115,13 @@ export class BackupService {
   /**
    * Get database path for SQLite
    */
-  private getConnectionUrl(): string {
-    // For SQLite, return the database file path
+  private getDatabasePath(): string {
     const userDataPath = app.getPath('userData');
     return path.join(userDataPath, 'mr5-pos.db');
   }
 
   /**
-   * Perform a database backup
+   * Perform a database backup using SQLite's built-in backup method
    * @param isAutomatic Whether this is an automatic or manual backup
    * @returns Information about the created backup
    */
@@ -138,7 +134,7 @@ export class BackupService {
       this.isRunning = true;
       const timestamp = getCurrentLocalDateTime().replace(/[:.]/g, '-');
       const backupId = `backup-${timestamp}`;
-      const filename = `${backupId}.sql`;
+      const filename = `${backupId}.db`;
       const backupFilePath = path.join(this.backupPath, filename);
 
       logInfo(
@@ -146,19 +142,12 @@ export class BackupService {
         'BackupService'
       );
 
-      // Get database connection info
-      const dbUrl = this.getConnectionUrl();
-      const parsedUrl = new URL(dbUrl);
-      const database = parsedUrl.pathname.slice(1);
-      const user = parsedUrl.username;
-      const port = parsedUrl.port;
-      const host = parsedUrl.hostname;
+      // Get the database connection
+      const database = getDatabase();
 
-      // Create backup using pg_dump
-      const pgDumpPath = this.getPgDumpPath();
-      const command = `"${pgDumpPath}" -h ${host} -p ${port} -U ${user} -F p -f "${backupFilePath}" ${database}`;
-
-      await execAsync(command);
+      // Perform backup using better-sqlite3's built-in backup method
+      // This creates a hot backup of the database without locking
+      database.backup(backupFilePath);
 
       // Get file size
       const stats = fs.statSync(backupFilePath);
@@ -195,7 +184,7 @@ export class BackupService {
   }
 
   /**
-   * Restore database from a backup file
+   * Restore database from a backup file (SQLite file copy method)
    * @param backupId ID of the backup to restore
    * @returns Success status
    */
@@ -213,50 +202,46 @@ export class BackupService {
         throw new Error(`Backup with ID ${backupId} not found`);
       }
 
+      if (!fs.existsSync(backup.path)) {
+        throw new Error(`Backup file not found at: ${backup.path}`);
+      }
+
       logInfo(
         `Starting database restore from backup: ${backup.filename}`,
         'BackupService'
       );
 
-      // Disconnect database before restore (SQLite handles this automatically)
-      // await this.databaseService.shutdown();
+      const dbPath = this.getDatabasePath();
 
-      // Get database connection info
-      const dbUrl = this.getConnectionUrl();
-      const parsedUrl = new URL(dbUrl);
-      const database = parsedUrl.pathname.slice(1);
-      const user = parsedUrl.username;
-      const port = parsedUrl.port;
-      const host = parsedUrl.hostname;
+      // Create a backup of the current (potentially corrupted) database
+      const corruptedBackupPath = `${dbPath}.corrupted.${Date.now()}`;
+      if (fs.existsSync(dbPath)) {
+        fs.copyFileSync(dbPath, corruptedBackupPath);
+        logInfo(
+          `Current database backed up to: ${corruptedBackupPath}`,
+          'BackupService'
+        );
+      }
 
-      // Create temporary database for restore
-      const psqlPath = this.getPsqlPath();
-
-      // Drop connections to the database
-      await execAsync(
-        `"${psqlPath}" -h ${host} -p ${port} -U ${user} -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='${database}' AND pid <> pg_backend_pid();" postgres`
+      // Close the database connection before overwriting the file
+      // Note: The app will need to restart after restore to reinitialize the database
+      logWarning(
+        'Database restore requires application restart to reinitialize connection',
+        'BackupService'
       );
 
-      // Drop and recreate the database
-      await execAsync(
-        `"${psqlPath}" -h ${host} -p ${port} -U ${user} -c "DROP DATABASE IF EXISTS ${database};" postgres`
-      );
-      await execAsync(
-        `"${psqlPath}" -h ${host} -p ${port} -U ${user} -c "CREATE DATABASE ${database};" postgres`
-      );
-
-      // Restore the backup
-      await execAsync(
-        `"${psqlPath}" -h ${host} -p ${port} -U ${user} -d ${database} -f "${backup.path}"`
-      );
+      // Copy the backup file over the current database
+      fs.copyFileSync(backup.path, dbPath);
 
       logInfo(
         `Database restore completed successfully: ${backup.filename}`,
         'BackupService'
       );
 
-      // Reconnect to the database (SQLite handles this automatically)
-      // await this.databaseService.initialize();
+      logWarning(
+        'Application restart required to complete restore',
+        'BackupService'
+      );
 
       return true;
     } catch (error) {
@@ -273,19 +258,19 @@ export class BackupService {
   }
 
   /**
-   * Get list of available backups
+   * Get list of available backups (SQLite .db files)
    */
   public async getBackups(): Promise<BackupInfo[]> {
     try {
       const files = fs.readdirSync(this.backupPath);
       const backupFiles = files.filter(
-        file => file.startsWith('backup-') && file.endsWith('.sql')
+        file => file.startsWith('backup-') && file.endsWith('.db')
       );
 
       const backups: BackupInfo[] = [];
       for (const file of backupFiles) {
         const stats = fs.statSync(path.join(this.backupPath, file));
-        const backupId = file.replace('.sql', '');
+        const backupId = file.replace('.db', '');
 
         // Extract timestamp from the backup ID
         const timestampStr = backupId.replace('backup-', '');
@@ -340,76 +325,6 @@ export class BackupService {
       logWarning(
         `Failed to clean up old backups: ${error instanceof Error ? error.message : String(error)}`,
         'BackupService'
-      );
-    }
-  }
-
-  /**
-   * Get the path to the pg_dump utility
-   */
-  private getPgDumpPath(): string {
-    // Platform-specific paths
-    if (process.platform === 'win32') {
-      return path.join(
-        app.getAppPath(),
-        'resources',
-        'postgresql',
-        'windows',
-        'bin',
-        'pg_dump.exe'
-      );
-    } else if (process.platform === 'darwin') {
-      return path.join(
-        app.getAppPath(),
-        'resources',
-        'postgresql',
-        'macos',
-        'bin',
-        'pg_dump'
-      );
-    } else {
-      return path.join(
-        app.getAppPath(),
-        'resources',
-        'postgresql',
-        'linux',
-        'bin',
-        'pg_dump'
-      );
-    }
-  }
-
-  /**
-   * Get the path to the psql utility
-   */
-  private getPsqlPath(): string {
-    // Platform-specific paths
-    if (process.platform === 'win32') {
-      return path.join(
-        app.getAppPath(),
-        'resources',
-        'postgresql',
-        'windows',
-        'bin',
-        'psql.exe'
-      );
-    } else if (process.platform === 'darwin') {
-      return path.join(
-        app.getAppPath(),
-        'resources',
-        'postgresql',
-        'macos',
-        'bin',
-        'psql'
-      );
-    } else {
-      return path.join(
-        app.getAppPath(),
-        'resources',
-        'postgresql',
-        'linux',
-        'bin',
-        'psql'
       );
     }
   }

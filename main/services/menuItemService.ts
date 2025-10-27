@@ -72,6 +72,7 @@ function mapPrismaMenuItemToAppMenuItem(
     price: price, // Use the fixed price
     categoryId: prismaMenuItem.categoryId || '',
     category: prismaMenuItem.category?.name || 'Uncategorized', // ✅ Fixed: Use actual category name
+    color: prismaMenuItem.color || undefined, // ✅ NEW: Add color field from menu item
     isActive: prismaMenuItem.isActive,
     isAvailable: prismaMenuItem.isActive,
     isCustomizable: (prismaMenuItem as any).isCustomizable || false, // ✅ NEW: Add isCustomizable field
@@ -123,6 +124,7 @@ function mapIpcMenuItemToUpdateData(ipcMenuItem: Partial<IpcMenuItem>): {
   price?: number;
   categoryId?: string;
   category?: string;
+  color?: string | null;
   isActive?: boolean;
   isCustomizable?: boolean;
   isPrintableInKitchen?: boolean;
@@ -138,6 +140,7 @@ function mapIpcMenuItemToUpdateData(ipcMenuItem: Partial<IpcMenuItem>): {
     price?: number;
     categoryId?: string;
     category?: string;
+    color?: string | null;
     isActive?: boolean;
     isCustomizable?: boolean;
     isPrintableInKitchen?: boolean;
@@ -168,6 +171,11 @@ function mapIpcMenuItemToUpdateData(ipcMenuItem: Partial<IpcMenuItem>): {
   } else if (ipcMenuItem.category !== undefined) {
     updateData.categoryId = ipcMenuItem.category;
     updateData.category = ipcMenuItem.category;
+  }
+
+  // ✅ Handle color field
+  if (ipcMenuItem.color !== undefined) {
+    updateData.color = ipcMenuItem.color;
   }
 
   if (ipcMenuItem.isAvailable !== undefined) {
@@ -240,6 +248,7 @@ export class MenuItemService extends BaseService {
         price: 0,
         categoryId: '',
         category: 'Uncategorized', // Use consistent fallback
+        color: undefined, // ✅ NEW: Add color field for consistency
         isActive: true,
         isAvailable: true,
         isCustomizable: false, // ✅ NEW: Default to false for fallback
@@ -512,6 +521,8 @@ export class MenuItemService extends BaseService {
               : null,
           price: price,
           categoryId: category.id, // Use the verified category ID
+          color:
+            updateData.color !== undefined ? updateData.color : null,
           imageUrl:
             updateData.imageUrl !== undefined ? updateData.imageUrl : null,
           // Skip fields that don't exist in the Prisma schema definition
@@ -696,6 +707,9 @@ export class MenuItemService extends BaseService {
       // ✅ NEW: Handle isPrintableInKitchen field
       if (menuItemUpdateData.isPrintableInKitchen !== undefined)
         updateDataObj.isPrintableInKitchen = menuItemUpdateData.isPrintableInKitchen;
+      // Handle color field
+      if (menuItemUpdateData.color !== undefined)
+        updateDataObj.color = menuItemUpdateData.color;
 
       const menuItem = await this.prisma.menuItem.update({
         where: { id },

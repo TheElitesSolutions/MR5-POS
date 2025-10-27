@@ -152,7 +152,7 @@ const ExpenseCard = ({
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                   <h3 className="font-semibold text-gray-900 dark:text-white text-lg">
-                    {expense.title}
+                    {expense.description}
                   </h3>
                   {expense.description && (
                     <p className="text-sm text-gray-600 dark:text-gray-400">
@@ -179,7 +179,7 @@ const ExpenseCard = ({
                 <div className="flex items-center space-x-2">
                   <DollarSign className="w-5 h-5 text-green-600" />
                   <span className="text-2xl font-bold text-gray-900 dark:text-white">
-                    {formatCurrency(expense.amount)}
+                    ${expense.amount.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex items-center space-x-2">

@@ -172,7 +172,7 @@ export class MenuService {
   /**
    * Get menu categories
    */
-  async getCategories(): Promise<Array<{id: string, name: string}>> {
+  async getCategories(): Promise<Array<{id: string, name: string, color?: string}>> {
     const cacheKey = 'menu:categories';
 
     return this.requestManager.execute(
@@ -192,22 +192,22 @@ export class MenuService {
           throw new Error(response.error || 'Failed to fetch categories');
         }
 
-        // Return full category objects with id and name
+        // Return full category objects with id, name, and color
         const categories = response.data || [];
         const processedCategories = Array.isArray(categories)
           ? categories
               .map(cat => {
                 if (typeof cat === 'string') {
                   // If it's just a string, create an object with name as both id and name
-                  return { id: cat, name: cat };
+                  return { id: cat, name: cat, color: undefined };
                 }
-                // Return full object with id and name
-                return { id: cat.id, name: cat.name };
+                // Return full object with id, name, and color
+                return { id: cat.id, name: cat.name, color: cat.color || undefined };
               })
               .filter(cat => cat && cat.id && cat.name)
           : [];
         console.log(
-          '📂 MenuService: Processed categories with IDs:',
+          '📂 MenuService: Processed categories with IDs and colors:',
           processedCategories
         );
         return processedCategories;

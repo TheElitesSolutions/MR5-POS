@@ -6,7 +6,7 @@ import { UIMenuItem } from '@/types/menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { getCategoryColor } from '@/utils/categoryColors';
+import { ColorPicker } from '@/components/ui/color-picker';
 import {
   Dialog,
   DialogContent,
@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 
 interface CategoryManagementProps {
-  categories: string[];
+  categories: Array<{id: string; name: string; color?: string}>;
   menuItems: UIMenuItem[];
   onCategorySelect: (category: string) => void;
   onCategoryUpdated?: () => void | Promise<void>; // Callback to refresh parent data
@@ -54,8 +54,11 @@ const CategoryManagement = ({
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedCategoryOriginalName, setSelectedCategoryOriginalName] = useState<string>('');
   const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryColor, setNewCategoryColor] = useState<string | undefined>(undefined);
   const [editCategoryName, setEditCategoryName] = useState('');
+  const [editCategoryColor, setEditCategoryColor] = useState<string | undefined>(undefined);
 
   // State for category statistics from backend
   const [categoryStats, setCategoryStats] = useState<
@@ -66,6 +69,14 @@ const CategoryManagement = ({
       avgPrice: number;
     }>
   >([]);
+
+  // Debug: Log categories data when it changes
+  useEffect(() => {
+    console.log('🔍 [CategoryManagement] Categories prop updated:', {
+      count: categories.length,
+      categories: categories.map(c => ({ id: c.id, name: c.name, color: c.color, hasColor: !!c.color }))
+    });
+  }, [categories]);
 
   // Fetch category statistics from backend API
   useEffect(() => {
@@ -129,12 +140,13 @@ const CategoryManagement = ({
     if (!newCategoryName.trim()) return;
 
     try {
-      await createCategory(newCategoryName.trim());
+      await createCategory(newCategoryName.trim(), newCategoryColor);
       setNewCategoryName('');
+      setNewCategoryColor(undefined);
       setShowAddDialog(false);
       // Refresh stats after creating category
       setTimeout(refreshCategoryStats, 500);
-      
+
       // Notify parent component to refresh its data
       if (onCategoryUpdated) {
         await onCategoryUpdated();
@@ -145,16 +157,19 @@ const CategoryManagement = ({
   };
 
   const handleEditCategory = async () => {
-    if (!editCategoryName.trim() || !selectedCategory) return;
+    if (!editCategoryName.trim() || !selectedCategoryOriginalName) return;
 
     try {
-      await updateCategory(selectedCategory, editCategoryName.trim());
+      // Pass the original name as the first parameter (oldName), not the ID
+      await updateCategory(selectedCategoryOriginalName, editCategoryName.trim(), editCategoryColor);
       setEditCategoryName('');
+      setEditCategoryColor(undefined);
       setSelectedCategory('');
+      setSelectedCategoryOriginalName('');
       setShowEditDialog(false);
       // Refresh stats after updating category
       setTimeout(refreshCategoryStats, 500);
-      
+
       // Notify parent component to refresh its data
       if (onCategoryUpdated) {
         await onCategoryUpdated();
@@ -183,9 +198,28 @@ const CategoryManagement = ({
     }
   };
 
-  const openEditDialog = (category: string) => {
-    setSelectedCategory(category);
-    setEditCategoryName(category);
+  const openEditDialog = (categoryId: string) => {
+    // Find the full category object to load its name and color
+    const categoryObj = categories.find(cat => cat.id === categoryId);
+    console.log('🎨 [CategoryManagement] Opening edit dialog:', {
+      categoryId,
+      categoryObj,
+      hasColor: !!categoryObj?.color,
+      color: categoryObj?.color,
+      allCategories: categories.map(c => ({ id: c.id, name: c.name, color: c.color }))
+    });
+    if (categoryObj) {
+      setSelectedCategory(categoryObj.id);
+      setSelectedCategoryOriginalName(categoryObj.name); // Store original name for update
+      setEditCategoryName(categoryObj.name);
+      setEditCategoryColor(categoryObj.color);
+      console.log('✅ [CategoryManagement] Set edit form state:', {
+        name: categoryObj.name,
+        color: categoryObj.color,
+        colorUndefined: categoryObj.color === undefined,
+        colorNull: categoryObj.color === null
+      });
+    }
     setShowEditDialog(true);
   };
 
@@ -203,7 +237,7 @@ const CategoryManagement = ({
         <div className='flex items-center space-x-2'>
           <Grid3X3 className='h-5 w-5 text-blue-600' />
           <h2 className='text-xl font-semibold text-gray-900 dark:text-white'>
-            Menu Categories
+            Category Management
           </h2>
           <Badge variant='outline' className='text-xs'>
             {categories.length} categories
@@ -238,6 +272,11 @@ const CategoryManagement = ({
                   }}
                 />
               </div>
+              <ColorPicker
+                value={newCategoryColor}
+                onChange={setNewCategoryColor}
+                label='Category Color (Optional)'
+              />
               <div className='flex justify-end space-x-2'>
                 <Button
                   variant='outline'
@@ -270,6 +309,16 @@ const CategoryManagement = ({
                 <div className='flex items-center justify-between'>
                   <CardTitle className='flex items-center space-x-2 text-lg'>
                     <UtensilsCrossed className='h-5 w-5 text-gray-600' />
+                    {(() => {
+                      const categoryObj = categories.find(cat => cat.name === category.name);
+                      return categoryObj?.color && (
+                        <div
+                          className='h-3 w-3 rounded-full flex-shrink-0'
+                          style={{ backgroundColor: categoryObj.color }}
+                          title='Category color'
+                        />
+                      );
+                    })()}
                     <span className='truncate'>{category.name}</span>
                   </CardTitle>
                   <div className='relative z-10 flex items-center space-x-1 opacity-0 transition-opacity group-hover:opacity-100'>
@@ -278,7 +327,11 @@ const CategoryManagement = ({
                       size='sm'
                       onClick={e => {
                         e.stopPropagation();
-                        openEditDialog(category.name);
+                        // Find the category ID by matching name with the categories prop
+                        const categoryObj = categories.find(cat => cat.name === category.name);
+                        if (categoryObj) {
+                          openEditDialog(categoryObj.id);
+                        }
                       }}
                       className='h-8 w-8 p-0 hover:bg-gray-200 dark:hover:bg-gray-800'
                     >
@@ -330,9 +383,7 @@ const CategoryManagement = ({
 
                 <Badge
                   variant='outline'
-                  className={`w-full justify-center ${getCategoryColor(
-                    category.name
-                  )}`}
+                  className='w-full justify-center'
                 >
                   Click to view items
                 </Badge>
@@ -344,7 +395,7 @@ const CategoryManagement = ({
         <div className='py-12 text-center'>
           <Grid3X3 className='mx-auto mb-4 h-12 w-12 text-gray-400' />
           <h3 className='mb-2 text-lg font-medium text-gray-900 dark:text-white'>
-            No categories found
+            Add New Category
           </h3>
           <p className='mb-4 text-gray-600 dark:text-gray-400'>
             Create your first category to organize your menu items.
@@ -379,6 +430,11 @@ const CategoryManagement = ({
                 }}
               />
             </div>
+            <ColorPicker
+              value={editCategoryColor}
+              onChange={setEditCategoryColor}
+              label='Category Color (Optional)'
+            />
             <div className='flex justify-end space-x-2'>
               <Button
                 variant='outline'

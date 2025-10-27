@@ -171,12 +171,8 @@ export function UpdateNotification() {
             {(status.available || status.downloading || status.downloaded) && (
               <Download className='h-5 w-5 text-green-500' />
             )}
-            <h3 className='font-semibold text-gray-900'>
-              {status.checking && 'Checking for updates...'}
-              {status.available && !status.downloading && 'Update Available'}
-              {status.downloading && 'Downloading Update...'}
-              {status.downloaded && 'Update Ready'}
-              {status.error && 'Update Error'}
+            <h3 className='font-semibold text-gray-900 dark:text-white'>
+              New Update Available!
             </h3>
           </div>
           <button

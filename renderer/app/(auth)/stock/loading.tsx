@@ -16,7 +16,7 @@ export default function StockLoading() {
           </div>
           <div className='space-y-2'>
             <p className='text-sm font-medium text-gray-900 dark:text-gray-100'>
-              Loading stock...
+              Loading stock management...
             </p>
             <p className='text-xs text-gray-500 dark:text-gray-400'>
               Fetching inventory data

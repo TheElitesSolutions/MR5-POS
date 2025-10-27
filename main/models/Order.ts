@@ -2013,15 +2013,45 @@ export class OrderModel {
           unitPrice = orderItem.menuItem.price;
         }
 
-        // Update the order item
+        // ✅ FIX: Fetch addons for totalPrice calculation
+        const addons = await tx.orderItemAddon.findMany({
+          where: { orderItemId },
+          include: {
+            addon: {
+              include: { addonGroup: true }
+            }
+          }
+        });
+
+        // ✅ FIX: Calculate addon contribution to total price (per-item addon total)
+        let addonTotalPerItem = new DecimalJS(0);
+        for (const addon of addons) {
+          addonTotalPerItem = addDecimals(addonTotalPerItem, addon.totalPrice);
+        }
+
+        // ✅ FIX: Scale addon total by item quantity
+        const addonTotalScaled = new DecimalJS(addonTotalPerItem).mul(newQuantity);
+
+        logger.info(
+          `💰 PRICE CALCULATION: Item ${orderItem.menuItem?.name || 'Unknown'} - Base: ${unitPrice} × ${newQuantity} = ${new DecimalJS(newQuantity).mul(unitPrice || 0)}, Addons: ${addonTotalPerItem} × ${newQuantity} = ${addonTotalScaled}, Total: ${new DecimalJS(newQuantity).mul(unitPrice || 0).add(addonTotalScaled)}`
+        );
+
+        // ✅ FIX: Update the order item with correct total including scaled addons
         const updatedItem = await tx.orderItem.update({
           where: { id: orderItemId },
           data: {
             quantity: newQuantity,
-            totalPrice: new DecimalJS(newQuantity).mul(unitPrice || 0),
+            totalPrice: new DecimalJS(newQuantity).mul(unitPrice || 0).add(addonTotalScaled),
           },
           include: {
             menuItem: true,
+            addons: {
+              include: {
+                addon: {
+                  include: { addonGroup: true }
+                }
+              }
+            }
           },
         });
 
@@ -2049,28 +2079,12 @@ export class OrderModel {
       // Recalculate order totals (outside transaction is fine)
       await this.recalculateOrderTotals(result.orderId);
 
+      // ✅ FIX: Use mapPrismaOrderItem to properly include addons in response
+      const mappedItem = this.mapPrismaOrderItem(result.updatedItem);
+
       return {
         success: true,
-        data: {
-          id: result.updatedItem.id,
-          orderId: result.updatedItem.orderId,
-          menuItemId: result.updatedItem.menuItemId,
-          quantity: result.updatedItem.quantity,
-          unitPrice: Number(result.updatedItem.unitPrice || 0),
-          totalPrice: Number(result.updatedItem.totalPrice || 0),
-          notes: result.updatedItem.notes,
-          status: result.updatedItem.status,
-          printed: result.updatedItem.printed,
-          createdAt: toISOString(result.updatedItem.createdAt),
-          updatedAt: toISOString(result.updatedItem.updatedAt),
-          menuItem: result.updatedItem.menuItem
-            ? {
-                id: result.updatedItem.menuItem.id,
-                name: result.updatedItem.menuItem.name,
-                price: Number(result.updatedItem.menuItem.price),
-              }
-            : null,
-        },
+        data: mappedItem,
         timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
@@ -2089,15 +2103,25 @@ export class OrderModel {
   }
 
   private async recalculateOrderTotals(orderId: string): Promise<void> {
+    // ✅ FIX: Include addons for visibility/debugging
+    // Note: item.totalPrice should already include addon prices after Fix #1
     const orderItems = await this.prisma.orderItem.findMany({
       where: { orderId },
+      include: {
+        addons: true, // Include for debugging/verification
+      },
     });
 
     // Calculate subtotal using Decimal arithmetic
+    // ✅ item.totalPrice now includes addon prices, so this calculation is correct
     let subtotal = new DecimalJS(0);
     for (const item of orderItems) {
       subtotal = addDecimals(subtotal, item.totalPrice);
     }
+
+    logger.info(
+      `📊 ORDER TOTAL RECALCULATION: Order ${orderId} - Subtotal: ${subtotal} (from ${orderItems.length} items)`
+    );
 
     // No tax calculation - total equals subtotal as requested
     const tax = new DecimalJS(0);

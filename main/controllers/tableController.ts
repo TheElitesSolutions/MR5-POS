@@ -44,6 +44,10 @@ export class TableController extends BaseController {
       TABLE_CHANNELS.UPDATE_STATUS,
       this.updateTableStatus.bind(this)
     );
+    this.registerHandler(
+      TABLE_CHANNELS.TOGGLE_PAY_LATER,
+      this.togglePayLater.bind(this)
+    );
 
     logInfo('Table IPC handlers registered');
   }
@@ -60,6 +64,7 @@ export class TableController extends BaseController {
       TABLE_CHANNELS.UPDATE,
       TABLE_CHANNELS.DELETE,
       TABLE_CHANNELS.UPDATE_STATUS,
+      TABLE_CHANNELS.TOGGLE_PAY_LATER,
     ];
 
     handlers.forEach(handler => {
@@ -223,6 +228,29 @@ export class TableController extends BaseController {
       }
       return this.createErrorResponse(
         new Error(result.error || 'Failed to delete table')
+      );
+    } catch (error) {
+      return this.createErrorResponse(
+        error instanceof Error ? error : String(error)
+      );
+    }
+  }
+
+  /**
+   * Toggle the pay later status of a table
+   */
+  private async togglePayLater(
+    _event: IpcMainInvokeEvent,
+    id: string
+  ): Promise<IPCResponse<Table>> {
+    try {
+      const result = await this.tableModel.togglePayLater(id);
+      if (result.success && result.data) {
+        logInfo(`Toggled pay later status for table ${id}`);
+        return this.createSuccessResponse(result.data);
+      }
+      return this.createErrorResponse(
+        new Error(result.error || 'Failed to toggle pay later status')
       );
     } catch (error) {
       return this.createErrorResponse(

@@ -115,7 +115,7 @@ export default function LoginPage() {
               priority
             />
           </div>
-          <h1 className='mb-1 sm:mb-2 text-xl sm:text-2xl md:text-3xl font-bold text-gray-900'>
+          <h1 className='mb-1 sm:mb-2 text-xl sm:text-2xl md:text-3xl font-bold text-gray-900 dark:text-white'>
             The Elites POS
           </h1>
           <p className='text-xs sm:text-sm text-muted-foreground'>
@@ -145,9 +145,7 @@ export default function LoginPage() {
                   type='text'
                   placeholder='Enter your username'
                   {...register('username')}
-                  className={`h-9 sm:h-10 text-sm ${
-                    errors.username ? 'border-destructive' : ''
-                  }`}
+                  className={`h-9 sm:h-10 text-sm $${errors.username ? 'border-destructive' : ''}`}
                   disabled={isSubmitting}
                 />
                 {errors.username && (
@@ -167,9 +165,7 @@ export default function LoginPage() {
                   type='password'
                   placeholder='Enter your password'
                   {...register('password')}
-                  className={`h-9 sm:h-10 text-sm ${
-                    errors.password ? 'border-destructive' : ''
-                  }`}
+                  className={`h-9 sm:h-10 text-sm $${errors.password ? 'border-destructive' : ''}`}
                   disabled={isSubmitting}
                 />
                 {errors.password && (

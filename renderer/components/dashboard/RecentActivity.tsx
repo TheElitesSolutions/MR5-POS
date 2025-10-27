@@ -165,7 +165,7 @@ const RecentActivity = () => {
                   </span>
                 </div>
 
-                <p className="text-sm text-gray-900 mb-1">
+                <p className="text-sm text-gray-900 dark:text-white mb-1">
                   {activity.description}
                 </p>
 

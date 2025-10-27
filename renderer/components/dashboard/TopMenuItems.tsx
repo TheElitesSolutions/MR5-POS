@@ -112,7 +112,7 @@ const TopMenuItems = () => {
                     #{index + 1}
                   </div>
                   <div>
-                    <h4 className="font-medium text-gray-900">{item.name}</h4>
+                    <h4 className="font-medium text-gray-900 dark:text-white">{item.name}</h4>
                     <div className="flex items-center space-x-2 mt-1">
                       <Badge
                         variant="outline"
@@ -133,7 +133,7 @@ const TopMenuItems = () => {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="font-semibold text-gray-900 text-lg">
+                  <div className="font-semibold text-gray-900 dark:text-white text-lg">
                     {formatCurrency(item.revenue)}
                   </div>
                   <div className="text-sm text-gray-500">

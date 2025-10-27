@@ -131,6 +131,7 @@ export interface Table {
   id: string;
   name: string;
   status: TableStatus;
+  isPayLater?: boolean;
   createdAt: Date;
   updatedAt: Date;
   activeOrder?: Order | null;
@@ -139,6 +140,7 @@ export interface Table {
 export interface CreateTableRequest {
   name: string;
   status?: TableStatus;
+  isPayLater?: boolean;
 }
 
 export interface UpdateTableRequest {
@@ -146,6 +148,7 @@ export interface UpdateTableRequest {
   updates: {
     name?: string;
     status?: TableStatus;
+    isPayLater?: boolean;
   };
 }
 

@@ -37,6 +37,7 @@ function convertIPCTableToRendererTable(ipcTable: IPCTable): Table {
     id: ipcTable.id,
     name: ipcTable.name,
     status: ipcTable.status as string,
+    isPayLater: ipcTable.isPayLater,
     createdAt: ipcTable.createdAt as any,
     updatedAt: ipcTable.updatedAt as any,
     activeOrder: ipcTable.activeOrder ? convertIPCOrderToRendererOrder(ipcTable.activeOrder) : null,
@@ -70,6 +71,7 @@ interface PosState {
   pendingItems: OrderItem[];
   viewMode: string;
   orderType: OrderType;
+  tableTab: 'DINE_IN' | 'NOT_PAID';
 
   // Enhanced order change tracking with data loss prevention
   orderChanges: Map<string, SimpleOrderTracking>;
@@ -90,6 +92,8 @@ interface PosState {
   selectTable: (tableId: string | Table) => Promise<void>;
   createTable: (name: string) => Promise<void>;
   deleteTable: (tableId: string) => Promise<void>;
+  toggleTablePayLater: (tableId: string) => Promise<void>;
+  setTableTab: (tab: 'DINE_IN' | 'NOT_PAID') => void;
   getTableStatus: (tableId: string) => string;
   createOrder: (tableId: string) => Promise<void>;
   createTakeawayDeliveryOrder: (
@@ -155,6 +159,7 @@ export const usePOSStore = create<PosState>((set, get) => ({
   pendingItems: [],
   viewMode: 'tables',
   orderType: OrderType.DINE_IN,
+  tableTab: 'DINE_IN',
 
   // Enhanced order change tracking with data loss prevention
   orderChanges: new Map(),
@@ -628,6 +633,43 @@ export const usePOSStore = create<PosState>((set, get) => ({
       });
       throw error;
     }
+  },
+
+  toggleTablePayLater: async (tableId: string) => {
+    try {
+      set({ isLoading: true, error: null });
+      const response = await tableAPI.togglePayLater(tableId);
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to toggle pay later status');
+      }
+      const updatedTable = convertIPCTableToRendererTable(response.data as IPCTable);
+      const { tables, selectedTable } = get();
+      // Update the table in the tables array
+      const updatedTables = tables.map(table =>
+        table.id === tableId ? updatedTable : table
+      );
+      set({
+        tables: updatedTables,
+        // Update selectedTable if it's the one being toggled
+        selectedTable: selectedTable?.id === tableId ? updatedTable : selectedTable,
+        isLoading: false,
+      });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('POS Store: Toggled pay later status successfully', tableId, updatedTable.isPayLater);
+      }
+    } catch (error) {
+      console.error('POS Store: Failed to toggle pay later status', error);
+      set({
+        error:
+          error instanceof Error ? error.message : 'Failed to toggle pay later status',
+        isLoading: false,
+      });
+      throw error;
+    }
+  },
+
+  setTableTab: (tab: 'DINE_IN' | 'NOT_PAID') => {
+    set({ tableTab: tab });
   },
 
   getTableStatus: (tableId: string) => {

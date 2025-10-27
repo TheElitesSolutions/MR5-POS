@@ -181,8 +181,49 @@ export function initializeDatabase(): Database.Database {
     console.log('Database already initialized with tables, skipping schema execution');
   }
 
+  // Run migrations for existing databases
+  runMigrations();
+
   console.log('Database initialized at:', dbPath);
   return db;
+}
+
+// Run database migrations for schema updates
+function runMigrations() {
+  if (!db) return;
+
+  console.log('Running database migrations...');
+
+  try {
+    // Migration 1: Add color column to categories table (if not exists)
+    const categoriesHasColor = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM pragma_table_info('categories')
+      WHERE name='color'
+    `).get() as { count: number };
+
+    if (categoriesHasColor.count === 0) {
+      db.prepare('ALTER TABLE categories ADD COLUMN color TEXT').run();
+      console.log('✓ Added color column to categories table');
+    }
+
+    // Migration 2: Add color column to menu_items table (if not exists)
+    const menuItemsHasColor = db.prepare(`
+      SELECT COUNT(*) as count
+      FROM pragma_table_info('menu_items')
+      WHERE name='color'
+    `).get() as { count: number };
+
+    if (menuItemsHasColor.count === 0) {
+      db.prepare('ALTER TABLE menu_items ADD COLUMN color TEXT').run();
+      console.log('✓ Added color column to menu_items table');
+    }
+
+    console.log('✓ Migrations completed successfully');
+  } catch (error) {
+    console.error('⚠ Migration error (non-critical):', error);
+    // Don't throw - migrations are non-critical for app startup
+  }
 }
 
 // Initialize default settings

@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS tables (
   notes TEXT,
   currentOrderId TEXT,
   lastStatusChange TEXT,
+  isPayLater INTEGER DEFAULT 0,
   createdAt TEXT DEFAULT (datetime('now', 'localtime')),
   updatedAt TEXT DEFAULT (datetime('now', 'localtime'))
 );
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS categories (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
   name TEXT UNIQUE NOT NULL,
   description TEXT,
+  color TEXT,
   sortOrder INTEGER DEFAULT 0,
   isActive INTEGER DEFAULT 1,
   parentId TEXT,
@@ -71,6 +73,7 @@ CREATE TABLE IF NOT EXISTS menu_items (
   description TEXT,
   price REAL NOT NULL,
   categoryId TEXT NOT NULL,
+  color TEXT,
   isActive INTEGER DEFAULT 1,
   isCustomizable INTEGER DEFAULT 0,
   isPrintableInKitchen INTEGER DEFAULT 1,

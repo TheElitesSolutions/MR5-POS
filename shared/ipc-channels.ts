@@ -54,6 +54,7 @@ export const TABLE_CHANNELS = {
   UPDATE: createChannel('tables', 'update'),
   UPDATE_STATUS: createChannel('tables', 'update-status'),
   DELETE: createChannel('tables', 'delete'),
+  TOGGLE_PAY_LATER: createChannel('tables', 'toggle-pay-later'),
 };
 
 /**

@@ -386,38 +386,61 @@ export default function MenuManagementPage() {
             </div>
 
             {viewMode === 'items' && (
-              <div className='flex items-center space-x-2'>
+              <div className='flex flex-wrap items-center gap-2'>
                 <span className='whitespace-nowrap text-sm text-gray-600 dark:text-gray-400'>
                   Category:
                 </span>
-                <select
-                  value={selectedCategory}
-                  onChange={e => {
-                    const newCategoryName = e.target.value;
-                    setSelectedCategory(newCategoryName);
-
-                    // FIX: Send categoryId instead of category name (same logic as handleCategorySelect)
-                    // Backend filters by categoryId for optimal performance
-                    const category = categories.find((c: any) => c.name === newCategoryName);
-
-                    if (category && (category as any).id) {
-                      setPaginationCategory((category as any).id); // Send category ID
-                    } else {
-                      // Fallback to name if category object not found (or clear filter)
-                      setPaginationCategory(newCategoryName);
-                    }
+                <Button
+                  key='all-categories'
+                  size='sm'
+                  variant={selectedCategory === '' ? 'default' : 'outline'}
+                  onClick={() => {
+                    setSelectedCategory('');
+                    setPaginationCategory('');
                   }}
-                  className='touch-manipulation rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 dark:border-gray-700 dark:bg-gray-800 dark:text-white'
+                  className='touch-manipulation'
                 >
-                  <option value=''>All Categories</option>
-                  {(categories || [])
-                    .filter((category: any) => category && typeof category === 'object' && category.name && category.name.trim() !== '')
-                    .map((category: any) => (
-                      <option key={category.id} value={category.name}>
-                        {category.name}
-                      </option>
-                    ))}
-                </select>
+                  All Categories
+                </Button>
+                {(categories || [])
+                  .filter((category: any) => category && typeof category === 'object' && category.name && category.name.trim() !== '')
+                  .map((category: any) => (
+                    <Button
+                      key={category.id}
+                      size='sm'
+                      variant={selectedCategory === category.name ? 'default' : 'outline'}
+                      onClick={() => {
+                        setSelectedCategory(category.name);
+                        if (category.id) {
+                          setPaginationCategory(category.id);
+                        } else {
+                          setPaginationCategory(category.name);
+                        }
+                      }}
+                      className='touch-manipulation flex items-center gap-1.5'
+                      style={
+                        category.color && selectedCategory === category.name
+                          ? {
+                              backgroundColor: category.color,
+                              borderColor: category.color,
+                              color: '#ffffff',
+                            }
+                          : category.color
+                          ? {
+                              borderColor: category.color,
+                            }
+                          : undefined
+                      }
+                    >
+                      {category.color && (
+                        <div
+                          className='h-2.5 w-2.5 rounded-full flex-shrink-0'
+                          style={{ backgroundColor: category.color }}
+                        />
+                      )}
+                      {category.name}
+                    </Button>
+                  ))}
               </div>
             )}
           </div>

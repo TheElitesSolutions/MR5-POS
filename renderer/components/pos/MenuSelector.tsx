@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 import { menuLogger } from '@/utils/logger';
 import { usePOSStore } from '@/stores/posStore';
 import { getIngredientNameSafe } from '@/utils/ingredientUtils';
@@ -21,6 +22,7 @@ import { useAvailableMenuItems } from '@/hooks/useMenuData';
 import { Customization, MenuItem } from '@/types';
 import { AlertTriangle, Minus, Plus, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { getMenuService } from '@/services/ServiceContainer';
 
 interface MenuSelectorProps {
   onClose: () => void;
@@ -50,6 +52,7 @@ const MenuSelector = ({ onClose }: MenuSelectorProps) => {
     categories,
     isLoading: menuLoading,
     error: menuError,
+    refetch,
   } = useAvailableMenuItems();
 
   // Use shared stock data from context - no direct API calls
@@ -76,6 +79,19 @@ const MenuSelector = ({ onClose }: MenuSelectorProps) => {
 
   // Combined loading state
   const isLoading = posLoading || menuLoading || stockLoading;
+
+  // Refresh menu data when MenuSelector opens to show latest colors
+  useEffect(() => {
+    const menuService = getMenuService();
+    menuService.refreshMenuData()
+      .then(() => {
+        // After cache is refreshed, refetch the menu data
+        refetch();
+      })
+      .catch(() => {
+        // Silent fail - cache refresh is not critical
+      });
+  }, [refetch]);
 
   // Show error messages if any
   useEffect(() => {
@@ -104,6 +120,14 @@ const MenuSelector = ({ onClose }: MenuSelectorProps) => {
         item.description.toLowerCase().includes(searchTerm.toLowerCase()));
     return matchesCategory && matchesSearch && item.isAvailable;
   });
+
+  // Helper function to get category color
+  const getCategoryColor = (categoryName: string): string | undefined => {
+    const category = categories.find(cat =>
+      typeof cat === 'string' ? cat === categoryName : cat.name === categoryName
+    );
+    return typeof category === 'object' ? category.color : undefined;
+  };
 
   const checkIngredientAvailability = async (
     menuItemId: string,
@@ -372,52 +396,108 @@ const MenuSelector = ({ onClose }: MenuSelectorProps) => {
                 >
                   All Items
                 </Button>
-                {categories.map(category => (
-                  <Button
-                    key={category}
-                    size='sm'
-                    variant={
-                      selectedCategory === category ? 'default' : 'outline'
-                    }
-                    onClick={() => setSelectedCategory(category)}
-                  >
-                    {category}
-                  </Button>
-                ))}
+                {categories.map(category => {
+                  const categoryName = typeof category === 'string' ? category : category.name;
+                  const categoryColor = typeof category === 'object' ? category.color : undefined;
+
+                  return (
+                    <Button
+                      key={typeof category === 'string' ? category : category.id}
+                      size='sm'
+                      variant={
+                        selectedCategory === categoryName ? 'default' : 'outline'
+                      }
+                      onClick={() => setSelectedCategory(categoryName)}
+                      style={
+                        categoryColor && selectedCategory === categoryName
+                          ? {
+                              backgroundColor: categoryColor,
+                              borderColor: categoryColor,
+                              color: '#ffffff',
+                            }
+                          : categoryColor
+                          ? {
+                              borderColor: categoryColor,
+                              color: categoryColor,
+                            }
+                          : undefined
+                      }
+                    >
+                      {categoryName}
+                    </Button>
+                  );
+                })}
               </div>
             </div>
 
             {/* Menu Items Grid */}
             <div className='flex-1 overflow-y-auto'>
               <div className='grid grid-cols-1 gap-3 sm:grid-cols-2'>
-                {filteredItems.map(item => (
-                  <Card
-                    key={item.id}
-                    className={`cursor-pointer transition-all hover:shadow-md ${
-                      selectedItem?.id === item.id ? 'ring-2 ring-blue-500' : ''
-                    }`}
-                    onClick={() => handleItemSelect(item)}
-                  >
-                    <CardContent className='p-4'>
-                      <div className='space-y-2'>
-                        <div className='flex items-start justify-between'>
-                          <h4 className='text-sm font-medium'>{item.name}</h4>
-                          <Badge variant='outline'>
-                            ${item.price.toFixed(2)}
-                          </Badge>
-                        </div>
+                {filteredItems.map(item => {
+                  // Get color from item or category
+                  const itemColor = item.color || getCategoryColor(item.category);
 
-                        <p className='line-clamp-2 text-xs text-gray-600'>
-                          {item.description}
-                        </p>
+                  return (
+                    <Card
+                      key={item.id}
+                      className={cn(
+                        'cursor-pointer transition-all hover:shadow-md overflow-hidden',
+                        selectedItem?.id === item.id && 'ring-2 ring-blue-500'
+                      )}
+                      onClick={() => handleItemSelect(item)}
+                      style={
+                        itemColor
+                          ? {
+                              backgroundColor: itemColor,
+                              borderColor: itemColor,
+                            }
+                          : undefined
+                      }
+                    >
+                      <CardContent
+                        className='p-4'
+                        style={
+                          itemColor
+                            ? { backgroundColor: itemColor }
+                            : undefined
+                        }
+                      >
+                        <div className='space-y-2'>
+                          <div className='flex items-start justify-between'>
+                            <h4 className={cn(
+                              'text-sm font-medium',
+                              itemColor && 'text-white'
+                            )}>
+                              {item.name}
+                            </h4>
+                            <Badge
+                              variant='outline'
+                              className={cn(itemColor && 'border-white text-white')}
+                            >
+                              ${item.price.toFixed(2)}
+                            </Badge>
+                          </div>
 
-                        <div className='flex items-center justify-between text-xs text-gray-500'>
-                          <span>{item.category}</span>
+                          <p className={cn(
+                            'line-clamp-2 text-xs',
+                            itemColor ? 'text-white/90' : 'text-gray-600'
+                          )}>
+                            {item.description}
+                          </p>
+
+                          <div className={cn(
+                            'flex items-center justify-between text-xs',
+                            itemColor ? 'text-white/80' : 'text-gray-500'
+                          )}>
+                            <div className='flex items-center gap-2'>
+                              <span>{item.category}</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
 
               {filteredItems.length === 0 && (
@@ -438,7 +518,18 @@ const MenuSelector = ({ onClose }: MenuSelectorProps) => {
                     {selectedItem.description}
                   </p>
                   <div className='mt-2 flex items-center justify-between'>
-                    <Badge>{selectedItem.category}</Badge>
+                    <div className='flex items-center gap-2'>
+                      {(selectedItem.color || getCategoryColor(selectedItem.category)) && (
+                        <div
+                          className='h-4 w-4 rounded-full'
+                          style={{
+                            backgroundColor:
+                              selectedItem.color || getCategoryColor(selectedItem.category),
+                          }}
+                        />
+                      )}
+                      <Badge>{selectedItem.category}</Badge>
+                    </div>
                     <span className='text-lg font-bold'>
                       ${selectedItem.price.toFixed(2)}
                     </span>

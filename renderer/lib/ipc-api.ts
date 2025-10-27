@@ -227,6 +227,8 @@ export const tableAPI = {
     typedInvoke<Table>(IPC_CHANNELS.TABLE.UPDATE_STATUS, data),
 
   delete: (id: string) => typedInvoke<void>(IPC_CHANNELS.TABLE.DELETE, id),
+
+  togglePayLater: (id: string) => typedInvoke<Table>(IPC_CHANNELS.TABLE.TOGGLE_PAY_LATER, id),
 };
 
 /**

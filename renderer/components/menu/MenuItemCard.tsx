@@ -7,6 +7,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import {
   Edit,
   Trash2,
@@ -97,22 +98,36 @@ const MenuItemCard = ({ item, onEdit }: MenuItemCardProps) => {
   };
 
   // Using the shared utility for consistent category colors across the application
+  const itemColor = (item as any).color;
 
   return (
     <Card
-      className={`transition-shadow hover:shadow-md ${
-        !item.isAvailable ? 'opacity-75' : ''
-      }`}
+      className={cn(
+        'transition-shadow hover:shadow-md overflow-hidden bg-white dark:bg-gray-800',
+        !item.isAvailable && 'opacity-75'
+      )}
     >
       <CardHeader className='pb-3'>
         <div className='flex items-start justify-between'>
           <div className='flex-1'>
-            <CardTitle className='mb-2 text-lg font-semibold text-gray-900'>
-              {item.name}
-            </CardTitle>
+            <div className='flex items-center gap-2 mb-2'>
+              {itemColor && (
+                <div
+                  className='h-3 w-3 rounded-full flex-shrink-0'
+                  style={{ backgroundColor: itemColor }}
+                  title='Item color'
+                />
+              )}
+              <CardTitle className='text-lg font-semibold text-gray-900 dark:text-white'>
+                {item.name}
+              </CardTitle>
+            </div>
             <Badge
               variant='outline'
-              className={`text-xs ${getCategoryColor(item.category)}`}
+              className={cn(
+                'text-xs',
+                getCategoryColor(item.category)
+              )}
             >
               {item.category}
             </Badge>
@@ -173,7 +188,7 @@ const MenuItemCard = ({ item, onEdit }: MenuItemCardProps) => {
       </CardHeader>
 
       <CardContent>
-        <p className='mb-4 line-clamp-3 text-sm text-gray-600'>
+        <p className='mb-4 line-clamp-3 text-sm text-gray-600 dark:text-gray-400'>
           {item.description}
         </p>
 

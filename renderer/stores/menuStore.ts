@@ -23,6 +23,7 @@ import {
   convertToUIMenuItem,
   convertToAPIMenuItem,
 } from '@/types/menu';
+import { getMenuService } from '@/services/ServiceContainer';
 
 // Define pagination state
 interface PaginationState {
@@ -36,7 +37,7 @@ interface PaginationState {
 
 interface MenuState {
   menuItems: UIMenuItem[];
-  categories: string[];
+  categories: Array<{id: string; name: string; color?: string}>;
   isLoading: boolean;
   error: string | null;
 
@@ -62,8 +63,8 @@ interface MenuState {
   restoreMenuItem: (id: string) => Promise<void>;
 
   // Category management
-  createCategory: (name: string) => Promise<void>;
-  updateCategory: (oldName: string, newName: string) => Promise<void>;
+  createCategory: (name: string, color?: string) => Promise<void>;
+  updateCategory: (oldName: string, newName: string, color?: string) => Promise<void>;
   deleteCategory: (name: string) => Promise<void>;
 
   // Pagination actions
@@ -280,12 +281,12 @@ export const useMenuStore = create<MenuState>((set, get) => ({
         return;
       }
 
-      // FIX: Store full category objects with id and name (not just names)
+      // FIX: Store full category objects with id, name, and color
       // This allows frontend to send categoryId for optimal backend filtering
       const categoryObjects = response.data
         .filter((c: any) => c !== null && typeof c === 'object')
         .filter((c: any) => c.id && c.name && typeof c.name === 'string' && c.name.trim())
-        .map((c: any) => ({ id: c.id, name: c.name }));
+        .map((c: any) => ({ id: c.id, name: c.name, color: c.color }));
 
       // Make sure we have unique categories (by id)
       const uniqueCategories = Array.from(
@@ -1015,7 +1016,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
     }
   },
 
-  createCategory: async name => {
+  createCategory: async (name, color) => {
     try {
       set({ isLoading: true, error: null });
 
@@ -1023,7 +1024,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       verifyPermission(Role.MANAGER);
 
       // First, create the category directly using a custom API endpoint
-      const createCategoryResponse = await menuAPI.createCategory({ name });
+      const createCategoryResponse = await menuAPI.createCategory({ name, color });
 
       if (!createCategoryResponse.success) {
         throw new Error(
@@ -1040,6 +1041,9 @@ export const useMenuStore = create<MenuState>((set, get) => ({
         );
       }
 
+      // Invalidate MenuService cache to ensure fresh data
+      getMenuService().invalidateMenuCaches();
+
       // Refresh categories list from backend
       await get()._internalFetchCategories();
       set({ isLoading: false });
@@ -1054,7 +1058,7 @@ export const useMenuStore = create<MenuState>((set, get) => ({
     }
   },
 
-  updateCategory: async (oldName, newName) => {
+  updateCategory: async (oldName, newName, color) => {
     try {
       set({ isLoading: true, error: null });
 
@@ -1073,7 +1077,10 @@ export const useMenuStore = create<MenuState>((set, get) => ({
       );
       if (!match) throw new Error(`Category "${oldName}" not found`);
 
-      await menuAPI.updateCategory({ id: match.id, name: newName });
+      await menuAPI.updateCategory({ id: match.id, name: newName, color });
+
+      // Invalidate MenuService cache to ensure fresh data
+      getMenuService().invalidateMenuCaches();
 
       // Refresh
       await get()._internalFetchCategories();

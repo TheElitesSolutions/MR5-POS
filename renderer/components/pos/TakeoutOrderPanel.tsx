@@ -833,7 +833,7 @@ const TakeoutOrderPanel = ({
       <div className='border-b border-gray-200 p-6 dark:border-gray-700'>
         <div className='mb-2 flex items-center justify-between'>
           <h2 className='text-xl font-semibold text-gray-900 dark:text-white'>
-            {orderType === 'TAKEOUT' ? 'Takeout' : 'Delivery'} Order
+            Order #{currentOrder.orderNumber || 'N/A'}
           </h2>
           <Badge variant='outline' className='text-xs'>
             #{currentOrder.orderNumber || 'N/A'}

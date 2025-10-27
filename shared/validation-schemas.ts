@@ -150,6 +150,7 @@ export const CreateMenuItemSchema = z.object({
     price: positiveNumberSchema,
     categoryId: z.string().optional(), // Accept any string ID (not strict UUID)
     category: z.string().optional(),
+    color: z.string().optional().nullable(), // ✅ ADDED: Color field for menu items
     isActive: z.union([z.boolean(), z.number()]).transform(val => {
       if (typeof val === 'number') return val !== 0;
       return val;
@@ -184,6 +185,7 @@ export const UpdateMenuItemSchema = z.object({
     price: positiveNumberSchema.optional(),
     categoryId: z.string().optional(), // Accept any string ID (not strict UUID)
     category: z.string().optional(),
+    color: z.string().optional().nullable(), // ✅ ADDED: Color field for menu items
     isActive: z.union([z.boolean(), z.number()]).transform(val => {
       if (typeof val === 'number') return val !== 0;
       return val;

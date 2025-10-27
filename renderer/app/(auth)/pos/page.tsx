@@ -57,6 +57,8 @@ export default function POSPage() {
     setOrderType,
     isDineIn,
     orderType, // Add orderType to track direct state
+    tableTab,
+    setTableTab,
   } = usePOSStore();
 
   const [mobileOrderPanelOpen, setMobileOrderPanelOpen] = useState(false);
@@ -245,14 +247,24 @@ export default function POSPage() {
                   icon: <UtensilsCrossed />,
                 },
                 {
+                  value: 'NOT_PAID',
+                  label: 'Not Paid',
+                  icon: <UtensilsCrossed />,
+                },
+                {
                   value: 'TAKEOUT',
                   label: 'Takeout/Delivery',
                   icon: <ShoppingBag />,
                 },
               ]}
-              value={orderType === 'DINE_IN' ? 'DINE_IN' : 'TAKEOUT'}
+              value={orderType === 'TAKEOUT' ? 'TAKEOUT' : tableTab}
               onValueChange={value => {
-                setOrderType(value as 'DINE_IN' | 'TAKEOUT');
+                if (value === 'TAKEOUT') {
+                  setOrderType('TAKEOUT');
+                } else {
+                  setOrderType('DINE_IN');
+                  setTableTab(value as 'DINE_IN' | 'NOT_PAID');
+                }
               }}
               fullWidth
             />
@@ -265,6 +277,11 @@ export default function POSPage() {
                 const isCurrentlyDineIn = orderType === 'DINE_IN'; // Use direct state value instead of function
 
                 if (viewMode === 'tables' && isCurrentlyDineIn) {
+                  const tabTitle = tableTab === 'NOT_PAID' ? 'Not Paid Tables' : 'Restaurant Tables';
+                  const tabDescription = tableTab === 'NOT_PAID'
+                    ? 'Tables with pay later orders'
+                    : 'Select a table to start taking orders';
+
                   return (
                     <div className='flex h-full flex-col overflow-hidden'>
                       <div className='flex-none p-3 sm:p-4 lg:p-6 pb-0'>
@@ -272,10 +289,10 @@ export default function POSPage() {
                         <div className='flex items-center justify-between'>
                           <div>
                             <h2 className='text-lg font-semibold text-gray-900 dark:text-white sm:text-xl lg:text-2xl'>
-                              Restaurant Tables
+                              {tabTitle}
                             </h2>
                             <p className='text-sm text-gray-600 dark:text-gray-400 sm:text-base'>
-                              Select a table to start taking orders
+                              {tabDescription}
                             </p>
                           </div>
 

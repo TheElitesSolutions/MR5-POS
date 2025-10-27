@@ -142,8 +142,8 @@ export default function RegisterPage() {
     <div className="min-h-screen flex items-center justify-center bg-background py-16 px-6">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-3">
-            The Elites POS
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-3">
+            Create Account
           </h1>
           <p className="text-muted-foreground">Create your POS account</p>
         </div>

@@ -493,7 +493,7 @@ export class MenuItemController extends BaseController {
    */
   private async createCategory(
     _event: IpcMainInvokeEvent,
-    data: { name: string }
+    data: { name: string; color?: string }
   ): Promise<IPCResponse<any>> {
     try {
       // Create a category directly in the database
@@ -501,6 +501,7 @@ export class MenuItemController extends BaseController {
         data: {
           name: data.name,
           description: `Category for ${data.name} items`,
+          color: data.color || null,
           sortOrder: 0,
           isActive: true,
         },
@@ -528,12 +529,15 @@ export class MenuItemController extends BaseController {
    */
   private async updateCategory(
     _event: IpcMainInvokeEvent,
-    data: { id: string; name: string }
+    data: { id: string; name: string; color?: string }
   ): Promise<IPCResponse<any>> {
     try {
       const category = await prisma.category.update({
         where: { id: data.id },
-        data: { name: data.name },
+        data: {
+          name: data.name,
+          ...(data.color !== undefined && { color: data.color || null }),
+        },
       });
 
       // Trigger real-time sync to Supabase (non-blocking)

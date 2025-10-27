@@ -30,7 +30,7 @@ export interface UseMenuItemsOptions extends MenuQueryParams {
 export interface UseMenuItemsResult {
   // Data
   menuItems: MenuItem[];
-  categories: string[];
+  categories: Array<{id: string, name: string, color?: string}>;
   totalItems: number;
   currentPage: number;
   pageSize: number;
@@ -64,7 +64,7 @@ export interface UseSingleMenuItemResult {
 
 export interface UseCategoriesResult {
   // Data
-  categories: Array<{id: string, name: string}>;
+  categories: Array<{id: string, name: string, color?: string}>;
 
   // State
   isLoading: boolean;
@@ -98,7 +98,7 @@ export function useMenuItems(
     page: 1,
     pageSize: 12,
   });
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Array<{id: string, name: string, color?: string}>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -226,7 +226,7 @@ export function useAvailableMenuItems(
 
   // State
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Array<{id: string, name: string, color?: string}>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -382,7 +382,7 @@ export function useMenuCategories(enabled = true): UseCategoriesResult {
   const menuService = getMenuService();
 
   // State
-  const [categories, setCategories] = useState<Array<{id: string, name: string}>>([]);
+  const [categories, setCategories] = useState<Array<{id: string, name: string, color?: string}>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

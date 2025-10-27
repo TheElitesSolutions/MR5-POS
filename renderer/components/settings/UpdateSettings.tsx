@@ -171,7 +171,7 @@ export default function UpdateSettings() {
       {/* Current Version */}
       <div className='flex items-center justify-between'>
         <div>
-          <h3 className='font-medium text-gray-900'>Current Version</h3>
+          <h3 className='font-medium text-gray-900 dark:text-white'>Current Version</h3>
           <p className='text-sm text-gray-600'>{appVersion}</p>
         </div>
         <Button
@@ -250,7 +250,7 @@ export default function UpdateSettings() {
       {status.downloading && status.progress && (
         <div className='space-y-3'>
           <div className='flex items-center justify-between text-sm'>
-            <span className='font-medium text-gray-900'>Downloading Update...</span>
+            <span className='font-medium text-gray-900 dark:text-white'>Downloading Update...</span>
             <span className='text-gray-600'>{Math.round(status.progress.percent)}%</span>
           </div>
           <Progress value={status.progress.percent} className='h-2' />
@@ -301,7 +301,7 @@ export default function UpdateSettings() {
             <div className='flex items-start space-x-3'>
               <CheckCircle2 className='h-5 w-5 text-gray-600' />
               <div>
-                <h3 className='font-medium text-gray-900'>Up to Date</h3>
+                <h3 className='font-medium text-gray-900 dark:text-white'>Up to Date</h3>
                 <p className='text-sm text-gray-600'>
                   You are running the latest version of MR5 POS.
                 </p>
@@ -313,7 +313,7 @@ export default function UpdateSettings() {
       {/* Auto-Update Info */}
       <div className='rounded-lg border border-gray-200 bg-gray-50 p-4'>
         <div className='space-y-2'>
-          <h3 className='font-medium text-gray-900'>Automatic Updates</h3>
+          <h3 className='font-medium text-gray-900 dark:text-white'>Automatic Updates</h3>
           <p className='text-sm text-gray-600'>
             The application automatically checks for updates every 6 hours. When an update is
             available, you'll be notified and can choose to download and install it.

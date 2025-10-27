@@ -42,6 +42,7 @@ export interface Table {
   status: string;
   positionX?: number;
   positionY?: number;
+  isPayLater?: boolean;
   // isActive field removed as it doesn't exist in the database
   createdAt: Date;
   updatedAt: Date;
@@ -133,6 +134,7 @@ export interface MenuItem {
   price: number;
   category: string;
   categoryId?: string; // Category ID for addon lookups
+  color?: string; // Optional custom color (hex code)
   isAvailable: boolean;
   isActive: boolean;
   isCustomizable: boolean;
@@ -142,6 +144,7 @@ export interface MenuItem {
 export interface MenuCategory {
   id: string;
   name: string;
+  color?: string; // Optional custom color (hex code)
   items: MenuItem[];
 }
 

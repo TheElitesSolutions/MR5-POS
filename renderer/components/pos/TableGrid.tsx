@@ -30,7 +30,7 @@ import { cn } from '@/lib/utils';
 import { useUserPermissions } from '@/stores/authStore';
 import { usePOSStore } from '@/stores/posStore';
 import { Table } from '@/types';
-import { Clock, DollarSign, MapPin, Plus, Trash2 } from 'lucide-react';
+import { Clock, DollarSign, MapPin, Plus, Trash2, Timer } from 'lucide-react';
 import React, { memo, useCallback, useState } from 'react';
 
 const TableGrid = memo(() => {
@@ -54,6 +54,8 @@ const TableGrid = memo(() => {
   const deleteTable = usePOSStore(state => state.deleteTable);
   const isLoading = usePOSStore(state => state.isLoading);
   const getTableStatus = usePOSStore(state => state.getTableStatus);
+  const tableTab = usePOSStore(state => state.tableTab);
+  const toggleTablePayLater = usePOSStore(state => state.toggleTablePayLater);
 
   const permissions = useUserPermissions();
   const { toast } = useToast();
@@ -173,6 +175,36 @@ const TableGrid = memo(() => {
     [createTable, newTable.name, toast, isCreating]
   );
 
+  const handleTogglePayLater = useCallback(
+    async (tableId: string, e: React.MouseEvent) => {
+      e.stopPropagation(); // Prevent table selection when clicking the button
+      try {
+        await toggleTablePayLater(tableId);
+        toast({
+          title: 'Pay Later Status Updated',
+          description: 'Table has been moved to the other tab',
+        });
+      } catch (error) {
+        posLogger.error('Failed to toggle pay later status:', error);
+        toast({
+          title: 'Update Failed',
+          description: 'Failed to update pay later status',
+          variant: 'destructive',
+        });
+      }
+    },
+    [toggleTablePayLater, toast]
+  );
+
+  // Filter tables based on the current tab
+  const filteredTables = tables.filter(table => {
+    if (tableTab === 'NOT_PAID') {
+      return table.isPayLater === true;
+    } else {
+      return table.isPayLater !== true; // Show tables that are false or undefined in DINE_IN tab
+    }
+  });
+
   if (isLoading) {
     return (
       <div className='flex h-64 items-center justify-center'>
@@ -244,12 +276,12 @@ const TableGrid = memo(() => {
       <div className='flex items-center justify-between'>
         <div className='flex items-center space-x-2'>
           <span className='text-sm text-gray-600 dark:text-gray-400'>
-            {tables.length} {tables.length === 1 ? 'table' : 'tables'} total
+            {filteredTables.length} {filteredTables.length === 1 ? 'table' : 'tables'} total
           </span>
-          {tables.filter(t => getTableStatus(t.id) === 'occupied').length >
+          {filteredTables.filter(t => getTableStatus(t.id) === 'occupied').length >
             0 && (
             <Badge variant='outline' className='text-xs'>
-              {tables.filter(t => getTableStatus(t.id) === 'occupied').length}{' '}
+              {filteredTables.filter(t => getTableStatus(t.id) === 'occupied').length}{' '}
               occupied
             </Badge>
           )}
@@ -268,7 +300,7 @@ const TableGrid = memo(() => {
 
       {/* Tables Grid - Responsive grid with better mobile spacing */}
       <div className='grid grid-cols-1 gap-3 xs:grid-cols-2 sm:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 lg:gap-6 xl:grid-cols-5 2xl:grid-cols-6'>
-        {tables.map(table => (
+        {filteredTables.map(table => (
           <Card
             key={table.id}
             className={cn(
@@ -282,7 +314,7 @@ const TableGrid = memo(() => {
             onClick={() => handleTableClick(table)}
           >
             <div className='flex h-full flex-col space-y-3'>
-              {/* Table Header with Name and Delete Button */}
+              {/* Table Header with Name and Action Buttons */}
               <div className='flex items-start justify-between'>
                 <div className='min-w-0 flex-1 pr-2'>
                   <h3 className='break-words text-sm font-bold leading-tight text-gray-900 dark:text-white sm:text-base'>
@@ -290,8 +322,27 @@ const TableGrid = memo(() => {
                   </h3>
                 </div>
 
-                {/* Delete button - show for all tables if user has permissions */}
-                {(permissions.isAdmin || permissions.isManager) && (
+                <div className='flex items-center gap-1'>
+                  {/* Pay Later toggle button */}
+                  {(permissions.isAdmin || permissions.isManager) && (
+                    <Button
+                      variant='ghost'
+                      size='icon'
+                      className={cn(
+                        'h-8 w-8 flex-shrink-0',
+                        table.isPayLater
+                          ? 'text-amber-600 hover:bg-amber-50 hover:text-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/20 dark:hover:text-amber-300'
+                          : 'text-gray-400 hover:bg-blue-50 hover:text-blue-600 dark:text-gray-500 dark:hover:bg-blue-950/20 dark:hover:text-blue-400'
+                      )}
+                      onClick={(e) => handleTogglePayLater(table.id, e)}
+                      title={table.isPayLater ? 'Move to Dine In tab' : 'Move to Not Paid tab'}
+                    >
+                      <Timer className='h-4 w-4' />
+                    </Button>
+                  )}
+
+                  {/* Delete button - show for all tables if user has permissions */}
+                  {(permissions.isAdmin || permissions.isManager) && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button
@@ -362,7 +413,8 @@ const TableGrid = memo(() => {
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
-                )}
+                  )}
+                </div>
               </div>
 
               {/* Status Badge */}
@@ -421,7 +473,7 @@ const TableGrid = memo(() => {
       </div>
 
       {/* Empty State */}
-      {tables.length === 0 && (
+      {filteredTables.length === 0 && (
         <div className='py-12 text-center sm:py-16'>
           <div className='mb-6 text-gray-500 dark:text-gray-400'>
             <MapPin className='mx-auto mb-4 h-16 w-16 text-gray-300 dark:text-gray-600' />

@@ -1144,7 +1144,7 @@ const ExpenseForm = memo(
                 >
                   <div className='space-y-4'>
                     <div className='flex items-center justify-between'>
-                      <Label className='text-base font-semibold'>
+                      <Label className='text-base font-semibold dark:text-white'>
                         Stock Items
                       </Label>
                       <Button
@@ -1165,7 +1165,7 @@ const ExpenseForm = memo(
                       >
                         <div className='flex items-center justify-between'>
                           <div className='flex items-center gap-4'>
-                            <Label className='text-sm font-medium'>
+                            <Label className='text-sm font-medium dark:text-white'>
                               Item #{index + 1}
                             </Label>
                             <Select
@@ -1233,7 +1233,7 @@ const ExpenseForm = memo(
                         <div className='mb-2 grid grid-cols-2 gap-3'>
                           {/* Category Selection First - Items depend on this */}
                           <div>
-                            <Label className='text-xs'>
+                            <Label className='text-xs dark:text-white'>
                               {item.isExisting
                                 ? 'Item Category'
                                 : 'New Item Category'}
@@ -1326,7 +1326,7 @@ const ExpenseForm = memo(
 
                           {/* Item Selection */}
                           <div>
-                            <Label className='text-xs'>
+                            <Label className='text-xs dark:text-white'>
                               {item.isExisting
                                 ? 'Select Existing Item'
                                 : 'New Item Name'}
@@ -1432,7 +1432,7 @@ const ExpenseForm = memo(
                           </div>
 
                           <div className='space-y-2'>
-                            <Label className='text-xs'>
+                            <Label className='text-xs dark:text-white'>
                               {item.isExisting
                                 ? 'Quantity to Add'
                                 : 'Initial Quantity'}
@@ -1479,7 +1479,7 @@ const ExpenseForm = memo(
                             {/* Show resulting quantity for existing items */}
                             {item.isExisting &&
                               item.currentQuantity !== undefined && (
-                                <div className='flex justify-between pt-1 text-xs text-muted-foreground'>
+                                <div className='flex justify-between pt-1 text-xs text-muted-foreground dark:text-gray-300'>
                                   <span>
                                     Current: {item.currentQuantity} {item.unit}
                                   </span>
@@ -1495,7 +1495,7 @@ const ExpenseForm = memo(
                           </div>
 
                           <div>
-                            <Label className='text-xs'>Unit</Label>
+                            <Label className='text-xs dark:text-white'>Unit</Label>
                             <Controller
                               name={`items.${index}.unit`}
                               control={stockForm.control}
@@ -1528,7 +1528,7 @@ const ExpenseForm = memo(
                           </div>
 
                           <div>
-                            <Label className='text-xs'>Cost per Unit</Label>
+                            <Label className='text-xs dark:text-white'>Cost per Unit</Label>
                             <Controller
                               name={`items.${index}.costPerUnit`}
                               control={stockForm.control}
@@ -1559,7 +1559,7 @@ const ExpenseForm = memo(
                           </div>
                         </div>
 
-                        <div className='text-right text-sm text-gray-600'>
+                        <div className='text-right text-sm text-gray-600 dark:text-gray-300'>
                           Subtotal:{' '}
                           {formatCurrency(item.quantity * item.costPerUnit)}
                         </div>

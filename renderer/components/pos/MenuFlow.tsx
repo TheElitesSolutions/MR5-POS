@@ -58,13 +58,34 @@ const MenuFlow = ({
   // Track previous view mode to detect transitions
   const [previousViewMode, setPreviousViewMode] = useState<string>(viewMode);
 
+  // Data from new service layer - automatically cached and deduplicated
+  // ✅ FIX: Fetch ALL available items (no pagination) for POS filtering to work correctly
+  // MUST be declared BEFORE useEffect hooks that use refetch
+  const {
+    menuItems,
+    categories,
+    isLoading: menuLoading,
+    error: menuError,
+    refetch,
+  } = useAvailableMenuItems({
+    search: '',
+    category: '',
+    page: 1,
+    pageSize: 1000, // Large number to get all items (POS needs all for category filtering)
+  });
+
   // Clear stale cache when POS MenuFlow mounts to ensure fresh data
   useEffect(() => {
     const menuService = getMenuService();
-    menuService.refreshMenuData().catch(() => {
-      // Silent fail - cache refresh is not critical
-    });
-  }, []);
+    menuService.refreshMenuData()
+      .then(() => {
+        // After cache is refreshed, refetch the menu data
+        refetch();
+      })
+      .catch(() => {
+        // Silent fail - cache refresh is not critical
+      });
+  }, [refetch]);
 
   // Smart refresh: Update menu data when switching from menu back to categories/tables view
   // This ensures category counts reflect any availability changes from order operations
@@ -73,28 +94,19 @@ const MenuFlow = ({
     if (previousViewMode === 'menu' && viewMode === 'tables') {
       console.log('🔄 MenuFlow: Detected return to categories, refreshing menu data');
       const menuService = getMenuService();
-      menuService.refreshMenuData().catch((error) => {
-        console.warn('⚠️ MenuFlow: Failed to refresh menu data:', error);
-        // Silent fail - not critical for operation
-      });
+      menuService.refreshMenuData()
+        .then(() => {
+          // After cache is refreshed, refetch the menu data
+          refetch();
+        })
+        .catch((error) => {
+          console.warn('⚠️ MenuFlow: Failed to refresh menu data:', error);
+          // Silent fail - not critical for operation
+        });
     }
     // Update previous view mode for next comparison
     setPreviousViewMode(viewMode);
-  }, [viewMode, previousViewMode]);
-
-  // Data from new service layer - automatically cached and deduplicated
-  // ✅ FIX: Fetch ALL available items (no pagination) for POS filtering to work correctly
-  const {
-    menuItems,
-    categories,
-    isLoading: menuLoading,
-    error: menuError,
-  } = useAvailableMenuItems({
-    search: '',
-    category: '',
-    page: 1,
-    pageSize: 1000, // Large number to get all items (POS needs all for category filtering)
-  });
+  }, [viewMode, previousViewMode, refetch]);
 
   // Use shared stock data with memoization to prevent unnecessary rerenders
   const {
@@ -380,26 +392,63 @@ const MenuFlow = ({
             // Handle both string and object category formats
             const categoryName =
               typeof category === 'string' ? category : (category as any).name;
+            const categoryColor =
+              typeof category === 'string' ? undefined : (category as any).color;
             const count = getCategoryCount(categoryName);
             return (
               <Card
                 key={
                   typeof category === 'string' ? category : (category as any).id
                 }
-                className='cursor-pointer touch-manipulation shadow-sm transition-all hover:bg-white hover:shadow-md'
+                className={cn(
+                  'cursor-pointer touch-manipulation shadow-sm transition-all hover:shadow-md overflow-hidden',
+                  !categoryColor && 'bg-white dark:bg-gray-800'
+                )}
+                style={
+                  categoryColor
+                    ? {
+                        backgroundColor: `${categoryColor} !important`,
+                        borderColor: categoryColor,
+                      }
+                    : undefined
+                }
                 onClick={() => handleCategorySelect(categoryName)}
               >
-                <CardContent className='p-6'>
+                <CardContent
+                  className='p-6'
+                  style={
+                    categoryColor
+                      ? { backgroundColor: categoryColor }
+                      : undefined
+                  }
+                >
                   <div className='flex items-center justify-between'>
                     <div>
-                      <h3 className='mb-1 text-lg font-medium'>
+                      <h3
+                        className={cn(
+                          'mb-1 text-lg font-medium',
+                          categoryColor ? 'text-white' : ''
+                        )}
+                      >
                         {categoryName}
                       </h3>
-                      <p className='text-sm text-gray-600 dark:text-gray-400'>
+                      <p
+                        className={cn(
+                          'text-sm',
+                          categoryColor
+                            ? 'text-white/90'
+                            : 'text-gray-600 dark:text-gray-400'
+                        )}
+                      >
                         {count} items available
                       </p>
                     </div>
-                    <ChefHat className='h-6 w-6 text-blue-600' />
+                    <ChefHat
+                      className={cn(
+                        'h-6 w-6',
+                        categoryColor ? 'text-white' : 'text-blue-600'
+                      )}
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -726,29 +775,55 @@ const ItemCard = React.memo(
       onItemSelect(item, 1); // Always default to quantity 1, customization happens in the next step
     }, [item, onItemSelect]);
 
+    const itemColor = item.color;
+
     return (
       <Card
-        className='cursor-pointer touch-manipulation border-2 shadow-sm transition-all hover:border-blue-300 hover:bg-white hover:shadow-md active:scale-95'
+        className='cursor-pointer touch-manipulation border-2 shadow-sm transition-all hover:shadow-md active:scale-95 overflow-hidden'
+        style={{
+          backgroundColor: itemColor || undefined,
+          borderColor: itemColor || undefined,
+        }}
         onClick={handleItemClick}
       >
-        <CardContent className='p-4'>
+        <CardContent
+          className='p-4'
+          style={{
+            backgroundColor: itemColor || undefined,
+          }}
+        >
           <div className='space-y-3'>
             {/* Item Header */}
             <div className='flex items-start justify-between'>
-              <h4 className='font-medium'>{item.name}</h4>
-              <Badge variant='outline' className='text-sm'>
+              <h4 className={cn('font-medium', itemColor ? 'text-white' : '')}>
+                {item.name}
+              </h4>
+              <Badge
+                variant='outline'
+                className={cn('text-sm', itemColor ? 'border-white text-white' : '')}
+              >
                 ${item.price.toFixed(2)}
               </Badge>
             </div>
 
             {/* Description */}
-            <p className='line-clamp-2 text-sm text-gray-600 dark:text-gray-400'>
+            <p
+              className={cn(
+                'line-clamp-2 text-sm',
+                itemColor ? 'text-white/90' : 'text-gray-600 dark:text-gray-400'
+              )}
+            >
               {item.description || 'No description available'}
             </p>
 
             {/* Ingredients Preview */}
             {item.ingredients && item.ingredients.length > 0 && (
-              <div className='text-xs text-gray-500'>
+              <div
+                className={cn(
+                  'text-xs',
+                  itemColor ? 'text-white/80' : 'text-gray-500'
+                )}
+              >
                 Ingredients:{' '}
                 {item.ingredients
                   .slice(0, 3)
@@ -763,8 +838,20 @@ const ItemCard = React.memo(
             )}
 
             {/* Simple Click to Select */}
-            <div className='border-t border-gray-200 pt-3 text-center dark:border-gray-700'>
-              <span className='text-sm text-gray-600 dark:text-gray-400'>
+            <div
+              className={cn(
+                'border-t pt-3 text-center',
+                itemColor
+                  ? 'border-white/30'
+                  : 'border-gray-200 dark:border-gray-700'
+              )}
+            >
+              <span
+                className={cn(
+                  'text-sm',
+                  itemColor ? 'text-white/90' : 'text-gray-600 dark:text-gray-400'
+                )}
+              >
                 {!item.ingredients || item.ingredients.length <= 1
                   ? 'Click to add'
                   : 'Click to customize and add'}

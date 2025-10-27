@@ -64,6 +64,7 @@ export class TableModel {
       id: table.id,
       name: table.name,
       status: validStatus,
+      isPayLater: Boolean(table.isPayLater),
       // Remove isActive field
       // Only include properties defined in the Table interface
       createdAt: table.createdAt instanceof Date ? table.createdAt : new Date(table.createdAt),
@@ -224,6 +225,7 @@ export class TableModel {
   async createTable(tableData: {
     name: string;
     status?: TableStatus;
+    isPayLater?: boolean;
   }): Promise<IPCResponse<Table>> {
     try {
       // Check if table name already exists
@@ -243,6 +245,7 @@ export class TableModel {
         data: {
           name: tableData.name,
           status: tableData.status || TableStatus.AVAILABLE,
+          isPayLater: tableData.isPayLater ? 1 : 0,
         },
       });
 
@@ -337,6 +340,7 @@ export class TableModel {
     updateData: {
       name?: string;
       status?: TableStatus;
+      isPayLater?: boolean;
       // Remove isActive field
     }
   ): Promise<IPCResponse<Table>> {
@@ -359,9 +363,15 @@ export class TableModel {
         }
       }
 
+      // Convert boolean to integer for SQLite
+      const dataToUpdate: any = { ...updateData };
+      if (dataToUpdate.isPayLater !== undefined) {
+        dataToUpdate.isPayLater = dataToUpdate.isPayLater ? 1 : 0;
+      }
+
       const table = await this.prisma.table.update({
         where: { id },
-        data: updateData,
+        data: dataToUpdate,
         include: {
           orders: {
             where: {
@@ -552,6 +562,76 @@ export class TableModel {
           error instanceof Error
             ? error.message
             : 'Failed to retrieve table statistics',
+        timestamp: getCurrentLocalDateTime(),
+      };
+    }
+  }
+
+  /**
+   * Toggle the isPayLater field for a table
+   */
+  async togglePayLater(id: string): Promise<IPCResponse<Table>> {
+    try {
+      // Get current table state
+      const currentTable = await this.prisma.table.findUnique({
+        where: { id },
+      });
+
+      if (!currentTable) {
+        return {
+          success: false,
+          error: 'Table not found',
+          timestamp: getCurrentLocalDateTime(),
+        };
+      }
+
+      // Toggle the isPayLater field
+      const newPayLaterValue = currentTable.isPayLater ? 0 : 1;
+
+      const table = await this.prisma.table.update({
+        where: { id },
+        data: {
+          isPayLater: newPayLaterValue,
+          updatedAt: getCurrentLocalDateTime(),
+        },
+        include: {
+          orders: {
+            where: {
+              status: {
+                in: ['PENDING', 'PREPARING', 'READY'],
+              },
+            },
+            orderBy: {
+              createdAt: 'desc',
+            },
+            take: 1,
+          },
+        },
+      });
+
+      logger.info(
+        'Table pay later status toggled',
+        `tableId: ${id}, newValue: ${newPayLaterValue}`
+      );
+
+      return {
+        success: true,
+        data: this.mapPrismaTable(table),
+        timestamp: getCurrentLocalDateTime(),
+      };
+    } catch (error) {
+      logger.error(
+        `Failed to toggle pay later status for table ${id}: ${
+          error instanceof Error ? error.message : error
+        }`,
+        'TableModel'
+      );
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to toggle pay later status',
         timestamp: getCurrentLocalDateTime(),
       };
     }

@@ -12,6 +12,7 @@
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ColorPicker } from '@/components/ui/color-picker';
 import {
   Form,
   FormControl,
@@ -85,6 +86,7 @@ const formSchema = z.object({
     .string()
     .min(1, 'Category is required')
     .max(50, 'Category name too long'),
+  color: z.string().optional().nullable(),
   // Accept both boolean and number (SQLite stores booleans as 0/1)
   isAvailable: z.union([z.boolean(), z.number()]).transform(val => {
     if (typeof val === 'number') return val !== 0;
@@ -151,6 +153,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
       description: '',
       price: undefined as any, // Will be set by user input, no invalid default
       category: defaultCategory || (categories && categories.length > 0 ? categories[0].id : 'default'),
+      color: undefined,
       isAvailable: true,
       isActive: true,
       isCustomizable: false, // ✅ NEW: Default value for isCustomizable
@@ -246,6 +249,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
         category: editingItem.category,
         categoryId: editingItem.categoryId,
         price: editingItem.price,
+        color: (editingItem as any).color,
         isCustomizable: (editingItem as any).isCustomizable,
       });
 
@@ -270,11 +274,18 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
         }
       }
 
+      const colorValue = (editingItem as any).color || undefined;
+      console.log('🎨 Setting color in form:', {
+        rawColor: (editingItem as any).color,
+        finalColor: colorValue
+      });
+
       form.reset({
         name: editingItem.name,
         description: editingItem.description || '',
         price: editingItem.price,
         category: categoryValue, // Use the resolved category ID
+        color: colorValue,
         isAvailable: editingItem.isAvailable,
         isActive: true, // Default value as it's not in the MenuItem type
         isCustomizable: (editingItem as any).isCustomizable || false, // ✅ NEW: Load isCustomizable value
@@ -286,6 +297,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
         name: editingItem.name,
         category: categoryValue,
         price: editingItem.price,
+        color: colorValue,
         ingredientsCount: ingredients.length,
       });
     } else {
@@ -296,6 +308,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
         description: '',
         price: undefined as any,
         category: defaultCategory || (categories && categories.length > 0 ? categories[0].id : 'default'),
+        color: undefined,
         isAvailable: true,
         isActive: true,
         isCustomizable: false,
@@ -358,6 +371,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
             : parseFloat(data.price as any) || 0,
         category:
           data.category || (categories.length > 0 ? categories[0] : 'default'),
+        color: data.color || undefined,
         isAvailable: !!data.isAvailable,
         isActive: !!data.isActive,
         isCustomizable: !!data.isCustomizable, // ✅ NEW: Include isCustomizable in formatted data
@@ -442,6 +456,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
         price: data.price,
         categoryId: data.category, // Send category ID from the form
         category: data.category, // Also send for backwards compatibility
+        color: data.color || undefined,
         isAvailable: data.isAvailable,
         isCustomizable: data.isCustomizable,
         isPrintableInKitchen: data.isPrintableInKitchen !== undefined ? data.isPrintableInKitchen : true, // Default to true
@@ -764,6 +779,27 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
                 )}
               />
             </div>
+
+            {/* Color Selection */}
+            <FormField
+              control={form.control}
+              name='color'
+              render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <ColorPicker
+                      value={field.value || undefined}
+                      onChange={field.onChange}
+                      label='Item Color (Optional)'
+                    />
+                  </FormControl>
+                  <FormDescription>
+                    Choose a custom color for this menu item or leave unset for default.
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </CardContent>
         </Card>
 

@@ -191,72 +191,72 @@ const ProfitReports = () => {
           <div className='overflow-x-auto'>
             <table className='w-full text-sm'>
               <thead>
-                <tr className='border-b bg-gray-50'>
-                  <th className='p-2 text-left font-semibold'>Time</th>
-                  <th className='p-2 text-left font-semibold'>Type</th>
-                  <th className='p-2 text-left font-semibold'>Description</th>
-                  <th className='p-2 text-left font-semibold'>Category</th>
-                  <th className='p-2 text-right font-semibold'>Amount</th>
-                  <th className='p-2 text-left font-semibold'>Notes</th>
+                <tr className='border-b bg-gray-50 dark:bg-gray-800'>
+                  <th className='p-2 text-left font-semibold dark:text-white'>Time</th>
+                  <th className='p-2 text-left font-semibold dark:text-white'>Type</th>
+                  <th className='p-2 text-left font-semibold dark:text-white'>Description</th>
+                  <th className='p-2 text-left font-semibold dark:text-white'>Category</th>
+                  <th className='p-2 text-right font-semibold dark:text-white'>Amount</th>
+                  <th className='p-2 text-left font-semibold dark:text-white'>Notes</th>
                 </tr>
               </thead>
               <tbody>
                 {profitReport.operations.map((operation, index) => (
                   <tr
                     key={index}
-                    className={`border-b hover:bg-gray-50 ${operation.type === 'expense' ? 'bg-red-50/30' : ''}`}
+                    className={`border-b hover:bg-gray-50 dark:hover:bg-gray-800 ${operation.type === 'expense' ? 'bg-red-50/30 dark:bg-red-900/10' : ''}`}
                   >
-                    <td className='p-2'>{formatDateTime(operation.timestamp)}</td>
+                    <td className='p-2 dark:text-gray-200'>{formatDateTime(operation.timestamp)}</td>
                     <td className='p-2'>
                       <span className={`inline-block rounded px-2 py-1 text-xs font-semibold ${
                         operation.type === 'order'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
+                          ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
                       }`}>
                         {operation.type === 'order' ? 'Order' : 'Expense'}
                       </span>
                     </td>
-                    <td className='p-2 font-medium'>{operation.description}</td>
-                    <td className='p-2'>{operation.category}</td>
+                    <td className='p-2 font-medium dark:text-gray-200'>{operation.description}</td>
+                    <td className='p-2 dark:text-gray-200'>{operation.category}</td>
                     <td className={`p-2 text-right font-semibold ${
-                      operation.type === 'order' ? 'text-green-600' : 'text-red-600'
+                      operation.type === 'order' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                     }`}>
                       {operation.type === 'order' ? '+' : '-'}{formatCurrency(Math.abs(operation.amount))}
                     </td>
-                    <td className='p-2 text-gray-600'>{operation.notes || '-'}</td>
+                    <td className='p-2 text-gray-600 dark:text-gray-400'>{operation.notes || '-'}</td>
                   </tr>
                 ))}
               </tbody>
-              <tfoot className='border-t-2 bg-gray-50 font-semibold'>
+              <tfoot className='border-t-2 bg-gray-50 dark:bg-gray-800 font-semibold'>
                 <tr>
-                  <td colSpan={4} className='p-3 text-right'>Total Income (Orders):</td>
-                  <td className='p-3 text-right text-green-600 text-base'>
+                  <td colSpan={4} className='p-3 text-right dark:text-gray-200'>Total Income (Orders):</td>
+                  <td className='p-3 text-right text-green-600 dark:text-green-400 text-base'>
                     {formatCurrency(profitReport.totalRevenue)}
                   </td>
                   <td></td>
                 </tr>
                 <tr>
-                  <td colSpan={4} className='p-3 text-right'>Total Expenses:</td>
-                  <td className='p-3 text-right text-red-600 text-base'>
+                  <td colSpan={4} className='p-3 text-right dark:text-gray-200'>Total Expenses:</td>
+                  <td className='p-3 text-right text-red-600 dark:text-red-400 text-base'>
                     -{formatCurrency(profitReport.totalExpenses)}
                   </td>
                   <td></td>
                 </tr>
                 <tr>
-                  <td colSpan={4} className='p-3 text-right'>Total Food Cost:</td>
-                  <td className='p-3 text-right text-orange-600 text-base'>
+                  <td colSpan={4} className='p-3 text-right dark:text-gray-200'>Total Food Cost:</td>
+                  <td className='p-3 text-right text-orange-600 dark:text-orange-400 text-base'>
                     -{formatCurrency(profitReport.totalFoodCost)}
                   </td>
                   <td></td>
                 </tr>
                 <tr className='border-t-2'>
-                  <td colSpan={4} className='p-3 text-right text-lg'>Net Profit:</td>
+                  <td colSpan={4} className='p-3 text-right text-lg dark:text-gray-200'>Net Profit:</td>
                   <td className={`p-3 text-right text-lg font-bold ${
-                    profitReport.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'
+                    profitReport.grossProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                   }`}>
                     {formatCurrency(profitReport.grossProfit)}
                   </td>
-                  <td className='p-3 text-sm text-gray-600'>
+                  <td className='p-3 text-sm text-gray-600 dark:text-gray-400'>
                     ({formatPercent(profitReport.profitMargin)} margin)
                   </td>
                 </tr>
@@ -270,4 +270,3 @@ const ProfitReports = () => {
 };
 
 export default ProfitReports;
-

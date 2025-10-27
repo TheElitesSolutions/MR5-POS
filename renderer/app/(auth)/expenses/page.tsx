@@ -173,7 +173,7 @@ export default function ExpensesPage() {
           <div className='flex items-center justify-between'>
             <div>
               <h1 className='text-xl font-bold text-gray-900 dark:text-white'>
-                Expenses
+                Expenses Management
               </h1>
               <p className='text-sm text-gray-600 dark:text-gray-400'>
                 Manage restaurant expenses and approvals
@@ -269,39 +269,39 @@ export default function ExpensesPage() {
                 <CardContent className='p-0'>
                   <div className='overflow-x-auto'>
                     <table className='w-full'>
-                      <thead className='border-b bg-gray-50'>
+                      <thead className='border-b bg-gray-50 dark:bg-gray-800'>
                         <tr>
-                          <th className='px-6 py-4 text-left text-sm font-medium text-gray-900'>
+                          <th className='px-6 py-4 text-left text-sm font-medium text-gray-900 dark:text-white'>
                             Title & Description
                           </th>
-                          <th className='px-6 py-4 text-left text-sm font-medium text-gray-900'>
+                          <th className='px-6 py-4 text-left text-sm font-medium text-gray-900 dark:text-white'>
                             Amount
                           </th>
-                          <th className='px-6 py-4 text-left text-sm font-medium text-gray-900'>
+                          <th className='px-6 py-4 text-left text-sm font-medium text-gray-900 dark:text-white'>
                             Category
                           </th>
-                          <th className='px-6 py-4 text-left text-sm font-medium text-gray-900'>
+                          <th className='px-6 py-4 text-left text-sm font-medium text-gray-900 dark:text-white'>
                             Date
                           </th>
-                          <th className='px-6 py-4 text-right text-sm font-medium text-gray-900'>
+                          <th className='px-6 py-4 text-right text-sm font-medium text-gray-900 dark:text-white'>
                             Actions
                           </th>
                         </tr>
                       </thead>
-                      <tbody className='divide-y divide-gray-200'>
+                      <tbody className='divide-y divide-gray-200 dark:divide-gray-700'>
                         {expenses.map((expense: Expense) => (
                           <tr
                             key={expense.id}
-                            className='transition-colors hover:bg-gray-50'
+                            className='transition-colors hover:bg-gray-50 dark:hover:bg-gray-800'
                           >
                             {/* Title & Description */}
                             <td className='px-6 py-4'>
                               <div className='space-y-1'>
-                                <div className='text-sm font-semibold text-gray-900'>
+                                <div className='text-sm font-semibold text-gray-900 dark:text-white'>
                                   {expense.title}
                                 </div>
                                 {expense.description && (
-                                  <div className='max-w-xs truncate text-sm text-gray-600'>
+                                  <div className='max-w-xs truncate text-sm text-gray-600 dark:text-gray-400'>
                                     {expense.description}
                                   </div>
                                 )}
@@ -312,7 +312,7 @@ export default function ExpensesPage() {
                             <td className='px-6 py-4'>
                               <div className='flex items-center gap-1'>
                                 <DollarSign className='h-4 w-4 text-green-600' />
-                                <span className='text-sm font-semibold text-gray-900'>
+                                <span className='text-sm font-semibold text-gray-900 dark:text-white'>
                                   {formatCurrency(expense.amount)}
                                 </span>
                               </div>
@@ -320,7 +320,7 @@ export default function ExpensesPage() {
 
                             {/* Category */}
                             <td className='px-6 py-4'>
-                              <span className='text-sm text-gray-900'>
+                              <span className='text-sm text-gray-900 dark:text-white'>
                                 {expense.category.replace(/_/g, ' ')}
                               </span>
                             </td>
@@ -328,8 +328,8 @@ export default function ExpensesPage() {
                             {/* Date */}
                             <td className='px-6 py-4'>
                               <div className='flex items-center gap-2'>
-                                <Calendar className='h-4 w-4 text-gray-400' />
-                                <span className='text-sm text-gray-900'>
+                                <Calendar className='h-4 w-4 text-gray-400 dark:text-gray-600' />
+                                <span className='text-sm text-gray-900 dark:text-white'>
                                   {formatDate(expense.createdAt)}
                                 </span>
                               </div>
@@ -400,11 +400,11 @@ export default function ExpensesPage() {
                     {/* Empty State */}
                     {expenses.length === 0 && (
                       <div className='flex flex-col items-center justify-center py-12'>
-                        <DollarSign className='mb-4 h-12 w-12 text-gray-400' />
-                        <h3 className='mb-2 text-lg font-medium text-gray-900'>
+                        <DollarSign className='mb-4 h-12 w-12 text-gray-400 dark:text-gray-600' />
+                        <h3 className='mb-2 text-lg font-medium text-gray-900 dark:text-white'>
                           No expenses found
                         </h3>
-                        <p className='mb-4 text-gray-600'>
+                        <p className='mb-4 text-gray-600 dark:text-gray-400'>
                           Get started by adding your first expense.
                         </p>
                         <Button

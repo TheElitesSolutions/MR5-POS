@@ -150,7 +150,7 @@ const OrderCard = memo(
                   <Truck className='h-4 w-4 text-blue-600' />
                 )}
                 <h3 className='truncate text-sm font-bold text-gray-900 dark:text-white'>
-                  {order.customerName || 'Guest'}
+                  {order.customerName || 'Walk-in Customer'}
                 </h3>
               </div>
               <p className='text-xs text-gray-500'>#{order.orderNumber}</p>

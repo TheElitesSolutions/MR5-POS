@@ -202,8 +202,8 @@ export function MenuSyncSettings() {
         <div className='flex items-center gap-3'>
           <Globe className='h-6 w-6 text-blue-600' />
           <div>
-            <h3 className='text-lg font-semibold text-gray-900'>
-              Menu Website Sync
+            <h3 className='text-lg font-semibold text-gray-900 dark:text-white'>
+              Menu Synchronization
             </h3>
             <p className='text-sm text-gray-500'>
               Sync active menu items to your public website
@@ -252,8 +252,8 @@ export function MenuSyncSettings() {
       {/* Last Sync Status */}
       <div className='space-y-3 rounded-lg border border-gray-200 bg-gray-50 p-4'>
         <div className='flex items-center justify-between'>
-          <span className='text-sm font-medium text-gray-700'>
-            Last Sync Status
+          <span className='text-sm font-medium text-gray-700 dark:text-white'>
+            Sync Status
           </span>
           <span
             className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium ${
@@ -290,7 +290,7 @@ export function MenuSyncSettings() {
       <div className='space-y-4'>
         <div className='flex items-center justify-between'>
           <div>
-            <h4 className='text-sm font-medium text-gray-900'>
+            <h4 className='text-sm font-medium text-gray-900 dark:text-white'>
               Automatic Sync
             </h4>
             <p className='text-xs text-gray-500'>
@@ -311,7 +311,7 @@ export function MenuSyncSettings() {
         {/* Sync Interval Selector */}
         {autoSyncEnabled && (
           <div className='space-y-2'>
-            <label className='text-sm font-medium text-gray-700'>
+            <label className='text-sm font-medium text-gray-700 dark:text-white'>
               Sync Interval
             </label>
             <select
