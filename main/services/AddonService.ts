@@ -436,6 +436,7 @@ export class AddonService {
             description: validatedData.description,
             imageUrl: validatedData.imageUrl,
             isActive: validatedData.isActive ?? true,
+            isPrintableInKitchen: validatedData.isPrintableInKitchen ?? true,
             sortOrder: validatedData.sortOrder ?? 0,
           },
         });
@@ -626,7 +627,10 @@ export class AddonService {
     data: UpdateAddonData
   ): Promise<ServiceResponse<AddonData>> {
     try {
-      const validatedData = UpdateAddonSchema.parse(data);
+      // ✅ FIX: Data is already validated by controller, no need to re-validate
+      // Controller validated with UpdateAddonSchema (including id), then extracted id
+      // So data here is the validated update data without id
+      const validatedData = data;
 
       // Check if add-on exists
       const existingAddon = await this.prisma.addon.findUnique({

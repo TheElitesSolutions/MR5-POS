@@ -188,6 +188,23 @@ export async function generateSimpleKitchenTicket(
 }
 
 /**
+ * Check if an item should be printed in kitchen tickets
+ * Returns true if isPrintableInKitchen is true or undefined (backward compatibility)
+ */
+function isItemPrintable(item: any): boolean {
+  // Check item.menuItem.isPrintableInKitchen first (joined data)
+  if (item.menuItem?.isPrintableInKitchen !== undefined) {
+    return item.menuItem.isPrintableInKitchen === true || item.menuItem.isPrintableInKitchen === 1;
+  }
+  // Check item.isPrintableInKitchen (direct property)
+  if (item.isPrintableInKitchen !== undefined) {
+    return item.isPrintableInKitchen === true || item.isPrintableInKitchen === 1;
+  }
+  // Default to true for backward compatibility (existing items without this field)
+  return true;
+}
+
+/**
  * Parse notes field to extract customizations and regular notes
  * Format: "remove: ingredient1 - ingredient2" for removed ingredients
  * Format: "customization1, customization2" for other customizations
@@ -365,8 +382,11 @@ function generateRemovalTicket(order: any, cancelledItems: any[]): string {
     }
   );
 
+  // Filter cancelled items to only include those that should be printed in kitchen
+  const printableCancelledItems = cancelledItems.filter(isItemPrintable);
+
   // Process each removed item
-  cancelledItems.forEach((item: any, index: number) => {
+  printableCancelledItems.forEach((item: any, index: number) => {
     // CRITICAL FIX: Ensure we get the actual menu item name from the relation
     const name =
       (item.menuItem && item.menuItem.name) || // Try menuItem relation first
@@ -454,7 +474,7 @@ function generateRemovalTicket(order: any, cancelledItems: any[]): string {
   });
 
   console.log(
-    `REMOVAL TICKET GENERATED: ${cancelledItems.length} items removed`
+    `REMOVAL TICKET GENERATED: ${printableCancelledItems.length} printable items removed (${cancelledItems.length} total)`
   );
   return JSON.stringify(printData);
 }
@@ -668,8 +688,11 @@ async function generateUpdateTicket(
     style: { fontSize: '12px', fontFamily: 'monospace', textAlign: 'center' },
   });
 
+  // Filter matching items to only include those that should be printed in kitchen
+  const printableMatchingItems = matchingItems.filter(isItemPrintable);
+
   // Process matched items
-  matchingItems.forEach((item: any, index: number) => {
+  printableMatchingItems.forEach((item: any, index: number) => {
     // CRITICAL FIX: Ensure we get the actual menu item name from the relation
     const name =
       (item.menuItem && item.menuItem.name) || // Try menuItem relation first
@@ -762,7 +785,7 @@ async function generateUpdateTicket(
   });
 
   console.log(
-    `✅ UPDATE TICKET GENERATED: ${matchingItems.length} items updated`
+    `✅ UPDATE TICKET GENERATED: ${printableMatchingItems.length} printable items updated (${matchingItems.length} total matching)`
   );
   return JSON.stringify(printData);
 }
@@ -981,8 +1004,11 @@ function generateStandardTicket(order: any, onlyUnprinted: boolean): string {
     style: { fontSize: '12px', fontFamily: 'monospace', textAlign: 'center' },
   });
 
+  // Filter items to only include those that should be printed in kitchen
+  const printableItems = itemsToProcess.filter(isItemPrintable);
+
   // Process all items
-  if (itemsToProcess.length === 0) {
+  if (printableItems.length === 0) {
     printData.push({
       type: 'text',
       value: 'No items to display',
@@ -994,7 +1020,7 @@ function generateStandardTicket(order: any, onlyUnprinted: boolean): string {
       },
     });
   } else {
-    itemsToProcess.forEach((item: any, index: number) => {
+    printableItems.forEach((item: any, index: number) => {
       // CRITICAL FIX: Ensure we get the actual menu item name from the relation
       const name =
         (item.menuItem && item.menuItem.name) || // Try menuItem relation first
@@ -1102,7 +1128,7 @@ function generateStandardTicket(order: any, onlyUnprinted: boolean): string {
   });
 
   console.log(
-    `✅ STANDARD TICKET GENERATED: ${itemsToProcess.length} items processed`
+    `✅ STANDARD TICKET GENERATED: ${printableItems.length} printable items (${itemsToProcess.length} total items)`
   );
   return JSON.stringify(printData);
 }

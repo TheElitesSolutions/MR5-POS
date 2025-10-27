@@ -98,6 +98,10 @@ const formSchema = z.object({
     if (typeof val === 'number') return val !== 0;
     return val;
   }).pipe(z.boolean()).default(false),
+  isPrintableInKitchen: z.union([z.boolean(), z.number()]).transform(val => {
+    if (typeof val === 'number') return val !== 0;
+    return val;
+  }).pipe(z.boolean()).default(true),
   ingredients: z.array(ingredientSchema).default([]),
 });
 
@@ -150,6 +154,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
       isAvailable: true,
       isActive: true,
       isCustomizable: false, // ✅ NEW: Default value for isCustomizable
+      isPrintableInKitchen: true, // Default: print in kitchen tickets
       ingredients: [],
     },
     mode: 'onChange', // Validate fields as they change
@@ -273,6 +278,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
         isAvailable: editingItem.isAvailable,
         isActive: true, // Default value as it's not in the MenuItem type
         isCustomizable: (editingItem as any).isCustomizable || false, // ✅ NEW: Load isCustomizable value
+        isPrintableInKitchen: (editingItem as any).isPrintableInKitchen !== undefined ? (editingItem as any).isPrintableInKitchen : true, // Default to true if not set
         ingredients: ingredients,
       });
 
@@ -293,6 +299,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
         isAvailable: true,
         isActive: true,
         isCustomizable: false,
+        isPrintableInKitchen: true,
         ingredients: [],
       });
     }
@@ -354,6 +361,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
         isAvailable: !!data.isAvailable,
         isActive: !!data.isActive,
         isCustomizable: !!data.isCustomizable, // ✅ NEW: Include isCustomizable in formatted data
+        isPrintableInKitchen: data.isPrintableInKitchen !== undefined ? !!data.isPrintableInKitchen : true, // Default to true
         ingredients: data.ingredients || [],
       };
 
@@ -436,6 +444,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
         category: data.category, // Also send for backwards compatibility
         isAvailable: data.isAvailable,
         isCustomizable: data.isCustomizable,
+        isPrintableInKitchen: data.isPrintableInKitchen !== undefined ? data.isPrintableInKitchen : true, // Default to true
         ingredients: ingredientsList,
       };
 
@@ -1080,6 +1089,31 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
                     <FormDescription>
                       Whether customers can customize this item (ingredients,
                       notes, etc.) regardless of ingredient count.
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {/* Kitchen Ticket Printing Toggle */}
+            <FormField
+              control={form.control}
+              name='isPrintableInKitchen'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
+                  <div className='space-y-0.5'>
+                    <FormLabel className='text-base'>
+                      Print in Kitchen Tickets
+                    </FormLabel>
+                    <FormDescription>
+                      When enabled, this item will appear on kitchen tickets when ordered.
+                      Disable for items that don't require kitchen preparation.
                     </FormDescription>
                   </div>
                   <FormControl>

@@ -37,6 +37,7 @@ export interface Addon {
   description: string | null;
   price: number; // Already converted from Decimal to number by backend
   isActive: boolean;
+  isPrintableInKitchen?: boolean; // Controls whether addon appears on kitchen tickets
   sortOrder: number;
   addonGroupId: string;
   createdAt: string;

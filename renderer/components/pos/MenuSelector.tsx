@@ -41,6 +41,9 @@ const MenuSelector = ({ onClose }: MenuSelectorProps) => {
   // UI state only from POS store
   const { addOrderItem, isLoading: posLoading } = usePOSStore();
 
+  // ✅ FIX: Local loading state to prevent double-clicks and race conditions
+  const [isAddingItem, setIsAddingItem] = useState(false);
+
   // Data from new service layer - automatically cached and deduplicated
   const {
     menuItems,
@@ -235,19 +238,23 @@ const MenuSelector = ({ onClose }: MenuSelectorProps) => {
   };
 
   const handleAddToOrder = async () => {
-    if (!selectedItem) return;
+    // ✅ FIX: Guard against re-entry from double-clicks or rapid clicks
+    if (!selectedItem || isAddingItem) return;
 
-    // Final stock check before adding to order
-    const canProceed = await checkIngredientAvailability(
-      selectedItem.id,
-      quantity
-    );
-
-    if (!canProceed) {
-      return; // Don't proceed if stock is insufficient
-    }
+    // ✅ FIX: Disable immediately to prevent race conditions
+    setIsAddingItem(true);
 
     try {
+      // Final stock check before adding to order
+      const canProceed = await checkIngredientAvailability(
+        selectedItem.id,
+        quantity
+      );
+
+      if (!canProceed) {
+        return; // Don't proceed if stock is insufficient
+      }
+
       await addOrderItem(
         selectedItem.id,
         quantity,
@@ -289,6 +296,9 @@ const MenuSelector = ({ onClose }: MenuSelectorProps) => {
           variant: 'destructive',
         });
       }
+    } finally {
+      // ✅ FIX: Always re-enable button, even if stock check fails or error occurs
+      setIsAddingItem(false);
     }
   };
 
@@ -556,9 +566,9 @@ const MenuSelector = ({ onClose }: MenuSelectorProps) => {
                 <Button
                   onClick={handleAddToOrder}
                   className='w-full'
-                  disabled={isLoading}
+                  disabled={isLoading || isAddingItem}
                 >
-                  {isLoading ? 'Adding...' : 'Add to Order'}
+                  {isLoading || isAddingItem ? 'Adding...' : 'Add to Order'}
                 </Button>
               </div>
             ) : (

@@ -162,6 +162,10 @@ export const CreateMenuItemSchema = z.object({
       if (typeof val === 'number') return val !== 0;
       return val;
     }).pipe(z.boolean()).optional(),
+    isPrintableInKitchen: z.union([z.boolean(), z.number()]).transform(val => {
+      if (typeof val === 'number') return val !== 0;
+      return val;
+    }).pipe(z.boolean()).optional(),
     imageUrl: z.string().url('Invalid image URL').optional(),
     preparationTime: nonNegativeNumberSchema.int().optional(),
     ingredients: z.array(IngredientSchema).optional(), // ✅ ADDED
@@ -189,6 +193,10 @@ export const UpdateMenuItemSchema = z.object({
       return val;
     }).pipe(z.boolean()).optional(),
     isCustomizable: z.union([z.boolean(), z.number()]).transform(val => {
+      if (typeof val === 'number') return val !== 0;
+      return val;
+    }).pipe(z.boolean()).optional(),
+    isPrintableInKitchen: z.union([z.boolean(), z.number()]).transform(val => {
       if (typeof val === 'number') return val !== 0;
       return val;
     }).pipe(z.boolean()).optional(),

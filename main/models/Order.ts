@@ -219,6 +219,8 @@ function mapAppStatusToPrismaStatus(status: OrderStatus): string {
 
 export class OrderModel {
   private tableModel: TableModel;
+  // ✅ FIX: Request deduplication to prevent duplicate items from concurrent requests
+  private pendingAddItemRequests: Map<string, Promise<IPCResponse<OrderItem>>> = new Map();
 
   constructor(private prisma: ExtendedPrismaClient) {
     this.tableModel = new TableModel(prisma);
@@ -239,6 +241,15 @@ export class OrderModel {
       items.map(async (item: any) => {
         const menuItem = await this.prisma.menuItem.findUnique({
           where: { id: item.menuItemId },
+        });
+
+        // ✅ DEBUG: Log what fields are actually returned from database
+        console.log('🔍 [fetchOrderItemsWithRelations] menuItem from DB:', {
+          id: menuItem?.id,
+          name: menuItem?.name,
+          isPrintableInKitchen: menuItem?.isPrintableInKitchen,
+          'typeof isPrintableInKitchen': typeof menuItem?.isPrintableInKitchen,
+          'all keys': menuItem ? Object.keys(menuItem) : 'null',
         });
 
         // Fetch addons for this order item
@@ -421,6 +432,16 @@ export class OrderModel {
             } : undefined,
           } : undefined,
         })) } : {}),
+        // ✅ FIX: Include menuItem object for kitchen ticket filtering
+        menuItem: item.menuItem ? {
+          id: item.menuItem.id,
+          name: item.menuItem.name,
+          isPrintableInKitchen: item.menuItem.isPrintableInKitchen !== undefined
+            ? item.menuItem.isPrintableInKitchen
+            : true, // default to true for backward compatibility
+          price: decimalToNumber(item.menuItem.price || 0),
+          categoryId: item.menuItem.categoryId,
+        } : undefined,
       };
 
       console.log(`🔍 OrderModel.mapPrismaOrderItem: Mapped result for ${item.id}:`, {
@@ -1388,13 +1409,26 @@ export class OrderModel {
       notes?: string;
     }
   ): Promise<IPCResponse<OrderItem>> {
-    try {
-      // FIXED: Use transaction to ensure atomicity between order changes and stock deduction
-      const result = await this.prisma.$transaction(async tx => {
-        // First get the menu item
-        const menuItem = await tx.menuItem.findUnique({
-          where: { id: item.menuItemId },
-        });
+    // ✅ FIX: Request deduplication - create unique key for this request
+    const requestKey = `${orderId}:${item.menuItemId}:${item.notes || 'none'}`;
+
+    // ✅ FIX: If same request is already in progress, return the existing promise
+    const existingRequest = this.pendingAddItemRequests.get(requestKey);
+    if (existingRequest) {
+      logger.info(`🔒 [RACE CONDITION PREVENTED] Duplicate addItem request detected for key: ${requestKey}`);
+      return existingRequest;
+    }
+
+    // ✅ FIX: Create the promise for this request
+    const requestPromise = (async () => {
+      try {
+        // ✅ FIX: Use SERIALIZABLE isolation to prevent race conditions
+        // SQLite uses SERIALIZABLE by default with WAL mode, but we add maxWait/timeout for safety
+        const result = await this.prisma.$transaction(async tx => {
+          // First get the menu item
+          const menuItem = await tx.menuItem.findUnique({
+            where: { id: item.menuItemId },
+          });
 
         if (!menuItem) {
           throw new AppError('Menu item not found', true);
@@ -1567,6 +1601,9 @@ export class OrderModel {
         }
 
         return resultOrderItem;
+      }, {
+        maxWait: 5000, // Maximum time to wait for transaction to start (5 seconds)
+        timeout: 10000, // Maximum time for transaction to complete (10 seconds)
       });
 
       // Recalculate order totals (outside transaction is fine)
@@ -1589,7 +1626,17 @@ export class OrderModel {
             : 'Failed to add item to order',
         timestamp: getCurrentLocalDateTime(),
       };
+    } finally {
+      // ✅ FIX: Always clean up the pending request from the Map
+      this.pendingAddItemRequests.delete(requestKey);
     }
+    })();
+
+    // ✅ FIX: Store the promise in the Map before starting execution
+    this.pendingAddItemRequests.set(requestKey, requestPromise);
+
+    // ✅ FIX: Return the promise (deduplication will return same promise for concurrent requests)
+    return requestPromise;
   }
 
   async removeItem(orderItemId: string): Promise<IPCResponse<boolean>> {
@@ -2135,6 +2182,16 @@ export function mapPrismaOrderItemToDTO(prismaOrderItem: any): any {
     status: mapPrismaOrderItemStatusToAppOrderItemStatus(orderItem.status),
     createdAt: toISOString(orderItem.createdAt),
     updatedAt: toISOString(orderItem.updatedAt),
+    // ✅ FIX: Include menuItem object for kitchen ticket filtering
+    menuItem: orderItem.menuItem ? {
+      id: orderItem.menuItem.id,
+      name: orderItem.menuItem.name,
+      isPrintableInKitchen: orderItem.menuItem.isPrintableInKitchen !== undefined
+        ? orderItem.menuItem.isPrintableInKitchen
+        : true, // default to true for backward compatibility
+      price: orderItem.menuItem.price,
+      categoryId: orderItem.menuItem.categoryId,
+    } : undefined,
   };
 }
 

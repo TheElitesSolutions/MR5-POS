@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS menu_items (
   categoryId TEXT NOT NULL,
   isActive INTEGER DEFAULT 1,
   isCustomizable INTEGER DEFAULT 0,
+  isPrintableInKitchen INTEGER DEFAULT 1,
   imageUrl TEXT,
   preparationTime INTEGER,
   ingredients TEXT DEFAULT '[]', -- JSON array
@@ -318,6 +319,7 @@ CREATE TABLE IF NOT EXISTS addons (
   price REAL NOT NULL,
   imageUrl TEXT,
   isActive INTEGER DEFAULT 1,
+  isPrintableInKitchen INTEGER DEFAULT 1,
   sortOrder INTEGER DEFAULT 0,
   createdAt TEXT DEFAULT (datetime('now', 'localtime')),
   updatedAt TEXT DEFAULT (datetime('now', 'localtime')),

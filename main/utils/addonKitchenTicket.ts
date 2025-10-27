@@ -113,6 +113,22 @@ export class AddonKitchenTicketGenerator {
       );
     }
 
+    // ✅ FIX: Filter out items marked as not printable in kitchen
+    console.log('🔍 [generateAddonStandardTicket] Filtering items before printing, count BEFORE filter:', itemsToProcess.length);
+    itemsToProcess = itemsToProcess.filter((item: any) => {
+      const isPrintable = this.isItemPrintable(item);
+      console.log('🔍 [generateAddonStandardTicket] Item:', {
+        id: item.id,
+        menuItemId: item.menuItemId,
+        name: item.menuItem?.name || item.name,
+        isPrintable,
+        'item.menuItem?.isPrintableInKitchen': item.menuItem?.isPrintableInKitchen,
+        'item.isPrintableInKitchen': item.isPrintableInKitchen,
+      });
+      return isPrintable;
+    });
+    console.log('🔍 [generateAddonStandardTicket] Items AFTER filter:', itemsToProcess.length);
+
     // Generate clean header (same as original)
     const currentDate = new Date();
     const dateString = currentDate.toLocaleDateString('en-US', {
@@ -248,8 +264,11 @@ export class AddonKitchenTicketGenerator {
       }
     );
 
+    // Filter items to only include those that should be printed in kitchen
+    const printableItems = itemsToProcess.filter((item: any) => this.isItemPrintable(item));
+
     // Process each item with add-ons
-    itemsToProcess.forEach((item: any, index: number) => {
+    printableItems.forEach((item: any, index: number) => {
       const itemName = this.getItemName(item);
       const quantity = item.quantity || 0;
 
@@ -273,8 +292,10 @@ export class AddonKitchenTicketGenerator {
         },
       });
 
-      // Add-ons display
-      if (item.hasAddons && item.addons?.length > 0) {
+      // Add-ons display - filter to only show printable addons
+      const printableAddons = this.filterPrintableAddons(item.addons);
+
+      if (item.hasAddons && printableAddons.length > 0) {
         printData.push({
           type: 'text',
           value: '',
@@ -282,7 +303,7 @@ export class AddonKitchenTicketGenerator {
         });
 
         // Group add-ons by addon group for better organization
-        const addonsByGroup = this.groupAddonsByGroup(item.addons);
+        const addonsByGroup = this.groupAddonsByGroup(printableAddons);
 
         Object.entries(addonsByGroup).forEach(
           ([groupName, addons]: [string, any[]]) => {
@@ -394,7 +415,7 @@ export class AddonKitchenTicketGenerator {
       },
       {
         type: 'text',
-        value: `Items: ${itemsToProcess.length}`,
+        value: `Items: ${printableItems.length}`,
         style: {
           fontSize: '16px',
           fontFamily: 'Arial, sans-serif',
@@ -465,6 +486,34 @@ export class AddonKitchenTicketGenerator {
     // This would handle add-on updates and changes
     // For now, delegate to standard implementation
     return this.generateAddonStandardTicket(order, onlyUnprinted);
+  }
+
+  /**
+   * Check if an item should be printed in kitchen tickets
+   * Returns true if isPrintableInKitchen is true or undefined (backward compatibility)
+   */
+  private isItemPrintable(item: any): boolean {
+    // Check item.menuItem.isPrintableInKitchen first (joined data)
+    if (item.menuItem?.isPrintableInKitchen !== undefined) {
+      return item.menuItem.isPrintableInKitchen === true || item.menuItem.isPrintableInKitchen === 1;
+    }
+    // Check item.isPrintableInKitchen (direct property)
+    if (item.isPrintableInKitchen !== undefined) {
+      return item.isPrintableInKitchen === true || item.isPrintableInKitchen === 1;
+    }
+    // Default to true for backward compatibility (existing items without this field)
+    return true;
+  }
+
+  /**
+   * Filter addons - addons always follow the parent menu item's printability
+   */
+  private filterPrintableAddons(addons: any[]): any[] {
+    if (!addons || !Array.isArray(addons)) {
+      return [];
+    }
+    // ✅ FIX: Addons always follow the parent item - no separate filtering needed
+    return addons;
   }
 
   /**

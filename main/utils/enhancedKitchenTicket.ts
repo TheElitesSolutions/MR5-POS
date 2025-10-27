@@ -33,6 +33,7 @@ export async function generateEnhancedKitchenTicket(
   updatedItemIds: string[] = [],
   changeDetails: any[] = []
 ): Promise<string> {
+  console.log('🎯🎯🎯 ENHANCED KITCHEN TICKET GENERATOR FUNCTION CALLED 🎯🎯🎯');
   console.log('🎯 ENHANCED KITCHEN TICKET GENERATOR:', {
     orderId: order?.id,
     orderNumber: order?.orderNumber,
@@ -44,8 +45,10 @@ export async function generateEnhancedKitchenTicket(
 
   // Route to appropriate ticket generator based on content
   if (cancelledItems && cancelledItems.length > 0) {
+    console.log('🎯 Routing to: generateEnhancedRemovalTicket (cancelled items)');
     return generateEnhancedRemovalTicket(order, cancelledItems);
   } else if (updatedItemIds && updatedItemIds.length > 0) {
+    console.log('🎯 Routing to: generateEnhancedUpdateTicket (updated items)');
     return generateEnhancedUpdateTicket(
       order,
       onlyUnprinted,
@@ -53,6 +56,7 @@ export async function generateEnhancedKitchenTicket(
       changeDetails
     );
   } else {
+    console.log('🎯 Routing to: generateEnhancedStandardTicket (standard ticket)');
     return generateEnhancedStandardTicket(order, onlyUnprinted);
   }
 }
@@ -137,6 +141,61 @@ function generateEnhancedStandardTicket(
     itemsToProcess = itemsToProcess.filter(
       (item: any) => item.printed !== true
     );
+  }
+
+  // ✅ FIX: Filter out items marked as not printable in kitchen
+  console.log('========================================');
+  console.log('🔍 [FILTERING] Starting kitchen ticket filtering process');
+  console.log(`🔍 [FILTERING] Total items BEFORE filter: ${itemsToProcess.length}`);
+  console.log('========================================');
+
+  // Log all items BEFORE filtering
+  console.log('📋 [FILTERING] Items BEFORE filtering:');
+  itemsToProcess.forEach((item: any, index: number) => {
+    const isPrintableValue = item.menuItem?.isPrintableInKitchen !== undefined
+      ? item.menuItem.isPrintableInKitchen
+      : item.isPrintableInKitchen;
+    console.log(`  ${index + 1}. "${item.menuItem?.name || item.name}" - isPrintableInKitchen: ${isPrintableValue} (${isPrintableValue === 1 || isPrintableValue === true ? '✅ PRINTABLE' : '❌ NOT PRINTABLE'})`);
+  });
+
+  // Track filtered items for logging
+  const filteredOutItems: any[] = [];
+  const keptItems: any[] = [];
+
+  // Apply filtering
+  itemsToProcess = itemsToProcess.filter((item: any) => {
+    const isPrintable = isItemPrintable(item);
+
+    if (isPrintable) {
+      keptItems.push(item);
+    } else {
+      filteredOutItems.push(item);
+    }
+
+    return isPrintable;
+  });
+
+  // Log filtering results
+  console.log('========================================');
+  console.log('🎯 [FILTERING] Filtering Results:');
+  console.log(`✅ Items KEPT (printable): ${keptItems.length}`);
+  keptItems.forEach((item: any, index: number) => {
+    console.log(`  ${index + 1}. "${item.menuItem?.name || item.name}" - Will be printed`);
+  });
+
+  console.log(`❌ Items FILTERED OUT (not printable): ${filteredOutItems.length}`);
+  filteredOutItems.forEach((item: any, index: number) => {
+    console.log(`  ${index + 1}. "${item.menuItem?.name || item.name}" - EXCLUDED from kitchen ticket`);
+  });
+
+  console.log(`🔍 [FILTERING] Total items AFTER filter: ${itemsToProcess.length}`);
+  console.log('========================================');
+
+  // ✅ FIX: If all items are filtered out, don't print an empty ticket
+  if (itemsToProcess.length === 0) {
+    console.log('🚫 [FILTERING] ALL items are unprintable - Skipping kitchen ticket printing');
+    console.log('========================================');
+    return JSON.stringify([]); // Return empty array - will cause print to be skipped
   }
 
   // Generate clean header
@@ -313,8 +372,11 @@ function generateEnhancedStandardTicket(
     }
   );
 
+  // Filter items to only include those that should be printed in kitchen
+  const printableItems = itemsToProcess.filter(isItemPrintable);
+
   // Process items with enhanced readability
-  if (itemsToProcess.length === 0) {
+  if (printableItems.length === 0) {
     printData.push({
       type: 'text',
       value: 'No items to display',
@@ -326,7 +388,7 @@ function generateEnhancedStandardTicket(
       },
     });
   } else {
-    itemsToProcess.forEach((item: any, index: number) => {
+    printableItems.forEach((item: any, index: number) => {
       const itemName = getItemName(item);
       const quantity = item.quantity || 0;
 
@@ -351,7 +413,10 @@ function generateEnhancedStandardTicket(
       });
 
       // Display add-ons if present (CRITICAL FOR KITCHEN)
-      if (item.addons && Array.isArray(item.addons) && item.addons.length > 0) {
+      // Filter to only show printable addons
+      const printableAddons = filterPrintableAddons(item.addons);
+
+      if (printableAddons.length > 0) {
         // Add small spacing before add-ons
         printData.push({
           type: 'text',
@@ -359,10 +424,10 @@ function generateEnhancedStandardTicket(
           style: { fontSize: '8px' },
         });
 
-        item.addons.forEach((addon: any) => {
+        printableAddons.forEach((addon: any) => {
           const addonName = addon.addonName || addon.addon?.name || 'Addon';
           const addonQty = addon.quantity || 1;
-          
+
           printData.push({
             type: 'text',
             value: `       + ${addonName}${addonQty > 1 ? ` (x${addonQty})` : ''}`,
@@ -474,7 +539,7 @@ function generateEnhancedStandardTicket(
   );
 
   console.log(
-    `✅ ENHANCED STANDARD TICKET: ${itemsToProcess.length} items processed`
+    `✅ ENHANCED STANDARD TICKET: ${printableItems.length} printable items (${itemsToProcess.length} total items)`
   );
   return JSON.stringify(printData);
 }
@@ -559,8 +624,25 @@ function generateEnhancedRemovalTicket(
     }
   );
 
+  // Filter cancelled items to only include those that should be printed in kitchen
+  const printableCancelledItems = cancelledItems.filter(isItemPrintable);
+
+  console.log('========================================');
+  console.log('🔍 [REMOVAL TICKET FILTERING] Starting filtering for cancelled items');
+  console.log(`🔍 [REMOVAL TICKET FILTERING] Cancelled items count: ${cancelledItems.length}`);
+  console.log(`✅ Printable cancelled items: ${printableCancelledItems.length}`);
+  console.log(`❌ Unprintable cancelled items: ${cancelledItems.length - printableCancelledItems.length}`);
+  console.log('========================================');
+
+  // ✅ FIX: If all cancelled items are unprintable, don't print an empty removal ticket
+  if (printableCancelledItems.length === 0) {
+    console.log('🚫 [REMOVAL TICKET FILTERING] ALL cancelled items are unprintable - Skipping removal ticket printing');
+    console.log('========================================');
+    return JSON.stringify([]); // Return empty array - will cause print to be skipped
+  }
+
   // Process removed items
-  cancelledItems.forEach((item: any, index: number) => {
+  printableCancelledItems.forEach((item: any, index: number) => {
     const itemName = getItemName(item);
     const quantity = item.quantity ? parseInt(item.quantity) : 1;
 
@@ -583,17 +665,20 @@ function generateEnhancedRemovalTicket(
     });
 
     // Display add-ons for the item being removed
-    if (item.addons && Array.isArray(item.addons) && item.addons.length > 0) {
+    // Filter to only show printable addons
+    const printableAddons = filterPrintableAddons(item.addons);
+
+    if (printableAddons.length > 0) {
       printData.push({
         type: 'text',
         value: '',
         style: { fontSize: '8px' },
       });
 
-      item.addons.forEach((addon: any) => {
+      printableAddons.forEach((addon: any) => {
         const addonName = addon.addonName || addon.addon?.name || 'Addon';
         const addonQty = addon.quantity || 1;
-        
+
         printData.push({
           type: 'text',
           value: `       + ${addonName}${addonQty > 1 ? ` (x${addonQty})` : ''}`,
@@ -767,7 +852,28 @@ function generateEnhancedUpdateTicket(
   const itemsToProcess =
     order?.items?.filter((item: any) => updatedItemIds.includes(item.id)) || [];
 
-  itemsToProcess.forEach((item: any, index: number) => {
+  console.log('========================================');
+  console.log('🔍 [UPDATE TICKET FILTERING] Starting filtering for updated items');
+  console.log(`🔍 [UPDATE TICKET FILTERING] Updated items count: ${itemsToProcess.length}`);
+  console.log('========================================');
+
+  // Filter updated items to only include those that should be printed in kitchen
+  const printableUpdatedItems = itemsToProcess.filter(isItemPrintable);
+
+  console.log('========================================');
+  console.log('🎯 [UPDATE TICKET FILTERING] Filtering Results:');
+  console.log(`✅ Printable updated items: ${printableUpdatedItems.length}`);
+  console.log(`❌ Unprintable updated items: ${itemsToProcess.length - printableUpdatedItems.length}`);
+  console.log('========================================');
+
+  // ✅ FIX: If all updated items are filtered out, don't print an empty update ticket
+  if (printableUpdatedItems.length === 0) {
+    console.log('🚫 [UPDATE TICKET FILTERING] ALL updated items are unprintable - Skipping update ticket printing');
+    console.log('========================================');
+    return JSON.stringify([]); // Return empty array - will cause print to be skipped
+  }
+
+  printableUpdatedItems.forEach((item: any, index: number) => {
     const itemName = getItemName(item);
     const quantity = item.quantity || 0;
     const change = changeDetails.find(
@@ -801,17 +907,20 @@ function generateEnhancedUpdateTicket(
     });
 
     // Display add-ons for the updated item
-    if (item.addons && Array.isArray(item.addons) && item.addons.length > 0) {
+    // Filter to only show printable addons
+    const printableAddons = filterPrintableAddons(item.addons);
+
+    if (printableAddons.length > 0) {
       printData.push({
         type: 'text',
         value: '',
         style: { fontSize: '8px' },
       });
 
-      item.addons.forEach((addon: any) => {
+      printableAddons.forEach((addon: any) => {
         const addonName = addon.addonName || addon.addon?.name || 'Addon';
         const addonQty = addon.quantity || 1;
-        
+
         printData.push({
           type: 'text',
           value: `       + ${addonName}${addonQty > 1 ? ` (x${addonQty})` : ''}`,
@@ -922,4 +1031,48 @@ function getItemName(item: any): string {
     item.menuItemName ||
     `Item ${item.menuItemId?.slice(-4) || 'Unknown'}`
   );
+}
+
+/**
+ * Check if an item should be printed in kitchen tickets
+ * Returns true if isPrintableInKitchen is true or undefined (backward compatibility)
+ */
+function isItemPrintable(item: any): boolean {
+  console.log('🔍 [isItemPrintable] Checking item:', {
+    itemId: item.id,
+    menuItemId: item.menuItemId,
+    'item.menuItem?.isPrintableInKitchen': item.menuItem?.isPrintableInKitchen,
+    'item.isPrintableInKitchen': item.isPrintableInKitchen,
+    'item.menuItem (keys)': item.menuItem ? Object.keys(item.menuItem) : 'no menuItem',
+  });
+
+  // Check item.menuItem.isPrintableInKitchen first (joined data)
+  if (item.menuItem?.isPrintableInKitchen !== undefined) {
+    const result = item.menuItem.isPrintableInKitchen === true || item.menuItem.isPrintableInKitchen === 1;
+    console.log('✅ [isItemPrintable] Using item.menuItem.isPrintableInKitchen:', result);
+    return result;
+  }
+  // Check item.isPrintableInKitchen (direct property)
+  if (item.isPrintableInKitchen !== undefined) {
+    const result = item.isPrintableInKitchen === true || item.isPrintableInKitchen === 1;
+    console.log('✅ [isItemPrintable] Using item.isPrintableInKitchen:', result);
+    return result;
+  }
+  // Default to true for backward compatibility (existing items without this field)
+  console.log('⚠️ [isItemPrintable] No isPrintableInKitchen found, defaulting to true');
+  return true;
+}
+
+/**
+ * Filter addons - addons always follow the parent menu item's printability
+ * If the item is printable, all its addons are printed with it
+ */
+function filterPrintableAddons(addons: any[]): any[] {
+  if (!addons || !Array.isArray(addons)) {
+    return [];
+  }
+  // ✅ FIX: Addons always follow the parent item - no separate filtering needed
+  // If the item is printable, all addons are included
+  console.log('🔍 [filterPrintableAddons] Returning all addons (follow parent item), count:', addons.length);
+  return addons;
 }

@@ -514,15 +514,15 @@ export class AddonController extends BaseController {
     request: UpdateAddonRequest
   ): Promise<IPCResponse> {
     try {
-      const { id, ...updateData } = request;
+      // ✅ FIX: Validate the full request (including id) first
+      const validatedData = UpdateAddonSchema.parse(request);
+      const { id, ...updateData } = validatedData;
 
       if (!id || typeof id !== 'string') {
         return this.createErrorResponse('Valid add-on ID is required');
       }
 
-      const validatedData = UpdateAddonSchema.parse(updateData);
-
-      const result = await this.addonService.updateAddon(id, validatedData);
+      const result = await this.addonService.updateAddon(id, updateData);
 
       if (!result.success) {
         return this.createErrorResponse((result as any).error.message);

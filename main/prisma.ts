@@ -194,6 +194,7 @@ export namespace Prisma {
     categoryId: string;
     isActive?: boolean;
     isCustomizable?: boolean;
+    isPrintableInKitchen?: boolean;
     imageUrl?: string | null;
     preparationTime?: number | null;
     ingredients?: string[];
@@ -211,6 +212,7 @@ export namespace Prisma {
     categoryId?: string;
     isActive?: boolean;
     isCustomizable?: boolean;
+    isPrintableInKitchen?: boolean;
     imageUrl?: string | null;
     preparationTime?: number | null;
     ingredients?: string[];

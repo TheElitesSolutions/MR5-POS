@@ -75,6 +75,9 @@ function mapPrismaMenuItemToAppMenuItem(
     isActive: prismaMenuItem.isActive,
     isAvailable: prismaMenuItem.isActive,
     isCustomizable: (prismaMenuItem as any).isCustomizable || false, // ✅ NEW: Add isCustomizable field
+    isPrintableInKitchen: (prismaMenuItem as any).isPrintableInKitchen !== undefined
+      ? (prismaMenuItem as any).isPrintableInKitchen
+      : true, // ✅ NEW: Add isPrintableInKitchen field (default true for backward compatibility)
     imageUrl: prismaMenuItem.imageUrl || null,
     // Use a different approach for compatibility - check with hasOwnProperty
     preparationTime: Object.prototype.hasOwnProperty.call(
@@ -122,6 +125,7 @@ function mapIpcMenuItemToUpdateData(ipcMenuItem: Partial<IpcMenuItem>): {
   category?: string;
   isActive?: boolean;
   isCustomizable?: boolean;
+  isPrintableInKitchen?: boolean;
   imageUrl?: string | null;
   preparationTime?: number | null;
   ingredients?: Ingredient[];
@@ -136,6 +140,7 @@ function mapIpcMenuItemToUpdateData(ipcMenuItem: Partial<IpcMenuItem>): {
     category?: string;
     isActive?: boolean;
     isCustomizable?: boolean;
+    isPrintableInKitchen?: boolean;
     imageUrl?: string | null;
     preparationTime?: number | null;
     ingredients?: Ingredient[];
@@ -172,6 +177,11 @@ function mapIpcMenuItemToUpdateData(ipcMenuItem: Partial<IpcMenuItem>): {
   // ✅ NEW: Handle isCustomizable field
   if (ipcMenuItem.isCustomizable !== undefined) {
     updateData.isCustomizable = ipcMenuItem.isCustomizable;
+  }
+
+  // ✅ NEW: Handle isPrintableInKitchen field
+  if (ipcMenuItem.isPrintableInKitchen !== undefined) {
+    updateData.isPrintableInKitchen = ipcMenuItem.isPrintableInKitchen;
   }
 
   if (ipcMenuItem.imageUrl !== undefined) {
@@ -508,6 +518,10 @@ export class MenuItemService extends BaseService {
           // but we'll handle them in the application layer
           isActive:
             updateData.isActive !== undefined ? updateData.isActive : true,
+          isCustomizable:
+            updateData.isCustomizable !== undefined ? updateData.isCustomizable : false,
+          isPrintableInKitchen:
+            updateData.isPrintableInKitchen !== undefined ? updateData.isPrintableInKitchen : true,
           // We'll handle these fields in the application layer
           // using transformations in the mapPrismaMenuItem function
         },
@@ -679,6 +693,9 @@ export class MenuItemService extends BaseService {
       // ✅ NEW: Handle isCustomizable field
       if (menuItemUpdateData.isCustomizable !== undefined)
         updateDataObj.isCustomizable = menuItemUpdateData.isCustomizable;
+      // ✅ NEW: Handle isPrintableInKitchen field
+      if (menuItemUpdateData.isPrintableInKitchen !== undefined)
+        updateDataObj.isPrintableInKitchen = menuItemUpdateData.isPrintableInKitchen;
 
       const menuItem = await this.prisma.menuItem.update({
         where: { id },

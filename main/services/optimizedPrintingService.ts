@@ -223,7 +223,16 @@ export class OptimizedPrintingService {
    * Background queue processor - handles actual printing
    */
   private startQueueProcessor(): void {
+    this.logger.info('🔥 [Queue Processor] STARTED - Running every 50ms');
+
     setInterval(async () => {
+      // ✅ DIAGNOSTIC: Log every queue check
+      if (this.printQueue.length > 0 || this.isProcessingQueue) {
+        this.logger.info(
+          `🔥 [Queue Processor] Checking queue... (length: ${this.printQueue.length}, isProcessing: ${this.isProcessingQueue})`
+        );
+      }
+
       if (this.isProcessingQueue || this.printQueue.length === 0) {
         return;
       }
@@ -237,6 +246,11 @@ export class OptimizedPrintingService {
           this.isProcessingQueue = false;
           return;
         }
+
+        // ✅ DIAGNOSTIC: Log job details
+        this.logger.info(
+          `🔥 [Queue Processor] PICKED UP JOB: ${job.id} (type: ${job.type}, orderId: ${job.orderId}, priority: ${job.priority})`
+        );
 
         this.logger.info(
           `🖨️ BACKGROUND PROCESSING: Starting ${job.type} print job ${job.id}`
@@ -263,12 +277,22 @@ export class OptimizedPrintingService {
    */
   private async processOptimizedPrintJob(job: PrintJob): Promise<boolean> {
     try {
+      // ✅ DIAGNOSTIC: Log entry
+      this.logger.info(
+        `🔥 [processOptimizedPrintJob] CALLED for job ${job.id} (type: ${job.type}, orderId: ${job.orderId})`
+      );
+
       // Step 1: Get cached printer or detect quickly
       const printer = await this.getCachedPrinter(job.printerName);
       if (!printer || !printer.isOnline) {
         this.logger.warn(`⚠️ Printer ${job.printerName} not available`);
         return false;
       }
+
+      // ✅ DIAGNOSTIC: Log printer found
+      this.logger.info(
+        `🔥 [processOptimizedPrintJob] Printer found: ${printer.name}`
+      );
 
       // Step 2: Get order data - BYPASS CACHE for active editing sessions to ensure fresh data
       // This fixes both debug ticket and missing invoice item issues caused by stale cache
@@ -279,12 +303,26 @@ export class OptimizedPrintingService {
         return false;
       }
 
+      // ✅ DIAGNOSTIC: Log order data retrieved
+      this.logger.info(
+        `🔥 [processOptimizedPrintJob] Order data retrieved: ${job.orderId} (${orderData.order.items?.length || 0} items)`
+      );
+
       this.logger.info(
         `🔍 Print processing using ${bypassCache ? 'FRESH' : 'CACHED'} order data for ${job.orderId}`
       );
 
       // Step 3: Use optimized print method with exact format preservation
+      // ✅ DIAGNOSTIC: Log before calling optimizedDirectPrint
+      this.logger.info(
+        `🔥 [processOptimizedPrintJob] Calling optimizedDirectPrint for ${job.type}...`
+      );
       const success = await this.optimizedDirectPrint(job, orderData, printer);
+
+      // ✅ DIAGNOSTIC: Log result
+      this.logger.info(
+        `🔥 [processOptimizedPrintJob] optimizedDirectPrint returned: ${success}`
+      );
 
       return success;
     } catch (error) {
@@ -303,6 +341,11 @@ export class OptimizedPrintingService {
     printer: CachedPrinter
   ): Promise<boolean> {
     try {
+      // ✅ DIAGNOSTIC: Log entry with job details
+      this.logger.info(
+        `🔥 [optimizedDirectPrint] ENTRY - Job type: ${job.type}, OrderId: ${(orderData.order as any).id || (orderData.order as any).orderNumber}, Items: ${orderData.order.items?.length || 0}`
+      );
+
       this.logger.info(
         `🖨️ OPTIMIZED PRINT: Using electron-pos-printer with ${this.OPTIMIZED_PRINT_DELAY}ms delay`
       );
@@ -313,16 +356,36 @@ export class OptimizedPrintingService {
       // Get the exact same content generation methods
       let printContent: string;
       if (job.type === 'invoice') {
+        this.logger.info(`🔥 [optimizedDirectPrint] Generating INVOICE content...`);
         printContent = await this.generateInvoiceContent(orderData.order);
+        this.logger.info(`🔥 [optimizedDirectPrint] Invoice content generated, length: ${printContent.length}`);
       } else if (job.type === 'kitchen') {
+        // ✅ DIAGNOSTIC: Log before calling generateKitchenContent
+        this.logger.info(
+          `🔥 [optimizedDirectPrint] Generating KITCHEN TICKET content...`
+        );
+        this.logger.info(
+          `🔥 [optimizedDirectPrint] Parameters: cancelledItems=${(job as any).cancelledItems?.length || 0}, updatedItemIds=${(job as any).updatedItemIds?.length || 0}, itemChanges=${(job as any).itemChanges?.length || 0}`
+        );
+        this.logger.info(
+          `🔥 [optimizedDirectPrint] About to call generateKitchenContent() NOW...`
+        );
+
         printContent = await this.generateKitchenContent(
           orderData.order,
           (job as any).cancelledItems,
           (job as any).updatedItemIds,
           (job as any).itemChanges // Pass the enhanced change tracking information
         );
+
+        // ✅ DIAGNOSTIC: Log after generateKitchenContent returns
+        this.logger.info(
+          `🔥 [optimizedDirectPrint] Kitchen content generated successfully! Length: ${printContent.length} chars`
+        );
       } else {
+        this.logger.info(`🔥 [optimizedDirectPrint] Generating RECEIPT content...`);
         printContent = await this.generateReceiptContent(orderData.order);
+        this.logger.info(`🔥 [optimizedDirectPrint] Receipt content generated, length: ${printContent.length}`);
       }
 
       // Parse the JSON content (same format as original)
@@ -655,6 +718,15 @@ export class OptimizedPrintingService {
     updatedItemIds?: string[],
     itemChanges?: any[] // Enhanced change tracking information
   ): Promise<string> {
+    // ✅ DIAGNOSTIC: Entry point
+    console.log('🔥 [OptimizedPrintingService.generateKitchenContent] CALLED', {
+      orderId: order?.id,
+      orderNumber: order?.orderNumber,
+      itemsCount: order?.items?.length,
+      hasCancelledItems: cancelledItems?.length > 0,
+      hasUpdatedItems: updatedItemIds?.length > 0,
+    });
+
     // Import the original PrinterController class
     const { PrinterController } = require('../controllers/printerController');
     const { LebanesReceiptGenerator } = require('../utils/receiptGenerator');
@@ -681,19 +753,44 @@ export class OptimizedPrintingService {
     // Use the new simple kitchen ticket format
     // Wrap in try-catch to handle any potential errors
     try {
+      // ✅ DIAGNOSTIC: Before require
+      console.log('🔥 [OptimizedPrintingService] About to require enhancedKitchenTicket module');
+
       // Import the enhanced kitchen ticket generator for better readability
       const {
         generateEnhancedKitchenTicket,
       } = require('../utils/enhancedKitchenTicket');
 
-      return await generateEnhancedKitchenTicket(
+      // ✅ DIAGNOSTIC: After require
+      console.log('🔥 [OptimizedPrintingService] Successfully imported generateEnhancedKitchenTicket:', {
+        functionExists: typeof generateEnhancedKitchenTicket === 'function',
+        functionName: generateEnhancedKitchenTicket?.name,
+      });
+
+      // ✅ DIAGNOSTIC: Before calling function
+      console.log('🔥 [OptimizedPrintingService] About to call generateEnhancedKitchenTicket with:', {
+        orderId: order?.id,
+        onlyUnprinted: false,
+        cancelledItemsCount: cancelledItems?.length || 0,
+        updatedItemIdsCount: updatedItemIds?.length || 0,
+        itemChangesCount: itemChanges?.length || 0,
+      });
+
+      const result = await generateEnhancedKitchenTicket(
         order,
         false, // Not just unprinted items
         cancelledItems, // Pass the cancelled items array
         updatedItemIds, // Pass the updated item IDs
         itemChanges // CRITICAL FIX: Pass the enhanced change tracking information
       );
+
+      // ✅ DIAGNOSTIC: After function returns
+      console.log('🔥 [OptimizedPrintingService] generateEnhancedKitchenTicket returned successfully, content length:', result?.length);
+
+      return result;
     } catch (error) {
+      // ✅ DIAGNOSTIC: Error caught
+      console.error('🔥 [OptimizedPrintingService] ERROR in generateKitchenContent:', error);
       enhancedLogger.error('Error generating kitchen content', LogCategory.BUSINESS, 'OptimizedPrintingService', { error });
       // Return a basic fallback kitchen ticket in case of error
       return `

@@ -58,6 +58,7 @@ import { getUpdateSafety } from './utils/updateSafety';
 import { getUpdaterController } from './controllers/updaterController';
 import { logInfo, logError } from './error-handler';
 import { enhancedLogger, LogCategory } from './utils/enhanced-logger';
+import { checkAndAddIsPrintableColumn } from './utils/checkIsPrintableColumn';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -124,6 +125,9 @@ let startupManager: StartupManagerNextron | null = null;
   try {
     initializeDatabase();
     console.log('[Main] Database initialized successfully');
+
+    // ✅ Check and add isPrintableInKitchen column if missing
+    await checkAndAddIsPrintableColumn();
   } catch (error) {
     console.error('[Main] Database initialization failed:', error);
     dialog.showErrorBox(

@@ -16,16 +16,6 @@ import {
 } from 'lucide-react';
 import { useReportsStore } from '@/stores/reportsStore';
 import { useToast } from '@/hooks/use-toast';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
 
 const ProfitReports = () => {
   const { profitReport, fetchProfitReport, exportProfitReport, dateRange, isLoading } =
@@ -81,13 +71,6 @@ const ProfitReports = () => {
     return `${value.toFixed(2)}%`;
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    });
-  };
-
   const formatDateTime = (dateString: string) => {
     return new Date(dateString).toLocaleString('en-US', {
       month: 'short',
@@ -97,18 +80,6 @@ const ProfitReports = () => {
       minute: '2-digit',
       hour12: true,
     });
-  };
-
-  const getMarginColor = (margin: number) => {
-    if (margin > 50) return 'text-green-600 bg-green-50';
-    if (margin >= 30) return 'text-yellow-600 bg-yellow-50';
-    return 'text-red-600 bg-red-50';
-  };
-
-  const getMarginBorderColor = (margin: number) => {
-    if (margin > 50) return 'border-green-200';
-    if (margin >= 30) return 'border-yellow-200';
-    return 'border-red-200';
   };
 
   return (
@@ -211,148 +182,85 @@ const ProfitReports = () => {
         </Card>
       </div>
 
-      {/* Daily Trends Chart */}
-      {profitReport.dailyTrends && profitReport.dailyTrends.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Daily Trends</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width='100%' height={300} className='print:h-64'>
-              <LineChart data={profitReport.dailyTrends}>
-                <CartesianGrid strokeDasharray='3 3' />
-                <XAxis 
-                  dataKey='date' 
-                  tickFormatter={formatDate}
-                  angle={-45}
-                  textAnchor='end'
-                  height={60}
-                />
-                <YAxis tickFormatter={(value) => `$${value}`} />
-                <Tooltip 
-                  formatter={(value: number) => formatCurrency(value)}
-                  labelFormatter={(label) => `Date: ${label}`}
-                />
-                <Legend />
-                <Line 
-                  type='monotone' 
-                  dataKey='revenue' 
-                  stroke='#10B981' 
-                  name='Revenue'
-                  strokeWidth={2}
-                />
-                <Line 
-                  type='monotone' 
-                  dataKey='foodCost' 
-                  stroke='#F59E0B' 
-                  name='Food Cost'
-                  strokeWidth={2}
-                />
-                <Line 
-                  type='monotone' 
-                  dataKey='expenses' 
-                  stroke='#EF4444' 
-                  name='Expenses'
-                  strokeWidth={2}
-                />
-                <Line 
-                  type='monotone' 
-                  dataKey='profit' 
-                  stroke='#3B82F6' 
-                  name='Profit'
-                  strokeWidth={2}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Per-Item Profitability Table */}
+      {/* Daily Operations - Unified Orders and Expenses */}
       <Card>
         <CardHeader>
-          <CardTitle>Item Profitability Analysis</CardTitle>
+          <CardTitle>Daily Operations</CardTitle>
         </CardHeader>
         <CardContent>
           <div className='overflow-x-auto'>
             <table className='w-full text-sm'>
               <thead>
                 <tr className='border-b bg-gray-50'>
-                  <th className='p-2 text-left font-semibold'>Item</th>
-                  <th className='p-2 text-left font-semibold'>Category</th>
-                  <th className='p-2 text-right font-semibold'>Units Sold</th>
-                  <th className='p-2 text-right font-semibold'>Revenue</th>
-                  <th className='p-2 text-right font-semibold'>Food Cost/Unit</th>
-                  <th className='p-2 text-right font-semibold'>Profit/Unit</th>
-                  <th className='p-2 text-right font-semibold'>Total Profit</th>
-                  <th className='p-2 text-center font-semibold'>Margin %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {profitReport.itemProfitability.map((item, index) => (
-                  <tr key={index} className='border-b hover:bg-gray-50'>
-                    <td className='p-2'>{item.itemName}</td>
-                    <td className='p-2'>{item.category}</td>
-                    <td className='p-2 text-right'>{item.unitsSold}</td>
-                    <td className='p-2 text-right'>{formatCurrency(item.revenue)}</td>
-                    <td className='p-2 text-right'>{formatCurrency(item.foodCostPerUnit)}</td>
-                    <td className='p-2 text-right'>{formatCurrency(item.profitPerUnit)}</td>
-                    <td className='p-2 text-right font-semibold'>{formatCurrency(item.totalProfit)}</td>
-                    <td className='p-2 text-center'>
-                      <span className={`inline-block rounded px-2 py-1 text-xs font-semibold ${getMarginColor(item.margin)}`}>
-                        {formatPercent(item.margin)}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Per-Order Profitability Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Order Profitability</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className='overflow-x-auto'>
-            <table className='w-full text-sm'>
-              <thead>
-                <tr className='border-b bg-gray-50'>
-                  <th className='p-2 text-left font-semibold'>Order #</th>
-                  <th className='p-2 text-left font-semibold'>Date</th>
+                  <th className='p-2 text-left font-semibold'>Time</th>
                   <th className='p-2 text-left font-semibold'>Type</th>
-                  <th className='p-2 text-right font-semibold'>Revenue</th>
-                  <th className='p-2 text-right font-semibold'>Food Cost</th>
-                  <th className='p-2 text-right font-semibold'>Expenses</th>
-                  <th className='p-2 text-right font-semibold'>Total Cost</th>
-                  <th className='p-2 text-right font-semibold'>Profit</th>
-                  <th className='p-2 text-center font-semibold'>Margin %</th>
+                  <th className='p-2 text-left font-semibold'>Description</th>
+                  <th className='p-2 text-left font-semibold'>Category</th>
+                  <th className='p-2 text-right font-semibold'>Amount</th>
+                  <th className='p-2 text-left font-semibold'>Notes</th>
                 </tr>
               </thead>
               <tbody>
-                {profitReport.orderProfitability.map((order, index) => (
-                  <tr key={index} className='border-b hover:bg-gray-50'>
-                    <td className='p-2'>{order.orderNumber}</td>
-                    <td className='p-2'>{formatDateTime(order.createdAt)}</td>
-                    <td className='p-2'>{order.type}</td>
-                    <td className='p-2 text-right'>{formatCurrency(order.revenue)}</td>
-                    <td className='p-2 text-right'>{formatCurrency(order.foodCost)}</td>
-                    <td className='p-2 text-right'>{formatCurrency(order.allocatedExpenses)}</td>
-                    <td className='p-2 text-right'>{formatCurrency(order.totalCost)}</td>
-                    <td className={`p-2 text-right font-semibold ${order.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatCurrency(order.profit)}
-                    </td>
-                    <td className='p-2 text-center'>
-                      <span className={`inline-block rounded px-2 py-1 text-xs font-semibold ${getMarginColor(order.margin)}`}>
-                        {formatPercent(order.margin)}
+                {profitReport.operations.map((operation, index) => (
+                  <tr
+                    key={index}
+                    className={`border-b hover:bg-gray-50 ${operation.type === 'expense' ? 'bg-red-50/30' : ''}`}
+                  >
+                    <td className='p-2'>{formatDateTime(operation.timestamp)}</td>
+                    <td className='p-2'>
+                      <span className={`inline-block rounded px-2 py-1 text-xs font-semibold ${
+                        operation.type === 'order'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {operation.type === 'order' ? 'Order' : 'Expense'}
                       </span>
                     </td>
+                    <td className='p-2 font-medium'>{operation.description}</td>
+                    <td className='p-2'>{operation.category}</td>
+                    <td className={`p-2 text-right font-semibold ${
+                      operation.type === 'order' ? 'text-green-600' : 'text-red-600'
+                    }`}>
+                      {operation.type === 'order' ? '+' : '-'}{formatCurrency(Math.abs(operation.amount))}
+                    </td>
+                    <td className='p-2 text-gray-600'>{operation.notes || '-'}</td>
                   </tr>
                 ))}
               </tbody>
+              <tfoot className='border-t-2 bg-gray-50 font-semibold'>
+                <tr>
+                  <td colSpan={4} className='p-3 text-right'>Total Income (Orders):</td>
+                  <td className='p-3 text-right text-green-600 text-base'>
+                    {formatCurrency(profitReport.totalRevenue)}
+                  </td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td colSpan={4} className='p-3 text-right'>Total Expenses:</td>
+                  <td className='p-3 text-right text-red-600 text-base'>
+                    -{formatCurrency(profitReport.totalExpenses)}
+                  </td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td colSpan={4} className='p-3 text-right'>Total Food Cost:</td>
+                  <td className='p-3 text-right text-orange-600 text-base'>
+                    -{formatCurrency(profitReport.totalFoodCost)}
+                  </td>
+                  <td></td>
+                </tr>
+                <tr className='border-t-2'>
+                  <td colSpan={4} className='p-3 text-right text-lg'>Net Profit:</td>
+                  <td className={`p-3 text-right text-lg font-bold ${
+                    profitReport.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}>
+                    {formatCurrency(profitReport.grossProfit)}
+                  </td>
+                  <td className='p-3 text-sm text-gray-600'>
+                    ({formatPercent(profitReport.profitMargin)} margin)
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </CardContent>

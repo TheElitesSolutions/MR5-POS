@@ -668,7 +668,41 @@ export class ReportService extends BaseService {
         })
         .sort((a, b) => a.date.localeCompare(b.date)); // Sort by date ascending
 
-      // 7. Calculate summary KPIs
+      // 7. Create unified operations array (orders + expenses chronologically)
+      const operations: ProfitReportData['operations'] = [];
+
+      // Add orders to operations
+      orderProfitabilityData.forEach(orderData => {
+        operations.push({
+          type: 'order',
+          timestamp: orderData.order.createdAt,
+          id: orderData.order.id,
+          description: orderData.order.orderNumber,
+          category: orderData.order.type,
+          amount: orderData.revenue,
+          foodCost: orderData.foodCost,
+          profit: orderData.revenue - orderData.foodCost,
+          notes: `${orderData.order.items?.length || 0} items`,
+        });
+      });
+
+      // Add expenses to operations
+      expenses.forEach(expense => {
+        operations.push({
+          type: 'expense',
+          timestamp: expense.date,
+          id: expense.id,
+          description: expense.description || 'Expense',
+          category: expense.category,
+          amount: decimalToNumber(new Decimal(expense.amount || 0)),
+          notes: expense.vendor || undefined,
+        });
+      });
+
+      // Sort operations chronologically
+      operations.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+      // 8. Calculate summary KPIs
       const totalFoodCostNum = decimalToNumber(totalFoodCost);
       const totalCost = totalFoodCostNum + totalExpensesNum;
       const grossProfit = totalRevenueNum - totalCost;
@@ -681,8 +715,7 @@ export class ReportService extends BaseService {
         totalCost,
         grossProfit,
         profitMargin,
-        orderProfitability,
-        itemProfitability,
+        operations,
         dailyTrends,
       };
 

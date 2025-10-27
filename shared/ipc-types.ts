@@ -205,6 +205,7 @@ export interface MenuItem {
   imageUrl?: string;
   isAvailable: boolean;
   isCustomizable: boolean;
+  isPrintableInKitchen?: boolean; // Controls whether item appears on kitchen tickets
   preparationTime?: number;
   ingredients?: Ingredient[];
   allergens?: string[];
@@ -1038,35 +1039,20 @@ export interface ProfitReportData {
   totalCost: number;
   grossProfit: number;
   profitMargin: number;
-  
-  // Per-Order Breakdown
-  orderProfitability: {
+
+  // Unified Operations (Orders and Expenses chronologically)
+  operations: {
+    type: 'order' | 'expense';
+    timestamp: string;
     id: string;
-    orderNumber: string;
-    createdAt: string;
-    type: string;
-    revenue: number;
-    foodCost: number;
-    allocatedExpenses: number;
-    totalCost: number;
-    profit: number;
-    margin: number;
+    description: string; // Order number or expense description
+    category: string; // Order type or expense category
+    amount: number; // Revenue (positive) or expense amount (negative for display)
+    foodCost?: number; // Only for orders
+    profit?: number; // Only for orders
+    notes?: string; // Additional details
   }[];
-  
-  // Per-Item Profitability
-  itemProfitability: {
-    itemId: string;
-    itemName: string;
-    category: string;
-    unitsSold: number;
-    revenue: number;
-    foodCostPerUnit: number;
-    totalFoodCost: number;
-    profitPerUnit: number;
-    totalProfit: number;
-    margin: number;
-  }[];
-  
+
   // Time-based trends
   dailyTrends: {
     date: string;
