@@ -315,17 +315,17 @@ export class AddonController extends BaseController {
     request: UpdateAddonGroupRequest
   ): Promise<IPCResponse> {
     try {
-      const { id, ...updateData } = request;
+      // Validate full request first (schema requires id)
+      const validatedData = UpdateAddonGroupSchema.parse(request);
+      const { id, ...updateData } = validatedData;
 
       if (!id || typeof id !== 'string') {
         return this.createErrorResponse('Valid add-on group ID is required');
       }
 
-      const validatedData = UpdateAddonGroupSchema.parse(updateData);
-
       const result = await this.addonService.updateAddonGroup(
         id,
-        validatedData
+        updateData
       );
 
       if (!result.success) {

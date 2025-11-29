@@ -51,7 +51,32 @@ interface TakeoutOrderPanelProps {
     itemQuantity: number;
     ingredientAdjustments: Record<string, boolean>;
     specialNotes: string;
+    addonSelections?: any[]; // Include addon selections from menu flow
   } | null;
+}
+
+/**
+ * Compare addon selections to determine if two items have the same addons
+ * Used to detect if an item with the same addons already exists in the order
+ * (Port from OrderPanel for feature parity)
+ */
+function areAddonsEqual(
+  existingAddons: any[],
+  selectedAddons: any[]
+): boolean {
+  if (existingAddons.length !== selectedAddons.length) {
+    return false;
+  }
+  if (existingAddons.length === 0 && selectedAddons.length === 0) {
+    return true;
+  }
+  const selectedHasAllExisting = existingAddons.every(existing => {
+    return selectedAddons.some(selected => selected.addonId === existing.addonId);
+  });
+  const existingHasAllSelected = selectedAddons.every(selected => {
+    return existingAddons.some(existing => existing.addonId === selected.addonId);
+  });
+  return selectedHasAllExisting && existingHasAllSelected;
 }
 
 /**
@@ -94,6 +119,9 @@ const TakeoutOrderPanel = ({
   const [localDeliveryFee, setLocalDeliveryFee] = useState('');
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
+  // Track which item is currently being updated to prevent double-clicks
+  const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
+
   // ✅ Race Condition Prevention: Action queue system
   const { enqueueAction, isProcessing, queueLength } = useOrderActionQueue({
     orderId: currentOrder?.id,
@@ -117,6 +145,9 @@ const TakeoutOrderPanel = ({
   const orderIdRef = useRef<string | null>(null);
   const previousDeliveryFeeRef = useRef<number>(0);
   const userEnteredFeeRef = useRef<boolean>(false);
+
+  // ✅ FIX: Track if we're currently processing a customization to prevent duplicates
+  const isProcessingCustomizationRef = useRef<boolean>(false);
 
   // Get delivery fee from current order or default to 0
   const currentDeliveryFee = currentOrder?.deliveryFee || 0;
@@ -306,14 +337,17 @@ const TakeoutOrderPanel = ({
     }
   };
 
-  // Handle quantity changes (enhanced with tracking)
-  const handleQuantityChange = async (
+  // Handle quantity changes (enhanced with tracking and race condition prevention)
+  const handleQuantityChange = (
     orderItemId: string,
     newQuantity: number,
     itemName: string
   ) => {
+    // ✅ Prevent double-clicks by tracking which item is being updated
+    if (updatingItemId === orderItemId) return;
+
     if (newQuantity <= 0) {
-      await handleRemoveItem(orderItemId, itemName);
+      handleRemoveItem(orderItemId, itemName);
       return;
     }
 
@@ -328,67 +362,123 @@ const TakeoutOrderPanel = ({
     // Don't do anything if quantity didn't change
     if (oldQuantity === newQuantity) return;
 
-    try {
-      await updateOrderItem(orderItemId, newQuantity);
+    // ✅ Race Condition Fix: Queue the update instead of executing immediately
+    enqueueAction(
+      'update',
+      async () => {
+        setUpdatingItemId(orderItemId);
+        await updateOrderItem(orderItemId, newQuantity);
 
-      // ✅ SIMPLE: Track this quantity change using simple tracking system
-      trackQuantityChange(
-        orderItemId,
-        itemName,
-        currentItem.menuItemId || '',
-        oldQuantity,
-        newQuantity
-      );
+        // ✅ FIX: Scale addon quantities when using +/- buttons
+        const itemAddons = (currentItem as any).addons || [];
+        if (itemAddons.length > 0 && currentOrder?.id) {
+          const quantityChange = newQuantity - oldQuantity;
+          orderLogger.debug('Scaling addon quantities for +/- button', {
+            addonCount: itemAddons.length,
+            quantityChange,
+          });
+          try {
+            const addonResult = await (window as any).electronAPI.ipc.invoke(
+              'addon:scaleAddonQuantities',
+              {
+                orderItemId: orderItemId,
+                quantityToAdd: quantityChange,
+              }
+            );
+            if (addonResult.success) {
+              orderLogger.debug('Addon quantities scaled successfully');
+              // Refresh order to show updated addon quantities
+              const orderAPI = await import('@/lib/ipc-api');
+              const refreshResp = await orderAPI.orderAPI.getById(currentOrder.id);
+              if (refreshResp.success && refreshResp.data) {
+                const { updateOrderInStore } = usePOSStore.getState();
+                updateOrderInStore(refreshResp.data as any);
+                orderLogger.debug('Order refreshed with updated addon quantities');
+              }
+            } else {
+              orderLogger.error('Failed to scale addon quantities:', addonResult.error);
+            }
+          } catch (addonError) {
+            orderLogger.error('Error scaling addon quantities:', addonError);
+          }
+        }
 
-      toast({
-        title: 'Quantity Updated',
-        description: `${itemName} quantity changed to ${newQuantity}`,
-      });
-    } catch (error) {
-      orderLogger.error('Failed to update quantity:', error);
-      toast({
-        title: 'Update Failed',
-        description: 'Failed to update item quantity. Please try again.',
-        variant: 'destructive',
-      });
-    }
+        return { orderItemId, itemName, menuItemId: currentItem.menuItemId || '', oldQuantity, newQuantity };
+      },
+      {
+        onSuccess: (result) => {
+          setUpdatingItemId(null);
+          // ✅ SIMPLE: Track this quantity change using simple tracking system
+          trackQuantityChange(
+            result.orderItemId,
+            result.itemName,
+            result.menuItemId,
+            result.oldQuantity,
+            result.newQuantity
+          );
+          toast({
+            title: 'Quantity Updated',
+            description: `${result.itemName} quantity changed to ${result.newQuantity}`,
+          });
+        },
+        onError: (error) => {
+          setUpdatingItemId(null);
+          orderLogger.error('Failed to update quantity:', error);
+          toast({
+            title: 'Update Failed',
+            description: 'Failed to update item quantity. Please try again.',
+            variant: 'destructive',
+          });
+        },
+      }
+    );
   };
 
   // Handle item removal (enhanced with tracking)
-  const handleRemoveItem = async (orderItemId: string, itemName: string) => {
-    try {
-      // Find the current item before removing it to track its quantity
-      const itemToRemove = currentOrder?.items?.find(
-        item => item.id === orderItemId
-      );
-      const quantity = itemToRemove?.quantity || 0;
+  const handleRemoveItem = (orderItemId: string, itemName: string) => {
+    // Find the current item before removing it to track its quantity
+    const itemToRemove = currentOrder?.items?.find(
+      item => item.id === orderItemId
+    );
+    const quantity = itemToRemove?.quantity || 0;
+    const menuItemId = itemToRemove?.menuItemId || '';
 
-      await removeOrderItem(orderItemId);
+    // ✅ Race Condition Fix: Queue the removal
+    enqueueAction(
+      'remove',
+      async () => {
+        await removeOrderItem(orderItemId);
+        return { orderItemId, itemName, quantity, menuItemId };
+      },
+      {
+        onSuccess: (result) => {
+          // ✅ SIMPLE: Track the removed item using simple tracking system
+          trackItemRemoval(
+            result.orderItemId,
+            result.itemName,
+            result.menuItemId,
+            result.quantity
+          );
 
-      // ✅ SIMPLE: Track the removed item using simple tracking system
-      trackItemRemoval(
-        orderItemId,
-        itemName,
-        itemToRemove?.menuItemId || '',
-        quantity
-      );
+          // ❌ REMOVED: No longer print removal notifications to kitchen
+          // Kitchen staff doesn't need to know about removed items
+          // Only additions and increases should be printed
 
-      // ❌ REMOVED: No longer print removal notifications to kitchen
-      // Kitchen staff doesn't need to know about removed items
-      // Only additions and increases should be printed
-
-      toast({
-        title: 'Item Removed',
-        description: `${itemName} has been removed from the order`,
-      });
-    } catch (error) {
-      orderLogger.error('Failed to remove item:', error);
-      toast({
-        title: 'Removal Failed',
-        description: 'Failed to remove item. Please try again.',
-        variant: 'destructive',
-      });
-    }
+          toast({
+            title: 'Item Removed',
+            description: `${result.itemName} has been removed from the order`,
+          });
+        },
+        onError: (error) => {
+          orderLogger.error('Failed to remove item:', error);
+          toast({
+            title: 'Removal Failed',
+            description: 'Failed to remove item. Please try again.',
+            variant: 'destructive',
+          });
+        },
+      }
+    );
   };
 
   // Handle order status transitions with proper workflow
@@ -570,6 +660,15 @@ const TakeoutOrderPanel = ({
       return;
     }
 
+    // ✅ FIX: Skip if we're already processing a customization (prevents duplicate from store updates)
+    if (isProcessingCustomizationRef.current) {
+      orderLogger.debug('Skipping - already processing a customization');
+      return;
+    }
+
+    // Mark that we're processing
+    isProcessingCustomizationRef.current = true;
+
     // Function to process item addition
     const processItemAddition = async () => {
       try {
@@ -585,6 +684,7 @@ const TakeoutOrderPanel = ({
         const ingredientAdjustments =
           pendingCustomization.ingredientAdjustments || {};
         const specialNotes = pendingCustomization.specialNotes || '';
+        const addonSelections = pendingCustomization.addonSelections || [];
 
         // Create customizations array from ingredient adjustments
         const customizations: {
@@ -651,6 +751,126 @@ const TakeoutOrderPanel = ({
           }
         );
 
+        // ✅ Check if this item already exists with same notes AND addons (OrderPanel parity)
+        const normalizedNotes = finalNotes?.trim() || '';
+        const normalizedAddonSelections = addonSelections || [];
+
+        const existingItem = currentOrder.items?.find(item => {
+          // Check if menuItemId matches
+          if (item.menuItemId !== selectedItem.id) return false;
+
+          // Check if notes match (including customizations)
+          const itemNotes = item.notes || '';
+          if (itemNotes !== normalizedNotes) return false;
+
+          // ✅ Check if addons match
+          const itemAddons = (item as any).addons || [];
+          const addonsMatch = areAddonsEqual(itemAddons, normalizedAddonSelections);
+
+          return addonsMatch;
+        });
+
+        orderLogger.debug('Existing item search result', {
+          found: !!existingItem,
+          existingItemId: existingItem?.id,
+          hasAddons: normalizedAddonSelections.length > 0,
+          addonCount: normalizedAddonSelections.length,
+        });
+
+        // If existing item found, update quantity instead of adding new
+        if (existingItem) {
+          orderLogger.debug('Found existing item in takeout order, updating quantity', {
+            itemId: existingItem.id,
+            oldQuantity: existingItem.quantity,
+            adding: itemQuantity,
+          });
+
+          const oldQuantity = existingItem.quantity || 0;
+          const newQuantity = oldQuantity + itemQuantity;
+
+          // Update the existing item's quantity
+          await updateOrderItem(existingItem.id, newQuantity);
+
+          // ✅ Scale addon quantities proportionally if existing item has addons
+          const existingAddons = (existingItem as any).addons || [];
+          if (existingAddons.length > 0) {
+            orderLogger.debug('Scaling addon quantities for existing takeout item', {
+              addonCount: existingAddons.length,
+              quantityToAdd: itemQuantity,
+            });
+
+            try {
+              const addonResult = await (window as any).electronAPI.ipc.invoke(
+                'addon:scaleAddonQuantities',
+                {
+                  orderItemId: existingItem.id,
+                  quantityToAdd: itemQuantity,
+                }
+              );
+
+              if (addonResult.success) {
+                orderLogger.debug('Addon quantities scaled successfully');
+
+                // ✅ Refresh order to show updated addon quantities
+                try {
+                  const orderAPI = await import('@/lib/ipc-api');
+                  const refreshResp = await orderAPI.orderAPI.getById(currentOrder.id);
+                  if (refreshResp.success && refreshResp.data) {
+                    orderLogger.debug('Order refreshed after addon scaling', {
+                      itemCount: refreshResp.data.items?.length,
+                    });
+                    // Update the posStore with refreshed order
+                    const { updateOrderInStore } = usePOSStore.getState();
+                    const refreshedOrder = {
+                      ...refreshResp.data,
+                      items: refreshResp.data.items ? [...refreshResp.data.items.map((item: any) => ({
+                        ...item,
+                        unitPrice: item.unitPrice,
+                        totalPrice: item.totalPrice,
+                        price: item.price,
+                      }))] : [],
+                    };
+                    updateOrderInStore(refreshedOrder as any);
+                    orderLogger.debug('Updated posStore with scaled addon quantities');
+                  }
+                } catch (refreshError) {
+                  orderLogger.error('Failed to refresh order after addon scaling:', refreshError);
+                }
+              } else {
+                orderLogger.error('Failed to scale addon quantities:', addonResult.error);
+                toast({
+                  title: 'Warning',
+                  description: 'Item quantity updated but addon quantities may be incorrect',
+                  variant: 'default',
+                });
+              }
+            } catch (addonError) {
+              orderLogger.error('Error scaling addon quantities:', addonError);
+              toast({
+                title: 'Warning',
+                description: 'Item quantity updated but addon quantities may be incorrect',
+                variant: 'default',
+              });
+            }
+          }
+
+          // ✅ Track this quantity change
+          trackQuantityChange(
+            existingItem.id,
+            existingItem.name || (existingItem as any).menuItemName || selectedItem.name,
+            selectedItem.id,
+            oldQuantity,
+            newQuantity
+          );
+
+          // ✅ FIX: Don't auto-navigate - let user continue adding items (matches OrderPanel)
+          toast({
+            title: 'Item Updated',
+            description: `Updated ${selectedItem.name} quantity to ${newQuantity}`,
+          });
+          return; // ✅ Exit early - don't add as new item
+        }
+
         // Use store's addOrderItem function which handles proper state updates
         const response = await addOrderItem(
           selectedItem.id,
@@ -668,6 +888,45 @@ const TakeoutOrderPanel = ({
             menuItemId: actualItem.menuItemId,
           });
 
+          // ✅ CRITICAL FIX: Add addons to the order item if any were selected
+          if (addonSelections && addonSelections.length > 0 && actualItem && actualItem.id) {
+            orderLogger.debug('Adding addons to takeout order item', {
+              addonCount: addonSelections.length,
+              orderId: currentOrder.id,
+              orderItemId: actualItem.id,
+            });
+
+            try {
+              const addonResult = await (window as any).electronAPI.ipc.invoke(
+                'addon:addToOrderItem',
+                {
+                  orderItemId: actualItem.id,
+                  addonSelections: addonSelections,
+                }
+              );
+
+              if (addonResult.success) {
+                orderLogger.debug('Addons added successfully to takeout order item');
+                // Small delay to ensure database transaction is fully committed
+                await new Promise(resolve => setTimeout(resolve, 100));
+              } else {
+                orderLogger.error('Failed to add addons to takeout order:', addonResult.error);
+                toast({
+                  title: 'Warning',
+                  description: 'Item added but some addons failed to attach',
+                  variant: 'default',
+                });
+              }
+            } catch (addonError) {
+              orderLogger.error('Error adding addons to takeout order:', addonError);
+              toast({
+                title: 'Warning',
+                description: 'Item added but addons failed to attach',
+                variant: 'default',
+              });
+            }
+          }
+
           // Always refresh the order to get the most current state
           orderLogger.debug('Refreshing order to get current state');
           try {
@@ -678,6 +937,20 @@ const TakeoutOrderPanel = ({
               orderLogger.debug('Order refreshed successfully', {
                 itemCount: refreshedOrder.items?.length,
               });
+
+              // ✅ CRITICAL FIX: Update store with refreshed order (includes addons!)
+              const { updateOrderInStore } = usePOSStore.getState();
+              const orderWithItems = {
+                ...refreshedOrder,
+                items: refreshedOrder.items ? [...refreshedOrder.items.map((item: any) => ({
+                  ...item,
+                  unitPrice: item.unitPrice,
+                  totalPrice: item.totalPrice,
+                  price: item.price,
+                }))] : [],
+              };
+              updateOrderInStore(orderWithItems as any);
+              orderLogger.debug('Updated posStore with refreshed order (including addons)');
 
               // Find the ACTUAL item in the refreshed order
               orderLogger.debug('Searching for matching item', {
@@ -792,14 +1065,17 @@ const TakeoutOrderPanel = ({
           description: 'Failed to add item to order',
           variant: 'destructive',
         });
+      } finally {
+        // ✅ FIX: Reset processing flag when done (success or error)
+        isProcessingCustomizationRef.current = false;
       }
     };
 
     // Execute the item addition
     processItemAddition();
   }, [
-    pendingCustomization?.selectedItem?.id,
-    currentOrder?.id,
+    pendingCustomization,  // ✅ Trigger on full object change (matches OrderPanel)
+    // ✅ FIX: Removed currentOrder?.id - it was causing duplicate triggers on store updates
     addOrderItem,
     toast,
   ]); // Only depend on essential props to prevent re-rendering
@@ -947,6 +1223,31 @@ const TakeoutOrderPanel = ({
                           }
                           return null;
                         })()}
+
+                      {/* Display addons if present */}
+                      {(item as any).addons && (item as any).addons.length > 0 && (
+                        <div className='mt-2'>
+                          <p className='text-xs font-medium text-gray-700 dark:text-gray-300'>
+                            Add-ons:
+                          </p>
+                          <div className='mt-1 space-y-1'>
+                            {(item as any).addons.map((addon: any) => (
+                              <div
+                                key={addon.id}
+                                className='flex items-center justify-between text-xs text-gray-600 dark:text-gray-400'
+                              >
+                                <span>
+                                  + {addon.addonName || addon.addon?.name} (×
+                                  {addon.quantity})
+                                </span>
+                                <span className='font-medium'>
+                                  ${Number(addon.totalPrice || 0).toFixed(2)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                     <Button
                       variant='ghost'
@@ -972,6 +1273,7 @@ const TakeoutOrderPanel = ({
                             item.menuItemName || 'Item'
                           )
                         }
+                        disabled={(item.quantity || 1) <= 1 || updatingItemId === item.id || isProcessing}
                         className='h-8 w-8 p-0'
                       >
                         <Minus className='h-3 w-3' />
@@ -989,6 +1291,7 @@ const TakeoutOrderPanel = ({
                             item.menuItemName || 'Item'
                           )
                         }
+                        disabled={updatingItemId === item.id || isProcessing}
                         className='h-8 w-8 p-0'
                       >
                         <Plus className='h-3 w-3' />

@@ -278,6 +278,41 @@ const OrderPanel = ({ pendingCustomization }: OrderPanelProps) => {
         orderLogger.debug('Calling updateOrderItem', { itemId, newQuantity });
         await updateOrderItem(itemId, newQuantity);
         orderLogger.debug('updateOrderItem completed successfully');
+
+        // ✅ FIX: Scale addon quantities when using +/- buttons
+        const itemAddons = (currentItem as any).addons || [];
+        if (itemAddons.length > 0 && currentOrder?.id) {
+          const quantityChange = newQuantity - oldQuantity;
+          orderLogger.debug('Scaling addon quantities for +/- button', {
+            addonCount: itemAddons.length,
+            quantityChange,
+          });
+          try {
+            const addonResult = await (window as any).electronAPI.ipc.invoke(
+              'addon:scaleAddonQuantities',
+              {
+                orderItemId: itemId,
+                quantityToAdd: quantityChange,
+              }
+            );
+            if (addonResult.success) {
+              orderLogger.debug('Addon quantities scaled successfully');
+              // Refresh order to show updated addon quantities
+              const orderAPI = await import('@/lib/ipc-api');
+              const refreshResp = await orderAPI.orderAPI.getById(currentOrder.id);
+              if (refreshResp.success && refreshResp.data) {
+                const { updateOrderInStore } = usePOSStore.getState();
+                updateOrderInStore(refreshResp.data as any);
+                orderLogger.debug('Order refreshed with updated addon quantities');
+              }
+            } else {
+              orderLogger.error('Failed to scale addon quantities:', addonResult.error);
+            }
+          } catch (addonError) {
+            orderLogger.error('Error scaling addon quantities:', addonError);
+          }
+        }
+
         return { itemId, newQuantity };
       },
       {
@@ -1167,6 +1202,7 @@ const OrderPanel = ({ pendingCustomization }: OrderPanelProps) => {
                             )
                           }
                           disabled={
+                            isProcessing ||
                             updatingItemId === item.id ||
                             (item.quantity || 1) <= 1
                           }
@@ -1195,7 +1231,7 @@ const OrderPanel = ({ pendingCustomization }: OrderPanelProps) => {
                               item.menuItemName || 'Item'
                             )
                           }
-                          disabled={updatingItemId === item.id}
+                          disabled={isProcessing || updatingItemId === item.id}
                         >
                           <Plus className='h-3 w-3' />
                         </Button>

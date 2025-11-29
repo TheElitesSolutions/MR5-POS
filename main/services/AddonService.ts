@@ -239,7 +239,8 @@ export class AddonService {
     data: UpdateAddonGroupData
   ): Promise<ServiceResponse<AddonGroupData>> {
     try {
-      const validatedData = UpdateAddonGroupSchema.parse(data);
+      // Note: Controller already validated data with UpdateAddonGroupSchema
+      // No need to re-validate here (data doesn't include id which schema requires)
 
       // Check if group exists
       const existingGroup = await this.prisma.addonGroup.findUnique({
@@ -254,10 +255,10 @@ export class AddonService {
       }
 
       // Check name uniqueness if name is being updated
-      if (validatedData.name && validatedData.name !== existingGroup.name) {
+      if (data.name && data.name !== existingGroup.name) {
         const nameExists = await this.prisma.addonGroup.findFirst({
           where: {
-            name: validatedData.name,
+            name: data.name,
             id: { not: id },
             isActive: true,
           },
@@ -266,7 +267,7 @@ export class AddonService {
         if (nameExists) {
           return {
             success: false,
-            error: AddonErrorFactory.addonGroupNameExists(validatedData.name),
+            error: AddonErrorFactory.addonGroupNameExists(data.name),
           };
         }
       }
@@ -274,7 +275,7 @@ export class AddonService {
       const updatedGroup = await this.prisma.addonGroup.update({
         where: { id },
         data: {
-          ...validatedData,
+          ...data,
           updatedAt: getCurrentLocalDateTime(),
         },
       });

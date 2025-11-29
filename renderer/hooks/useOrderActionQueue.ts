@@ -139,8 +139,8 @@ export const useOrderActionQueue = (
 
       // Process next action if queue is not empty
       if (queueRef.current.length > 0) {
-        // Small delay to prevent tight loop
-        setTimeout(() => processNextAction(), 10);
+        // Delay between actions - increased for slow hardware compatibility
+        setTimeout(() => processNextAction(), 100);
       } else {
         setIsProcessing(false);
         setQueueLength(0);
