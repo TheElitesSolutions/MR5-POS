@@ -325,10 +325,10 @@ export class AddonKitchenTicketGenerator {
             addons.forEach((addon: any) => {
               const prefix =
                 Object.keys(addonsByGroup).length > 1 ? '         ' : '       ';
-              const addonDisplay =
-                addon.quantity > 1
-                  ? `${prefix}+ ${addon.quantity}x ${addon.addon.name}`
-                  : `${prefix}+ ${addon.addon.name}`;
+              const perItemQty = addon.quantity || 1;
+              // ✅ FIX: Show total addon quantity (per-item qty × item qty)
+              const totalAddonQty = perItemQty * quantity;
+              const addonDisplay = `${prefix}+ ${totalAddonQty}x ${addon.addon.name}`;
 
               printData.push({
                 type: 'text',

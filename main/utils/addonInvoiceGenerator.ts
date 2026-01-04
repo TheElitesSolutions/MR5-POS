@@ -328,69 +328,50 @@ export class AddonInvoiceGenerator {
       });
     }
 
-    // Group items by menuItemId and aggregate add-ons
+    // ✅ FIX: Use item.id as key to prevent grouping items with different addons
+    // Each order item appears as separate line on invoice
     order.items?.forEach((item: any) => {
+      const uniqueKey = item.id; // Use item.id to prevent grouping
       const menuItemId = item.menuItemId || item.menuItem?.id || 'unknown';
       const name = item.menuItem?.name || item.menuItemName || item.name || 'Unknown Item';
       const qty = item.quantity || 1;
-      const baseItemPrice = item.baseItemPrice || item.unitPrice || item.totalPrice || 0;
+      // ✅ FIX: Use item.unitPrice directly (this is the base price per unit, excluding addons)
+      const unitPrice = Number(item.unitPrice) || 0;
+      const baseItemPrice = unitPrice * qty; // Total base price (unitPrice × quantity)
       const addonTotal = item.addonTotal || 0;
       const itemTotalPrice = item.totalPrice || 0;
-      const unitPrice = baseItemPrice / qty; // Unit price for base item only
 
-      if (groupedItems.has(menuItemId)) {
-        // Add to existing group
-        const existing = groupedItems.get(menuItemId)!;
-        existing.totalQuantity += qty;
-        existing.baseTotal += baseItemPrice;
-        existing.addonTotal += addonTotal;
-        existing.totalPrice += itemTotalPrice;
+      // Create entry for this specific order item (no grouping)
+      const addons: Array<{
+        name: string;
+        quantity: number;
+        unitPrice: number;
+        totalPrice: number;
+        groupName: string;
+      }> = [];
 
-        // Add add-ons to the group
-        if (item.hasAddons && item.addons?.length > 0) {
-          item.addons.forEach((addon: any) => {
-            existing.addons.push({
-              name: addon.addon?.name || addon.addonName || 'Unknown Addon',
-              quantity: addon.quantity,
-              unitPrice: Number(addon.unitPrice),
-              totalPrice: Number(addon.totalPrice),
-              groupName: addon.addon?.addonGroup?.name || 'Add-ons',
-            });
+      if (item.hasAddons && item.addons?.length > 0) {
+        item.addons.forEach((addon: any) => {
+          addons.push({
+            name: addon.addon?.name || addon.addonName || 'Unknown Addon',
+            quantity: addon.quantity,
+            unitPrice: Number(addon.unitPrice),
+            totalPrice: Number(addon.totalPrice),
+            groupName: addon.addon?.addonGroup?.name || 'Add-ons',
           });
-        }
-      } else {
-        // Create new group
-        const addons: Array<{
-          name: string;
-          quantity: number;
-          unitPrice: number;
-          totalPrice: number;
-          groupName: string;
-        }> = [];
-
-        if (item.hasAddons && item.addons?.length > 0) {
-          item.addons.forEach((addon: any) => {
-            addons.push({
-              name: addon.addon?.name || addon.addonName || 'Unknown Addon',
-              quantity: addon.quantity,
-              unitPrice: Number(addon.unitPrice),
-              totalPrice: Number(addon.totalPrice),
-              groupName: addon.addon?.addonGroup?.name || 'Add-ons',
-            });
-          });
-        }
-
-        groupedItems.set(menuItemId, {
-          name,
-          totalQuantity: qty,
-          unitPrice,
-          baseTotal: baseItemPrice,
-          addonTotal: addonTotal,
-          totalPrice: itemTotalPrice,
-          menuItemId,
-          addons,
         });
       }
+
+      groupedItems.set(uniqueKey, {
+        name,
+        totalQuantity: qty,
+        unitPrice,
+        baseTotal: baseItemPrice,
+        addonTotal: addonTotal,
+        totalPrice: itemTotalPrice,
+        menuItemId,
+        addons,
+      });
     });
 
     // Debug: Log grouped items before display
@@ -468,21 +449,25 @@ export class AddonInvoiceGenerator {
 
           // Display each add-on in the group
           addons.forEach(addon => {
-            const addonDisplay =
-              addon.quantity > 1
-                ? `${addon.quantity}x ${addon.name}`
-                : addon.name;
+            // ✅ FIX: Calculate total addon quantity and correct prices
+            const totalAddonQty = addon.quantity * groupedItem.totalQuantity;
+            const addonName = addon.name; // Just the name, no "xn" prefix
             const marginLeft =
               Object.keys(addonsByGroup).length > 1 ? '25px' : '15px';
 
-            const addonUnitPriceStr = typeof addon.unitPrice === 'number' ? addon.unitPrice.toFixed(2) : '0.00';
-            const addonTotalPriceStr = typeof addon.totalPrice === 'number' ? addon.totalPrice.toFixed(2) : '0.00';
+            // ✅ FIX: Addon unit price should be (unitPrice × addon.quantity per item)
+            const addonUnitPricePerItem = addon.unitPrice * addon.quantity;
+            const addonUnitPriceStr = addonUnitPricePerItem.toFixed(2);
+
+            // Total price = unit price per item × item quantity
+            const addonTotalPrice = addonUnitPricePerItem * groupedItem.totalQuantity;
+            const addonTotalPriceStr = addonTotalPrice.toFixed(2);
 
             printData.push({
               type: 'text',
               value: `<div style="display: flex; justify-content: space-between; font-size: 11px; padding: 1px 0;">
-                <span style="width: 45%; text-align: left; margin-left: ${marginLeft}; font-style: italic;">+ ${addonDisplay}</span>
-                <span style="width: 15%; text-align: center;"></span>
+                <span style="width: 45%; text-align: left; margin-left: ${marginLeft}; font-style: italic;">+ ${addonName}</span>
+                <span style="width: 15%; text-align: center;">${totalAddonQty}</span>
                 <span style="width: 20%; text-align: right;">$${addonUnitPriceStr}</span>
                 <span style="width: 20%; text-align: right;">$${addonTotalPriceStr}</span>
               </div>`,
@@ -507,10 +492,20 @@ export class AddonInvoiceGenerator {
       },
     });
 
-    // Calculate totals
-    const subtotal = order.subtotal || order.total || 0;
-    const tax = order.tax || 0;
-    const total = order.total || subtotal + tax;
+    // ✅ FIX: Calculate totals from items instead of trusting database
+    // This ensures invoice always shows correct total even if DB hasn't updated yet
+    let calculatedSubtotal = 0;
+
+    // Sum all item totals (item.totalPrice already includes addon prices)
+    order.items?.forEach(item => {
+      const itemTotal = Number(item.totalPrice) || 0;
+      calculatedSubtotal += itemTotal;
+    });
+
+    const subtotal = calculatedSubtotal;
+    const deliveryFee = Number(order.deliveryFee) || 0;
+    const tax = Number(order.tax) || 0;
+    const total = subtotal + deliveryFee + tax;  // ✅ Always calculated fresh from items
 
     console.log('💰 INVOICE GENERATION - Totals calculated:', {
       subtotal,

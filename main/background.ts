@@ -59,6 +59,7 @@ import { getUpdaterController } from './controllers/updaterController';
 import { logInfo, logError } from './error-handler';
 import { enhancedLogger, LogCategory } from './utils/enhanced-logger';
 import { checkAndAddIsPrintableColumn } from './utils/checkIsPrintableColumn';
+import { setupGlobalShortcuts, unregisterAllShortcuts } from './shortcuts';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -201,6 +202,23 @@ let startupManager: StartupManagerNextron | null = null;
 
   // Disable application menu (removes File, Edit, View, Window, Help menu bar)
   Menu.setApplicationMenu(null);
+
+  // Register global keyboard shortcuts (including F12 for DevTools)
+  setupGlobalShortcuts(mainWindow);
+  console.log('[Main] Global shortcuts registered');
+
+  // Handle F12 key at window level for more reliable DevTools toggle on Windows
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12') {
+      event.preventDefault();
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+      } else {
+        mainWindow.webContents.openDevTools({ mode: 'detach' });
+      }
+    }
+  });
+  console.log('[Main] F12 DevTools handler registered');
 
   // Initialize auto-update system (only in production)
   if (isProd) {
@@ -363,6 +381,9 @@ let startupManager: StartupManagerNextron | null = null;
 
 // Quit when all windows are closed
 app.on('window-all-closed', async () => {
+  // Unregister all global shortcuts
+  unregisterAllShortcuts();
+
   // Cleanup controllers
   if (startupManager) {
     await startupManager.cleanup();
@@ -395,6 +416,39 @@ app.on('activate', () => {
         sandbox: false,
       },
     });
+
+    // Re-register global shortcuts for the new window
+    setupGlobalShortcuts(mainWindow);
+
+    // Re-register F12 handler
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+      if (input.key === 'F12') {
+        event.preventDefault();
+        if (mainWindow.webContents.isDevToolsOpened()) {
+          mainWindow.webContents.closeDevTools();
+        } else {
+          mainWindow.webContents.openDevTools({ mode: 'detach' });
+        }
+      }
+    });
+  }
+});
+
+// IPC handler for toggling DevTools
+ipcMain.handle('app:toggle-devtools', async () => {
+  try {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.webContents.isDevToolsOpened()) {
+        mainWindow.webContents.closeDevTools();
+      } else {
+        mainWindow.webContents.openDevTools({ mode: 'detach' });
+      }
+      return { success: true };
+    }
+    return { success: false, error: 'No main window available' };
+  } catch (error) {
+    logError(error as Error, 'Main - Toggle DevTools Handler');
+    return { success: false, error: (error as Error).message };
   }
 });
 

@@ -12,7 +12,17 @@
       "Bash(git commit:*)",
       "Bash(git push:*)",
       "Bash(node scripts/check-tablename-orders.js:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(yarn install:*)",
+      "Bash(yarn type-check:*)",
+      "Bash(gh release create v2.3.4 --title \"v2.3.4 - TakeoutOrderPanel Feature Parity & Addon Fixes\" --notes \"$(cat <<''EOF''\n## What''s Changed\n\n### TakeoutOrderPanel Fixes\n- **Fixed auto-navigation bug**: View no longer automatically navigates away after adding items with addons\n- **Fixed duplicate items bug**: Items with addons no longer appear twice in the order\n- **Added queue-based operations**: Prevents race conditions on slow hardware\n- **Fixed button disabled states**: Buttons properly disable during processing\n\n### Addon Quantity Display Fix (Both Dine-In & Takeout)\n- **Fixed addon labels not updating**: When using +/- buttons, addon quantity labels now update correctly (e.g., \"Mead x1\" → \"Mead x2\")\n\n### Performance Improvements\n- Increased action queue delay for better slow hardware compatibility\n\n## Files Changed\n- `renderer/components/pos/OrderPanel.tsx`\n- `renderer/components/pos/TakeoutOrderPanel.tsx`\n- `renderer/hooks/useOrderActionQueue.ts`\n- `main/controllers/addonController.ts`\n- `main/services/AddonService.ts`\nEOF\n)\")",
+      "Bash(yarn add:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill:*)",
+      "Bash(npm run build:*)",
+      "Bash(timeout /t 10 /nobreak)",
+      "Bash(yarn tsc:*)"
     ],
     "deny": [],
     "ask": []

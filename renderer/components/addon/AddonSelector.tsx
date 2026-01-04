@@ -127,21 +127,45 @@ export const AddonSelector: React.FC<AddonSelectorProps> = ({
   const unitPriceDisplay = addon.price.toFixed(2);
   const totalPriceDisplay = (addon.price * quantity).toFixed(2);
 
+  // Handle card click (toggle selection when clicking anywhere on card)
+  const handleCardClick = useCallback(
+    (e: React.MouseEvent) => {
+      // Don't trigger if clicking on quantity buttons or checkbox
+      const target = e.target as HTMLElement;
+      if (
+        target.closest('button') ||
+        target.closest('[role="checkbox"]') ||
+        target.closest('input')
+      ) {
+        return;
+      }
+
+      // Toggle selection
+      if (isSelected) {
+        onDeselect(addon.id);
+      } else if (canSelect) {
+        onSelectionChange(addon, 1);
+      }
+    },
+    [isSelected, canSelect, addon, onSelectionChange, onDeselect]
+  );
+
   return (
     <Card
       className={cn(
-        'transition-all duration-200 hover:shadow-md',
+        'transition-all duration-200 hover:shadow-md cursor-pointer',
         isSelected && 'ring-2 ring-primary ring-offset-2',
-        !canSelect && 'opacity-60',
+        !canSelect && 'opacity-60 cursor-not-allowed',
         className
       )}
+      onClick={handleCardClick}
     >
       <CardContent className={config.card}>
         <div className={cn('flex items-start justify-between', config.spacing)}>
           {/* Left section - Selection and info */}
           <div className={cn('flex items-start', config.spacing)}>
             {/* Checkbox */}
-            <div className='flex items-center pt-1'>
+            <div className='flex items-center pt-1' onClick={(e) => e.stopPropagation()}>
               <Checkbox
                 id={`addon-${addon.id}`}
                 checked={isSelected}
@@ -203,13 +227,16 @@ export const AddonSelector: React.FC<AddonSelectorProps> = ({
 
           {/* Right section - Quantity controls and price */}
           {isSelected && (
-            <div className='flex items-center gap-2'>
+            <div className='flex items-center gap-2' onClick={(e) => e.stopPropagation()}>
               {/* Quantity stepper */}
               <div className='flex items-center gap-1'>
                 <Button
                   variant='outline'
                   size='sm'
-                  onClick={() => handleQuantityChange(quantity - 1)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleQuantityChange(quantity - 1);
+                  }}
                   disabled={!canDecreaseQuantity}
                   className={cn(
                     'touch-manipulation',
@@ -230,7 +257,10 @@ export const AddonSelector: React.FC<AddonSelectorProps> = ({
                 <Button
                   variant='outline'
                   size='sm'
-                  onClick={() => handleQuantityChange(quantity + 1)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleQuantityChange(quantity + 1);
+                  }}
                   disabled={!canIncreaseQuantity}
                   className={cn(
                     'touch-manipulation',
@@ -278,7 +308,9 @@ export const MemoizedAddonSelector = React.memo(
       prevProps.isSelected === nextProps.isSelected &&
       prevProps.quantity === nextProps.quantity &&
       prevProps.currentStock === nextProps.currentStock &&
-      prevProps.disabled === nextProps.disabled
+      prevProps.disabled === nextProps.disabled &&
+      prevProps.addon.price === nextProps.addon.price &&
+      prevProps.addon.name === nextProps.addon.name
     );
   }
 );

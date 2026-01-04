@@ -831,10 +831,17 @@ export class AddonService {
   async addAddonsToOrderItem(
     orderItemId: string,
     addonSelections: AddonSelection[]
-  ): Promise<ServiceResponse<OrderItemAddonData[]>> {
+  ): Promise<ServiceResponse<{ assignments: OrderItemAddonData[]; orderId: string }>> {
     try {
+      console.log('🔍 [AddonService] addAddonsToOrderItem CALLED', {
+        orderItemId,
+        selectionsCount: addonSelections?.length || 0,
+        selections: addonSelections?.map(s => ({ addonId: s.addonId, quantity: s.quantity, unitPrice: s.unitPrice }))
+      });
+
       // Validate input
       if (!addonSelections.length) {
+        console.error('❌ [AddonService] Validation failed - empty addon selections');
         return {
           success: false,
           error: new AddonError(
@@ -848,6 +855,7 @@ export class AddonService {
       // Transaction-safe operation
       const result = await this.prisma.$transaction(async tx => {
         // 1. Verify order item exists
+        console.log(`🔍 [AddonService] Checking if order item exists: ${orderItemId}`);
         const orderItem = await tx.orderItem.findUnique({
           where: { id: orderItemId },
           include: {
@@ -856,13 +864,20 @@ export class AddonService {
         });
 
         if (!orderItem) {
+          console.error(`❌ [AddonService] Order item not found: ${orderItemId}`);
           throw AddonErrorFactory.orderItemNotFound(orderItemId);
         }
+
+        console.log(`✅ [AddonService] Order item found: ${orderItem.name}, Qty: ${orderItem.quantity}`);
 
         // 2. Validate and prepare add-on selections
         const processedSelections: Array<AddonSelection & { addon: any }> = [];
 
+        console.log(`🔍 [AddonService] Processing ${addonSelections.length} addon selections`);
+
         for (const selection of addonSelections) {
+          console.log(`🔍 [AddonService] Processing addon ${selection.addonId}, Qty: ${selection.quantity}`);
+
           // Get add-on details with inventory items
           const addon = await tx.addon.findUnique({
             where: { id: selection.addonId },
@@ -876,9 +891,17 @@ export class AddonService {
             },
           });
 
-          if (!addon || !addon.isActive) {
+          if (!addon) {
+            console.error(`❌ [AddonService] Addon not found: ${selection.addonId}`);
             throw AddonErrorFactory.addonNotFound(selection.addonId);
           }
+
+          if (!addon.isActive) {
+            console.error(`❌ [AddonService] Addon is INACTIVE: ${addon.name} (${selection.addonId}), isActive: ${addon.isActive}`);
+            throw AddonErrorFactory.addonNotFound(selection.addonId);
+          }
+
+          console.log(`✅ [AddonService] Addon found and active: ${addon.name}, HasInventory: ${addon.inventoryItems?.length > 0}, Count: ${addon.inventoryItems?.length || 0}`);
 
           // Check if already added
           const existing = await tx.orderItemAddon.findFirst({
@@ -889,6 +912,7 @@ export class AddonService {
           });
 
           if (existing) {
+            console.error(`❌ [AddonService] Addon already added to order item: ${selection.addonId} -> OrderItem: ${orderItemId}`);
             throw AddonErrorFactory.addonAlreadyAdded(
               orderItemId,
               selection.addonId
@@ -896,19 +920,45 @@ export class AddonService {
           }
 
           // Check stock availability for all inventory items
+          // ✅ CRITICAL FIX: Scale addon quantity by item quantity for stock check
+          const scaledAddonQty = selection.quantity * orderItem.quantity;
+
+          console.log(`🔍 [AddonService] Checking stock for addon: ${addon.name}`, {
+            requestedQty: selection.quantity,
+            itemQty: orderItem.quantity,
+            scaledQty: scaledAddonQty,
+            hasInventory: addon.inventoryItems && addon.inventoryItems.length > 0
+          });
+
           if (addon.inventoryItems && addon.inventoryItems.length > 0) {
             for (const addonInvItem of addon.inventoryItems) {
               if (addonInvItem.inventory && addonInvItem.quantity > 0) {
-                const totalToDeduct = addonInvItem.quantity * selection.quantity;
-                if (Number(addonInvItem.inventory.currentStock) < totalToDeduct) {
-                  throw AddonErrorFactory.insufficientStock(
-                    selection.addonId,
-                    totalToDeduct,
-                    Number(addonInvItem.inventory.currentStock)
-                  );
+                const totalToDeduct = addonInvItem.quantity * scaledAddonQty; // Use scaled quantity
+                const currentStock = Number(addonInvItem.inventory.currentStock);
+
+                console.log(`🔍 [AddonService] Inventory check: ${addonInvItem.inventory.name}`, {
+                  addonInvQty: addonInvItem.quantity,
+                  totalToDeduct,
+                  currentStock,
+                  hasEnough: currentStock >= totalToDeduct
+                });
+
+                if (currentStock < totalToDeduct) {
+                  console.warn(`⚠️ [AddonService] LOW/NEGATIVE STOCK (allowing anyway)`, {
+                    addon: addon.name,
+                    inventory: addonInvItem.inventory.name,
+                    required: totalToDeduct,
+                    available: currentStock,
+                    shortage: totalToDeduct - currentStock,
+                    willGoNegative: currentStock - totalToDeduct
+                  });
+                  // ✅ Allow addon to be added anyway - stock can go negative
                 }
               }
             }
+            console.log(`✅ [AddonService] Stock check PASSED for addon: ${addon.name}`);
+          } else {
+            console.log(`ℹ️ [AddonService] Addon has NO inventory items: ${addon.name}`);
           }
 
           processedSelections.push({
@@ -930,24 +980,31 @@ export class AddonService {
           })),
         });
 
+        // ✅ NEW APPROACH: Store addon quantity PER ITEM (user's selection)
+        // Frontend will multiply by item quantity for display
+        // This avoids all scaling/compounding issues
         const addonAssignments = await Promise.all(
-          processedSelections.map(selection =>
-            tx.orderItemAddon.create({
+          processedSelections.map(selection => {
+            // Store user's selection (e.g., "1 Meal per burger"), NOT scaled by item quantity
+            const addonQtyPerItem = selection.quantity;
+            const pricePerItem = new Decimal(addonQtyPerItem * selection.unitPrice!).toNumber();
+
+            console.log(`📦 ADDON CREATION (per-item): ${selection.addon.name} - Qty per item: ${addonQtyPerItem}, Price per item: ${pricePerItem}`);
+
+            return tx.orderItemAddon.create({
               data: {
                 orderItemId,
                 addonId: selection.addonId,
-                addonName: selection.addon.name, // Store addon name for historical accuracy
-                quantity: selection.quantity,
+                addonName: selection.addon.name,
+                quantity: addonQtyPerItem, // ✅ Store PER-ITEM quantity
                 unitPrice: selection.unitPrice!,
-                totalPrice: new Decimal(
-                  selection.quantity * selection.unitPrice!
-                ),
+                totalPrice: pricePerItem, // ✅ Price for ONE item's addons
               },
               include: {
                 addon: true,
               },
-            })
-          )
+            });
+          })
         );
 
         console.log('🔍 AddonService: Addon assignments created', {
@@ -962,11 +1019,13 @@ export class AddonService {
         });
 
         // 4. Update inventory atomically for all inventory items
+        // ✅ CRITICAL FIX: Use scaled addon quantity for stock deduction
         for (const selection of processedSelections) {
+          const scaledAddonQty = selection.quantity * orderItem.quantity; // Scale by item quantity
           if (selection.addon.inventoryItems && selection.addon.inventoryItems.length > 0) {
             for (const addonInvItem of selection.addon.inventoryItems) {
               if (addonInvItem.inventory && addonInvItem.quantity > 0) {
-                const totalToDeduct = addonInvItem.quantity * selection.quantity;
+                const totalToDeduct = addonInvItem.quantity * scaledAddonQty; // Use scaled quantity
                 await tx.inventory.update({
                   where: { id: addonInvItem.inventoryId },
                   data: {
@@ -982,16 +1041,22 @@ export class AddonService {
         }
 
         // 5. Update order item total
-        const totalAddonCost = processedSelections.reduce(
+        // ✅ CRITICAL FIX: Scale addon cost by item quantity (addons are stored per-item)
+        const addonCostPerItem = processedSelections.reduce(
           (sum, selection) => sum + selection.quantity * selection.unitPrice!,
           0
         );
+        const totalAddonCost = addonCostPerItem * orderItem.quantity; // Scale by item quantity
 
-        // Get current totalPrice and add addon cost
+        console.log(`💰 ADDON COST CALCULATION: Per-item: ${addonCostPerItem}, Item qty: ${orderItem.quantity}, Total: ${totalAddonCost}`);
+
+        // ✅ FIX: Use DecimalJS for precision in monetary calculations
         const currentOrderItem = await tx.orderItem.findUnique({
           where: { id: orderItemId },
         });
-        const newItemTotal = Number(currentOrderItem.totalPrice || 0) + totalAddonCost;
+        const currentItemTotal = new Decimal(currentOrderItem.totalPrice || 0);
+        const addonCost = new Decimal(totalAddonCost);
+        const newItemTotal = currentItemTotal.plus(addonCost).toNumber();
 
         await tx.orderItem.update({
           where: { id: orderItemId },
@@ -1001,39 +1066,55 @@ export class AddonService {
           },
         });
 
-        // 6. Update order total
-        const currentOrder = await tx.order.findUnique({
-          where: { id: orderItem.orderId },
-        });
-        const newOrderTotal = Number(currentOrder.total || 0) + totalAddonCost;
-        const newOrderSubtotal = Number(currentOrder.subtotal || 0) + totalAddonCost;
+        // ✅ FIX: Removed manual order.total update - will be recalculated by controller
+        // This ensures single source of truth and prevents precision errors
 
-        await tx.order.update({
-          where: { id: orderItem.orderId },
-          data: {
-            total: newOrderTotal,
-            subtotal: newOrderSubtotal,
-            updatedAt: getCurrentLocalDateTime(),
-          },
-        });
+        return { assignments: addonAssignments, orderId: orderItem.orderId };
+      });
 
-        return addonAssignments;
+      console.log(`✅ [AddonService] Transaction completed successfully`, {
+        assignmentsCount: result.assignments.length,
+        assignmentIds: result.assignments.map(a => a.id),
+        orderId: result.orderId
       });
 
       return {
         success: true,
-        data: result.map(assignment => OrderItemAddonSchema.parse(assignment)),
+        data: {
+          assignments: result.assignments.map(assignment => OrderItemAddonSchema.parse(assignment)),
+          orderId: result.orderId
+        },
       };
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      console.error(`❌ [AddonService] Error in addAddonsToOrderItem`, {
+        error: errorMsg,
+        orderItemId,
+        selectionsCount: addonSelections?.length,
+        isAddonError: isAddonError(error),
+        stack: errorStack
+      });
+
       if (isAddonError(error)) {
+        const addonErr = error as any;
+        console.error(`❌ [AddonService] Returning AddonError`, {
+          code: addonErr.code,
+          message: error.message,
+          statusCode: addonErr.statusCode
+        });
         return { success: false, error };
       }
+
+      const transactionError = AddonErrorFactory.transactionFailed(
+        'addAddonsToOrderItem',
+        error
+      );
+      console.error(`❌ [AddonService] Returning transaction error: ${transactionError.message}`);
+
       return {
         success: false,
-        error: AddonErrorFactory.transactionFailed(
-          'addAddonsToOrderItem',
-          error
-        ),
+        error: transactionError,
       };
     }
   }
@@ -1044,7 +1125,7 @@ export class AddonService {
   async removeAddonFromOrderItem(
     orderItemId: string,
     addonId: string
-  ): Promise<ServiceResponse<{ removed: boolean }>> {
+  ): Promise<ServiceResponse<{ removed: boolean; orderId: string }>> {
     try {
       const result = await this.prisma.$transaction(async tx => {
         // Find the add-on assignment
@@ -1072,7 +1153,8 @@ export class AddonService {
         });
 
         if (!assignment) {
-          return false;
+          // Assignment not found - return empty result
+          return { removed: false, orderId: '' };
         }
 
         // Restore inventory for all inventory items linked to this addon
@@ -1108,42 +1190,37 @@ export class AddonService {
           }
         }
 
+        // ✅ FIX: Use DecimalJS for precision in monetary calculations
+        const currentOrderItem = await tx.orderItem.findUnique({
+          where: { id: orderItemId },
+        });
+        const currentItemTotal = new Decimal(currentOrderItem.totalPrice || 0);
+        const addonPrice = new Decimal(assignment.totalPrice || 0);
+        const newItemTotal = currentItemTotal.minus(addonPrice).toNumber();
+
         // Update order item total
         await tx.orderItem.update({
           where: { id: orderItemId },
           data: {
-            totalPrice: {
-              decrement: assignment.totalPrice,
-            },
+            totalPrice: newItemTotal,
             updatedAt: getCurrentLocalDateTime(),
           },
         });
 
-        // Update order total
-        await tx.order.update({
-          where: { id: assignment.orderItem.orderId },
-          data: {
-            total: {
-              decrement: assignment.totalPrice,
-            },
-            subtotal: {
-              decrement: assignment.totalPrice,
-            },
-            updatedAt: getCurrentLocalDateTime(),
-          },
-        });
+        // ✅ FIX: Removed manual order.total update - will be recalculated by controller
+        // This ensures single source of truth and prevents precision errors
 
         // Delete the assignment
         await tx.orderItemAddon.delete({
           where: { id: assignment.id },
         });
 
-        return true;
+        return { removed: true, orderId: assignment.orderItem.orderId };
       });
 
       return {
         success: true,
-        data: { removed: result },
+        data: { removed: result.removed, orderId: result.orderId },
       };
     } catch (error) {
       if (isAddonError(error)) {
@@ -1203,8 +1280,10 @@ export class AddonService {
 
         // Update each addon's quantity and check stock
         for (const addonAssignment of orderItemAddons) {
-          // Calculate the quantity to add (same as item quantity change)
-          const newQuantity = addonAssignment.quantity + quantityToAdd;
+          // ✅ CRITICAL FIX: DON'T change addon quantity - it's stored per-item
+          // The quantity in database represents "addons per item", not total addons
+          // When item quantity changes, addon per-item quantity stays the same
+          // (Frontend multiplies by item quantity for display)
 
           // ✅ CRITICAL FIX: Only check stock if addon relation exists
           if (addonAssignment.addon) {
@@ -1213,12 +1292,16 @@ export class AddonService {
               for (const invItem of addonAssignment.addon.inventoryItems) {
                 if (invItem.inventory && invItem.quantity > 0) {
                   const totalToDeduct = invItem.quantity * quantityToAdd;
-                  if (Number(invItem.inventory.currentStock) < totalToDeduct) {
-                    throw AddonErrorFactory.insufficientStock(
-                      addonAssignment.addonId,
-                      totalToDeduct,
-                      Number(invItem.inventory.currentStock)
-                    );
+                  const currentStock = Number(invItem.inventory.currentStock);
+                  if (currentStock < totalToDeduct) {
+                    console.warn(`⚠️ [AddonService] LOW/NEGATIVE STOCK on quantity increase (allowing anyway)`, {
+                      addon: addonAssignment.addonName,
+                      inventory: invItem.inventory.name,
+                      required: totalToDeduct,
+                      available: currentStock,
+                      willGoNegative: currentStock - totalToDeduct
+                    });
+                    // ✅ Allow quantity increase anyway - stock can go negative
                   }
                 }
               }
@@ -1245,19 +1328,13 @@ export class AddonService {
             console.warn(`Addon relation not loaded for assignment ${addonAssignment.id}, skipping stock operations`);
           }
 
-          // Calculate price change
+          // Calculate price change for order total
           const priceChange = addonAssignment.unitPrice * quantityToAdd;
           totalPriceChange += Number(priceChange);
 
-          // Update addon assignment (always do this, even if stock check was skipped)
-          await tx.orderItemAddon.update({
-            where: { id: addonAssignment.id },
-            data: {
-              quantity: newQuantity,
-              totalPrice: addonAssignment.unitPrice * newQuantity,
-              updatedAt: getCurrentLocalDateTime(),
-            },
-          });
+          // ✅ CRITICAL FIX: DON'T update addon assignment quantity or totalPrice
+          // Both are stored per-item and should never change when item quantity changes
+          // The order item total will be recalculated below using the per-item values
         }
 
         // ✅ CRITICAL FIX: Calculate correct total price instead of incrementing
@@ -1274,13 +1351,14 @@ export class AddonService {
         // Calculate base price (item price × quantity)
         const basePrice = Number(currentOrderItem.unitPrice) * currentOrderItem.quantity;
 
-        // Calculate total addon price (sum of all addon totalPrices after scaling)
+        // Calculate total addon price (sum of all addon totalPrices SCALED by item quantity)
+        // ✅ CRITICAL FIX: Addon prices are stored PER-ITEM, must multiply by item quantity
         const allAddonPrices = await tx.orderItemAddon.findMany({
           where: { orderItemId },
-          select: { totalPrice: true },
+          select: { totalPrice: true, quantity: true, unitPrice: true },
         });
         const totalAddonPrice = allAddonPrices.reduce(
-          (sum, addon) => sum + Number(addon.totalPrice),
+          (sum, addon) => sum + (Number(addon.totalPrice) * currentOrderItem.quantity),
           0
         );
 

@@ -517,7 +517,18 @@ export class OrderService extends BaseService {
         // Single query to get all items for all orders
         const allItems = await this.prisma.orderItem.findMany({
           where: { orderId: { in: orderIds } },
-          include: { menuItem: true },
+          include: {
+            menuItem: true,
+            addons: {
+              include: {
+                addon: {
+                  include: {
+                    addonGroup: true,
+                  },
+                },
+              },
+            },
+          },
         });
 
         // Group items by orderId in memory (O(n) operation)
@@ -564,7 +575,20 @@ export class OrderService extends BaseService {
       const order = await this.prisma.order.findUnique({
         where: { id },
         include: {
-          items: true,
+          items: {
+            include: {
+              menuItem: true,
+              addons: {
+                include: {
+                  addon: {
+                    include: {
+                      addonGroup: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
           table: {
             select: { id: true, name: true },
           },
@@ -1598,6 +1622,15 @@ export class OrderService extends BaseService {
             items: {
               include: {
                 menuItem: true,
+                addons: {
+                  include: {
+                    addon: {
+                      include: {
+                        addonGroup: true,
+                      },
+                    },
+                  },
+                },
               },
             },
             table: {
@@ -1648,6 +1681,15 @@ export class OrderService extends BaseService {
                 items: {
                   include: {
                     menuItem: true,
+                    addons: {
+                      include: {
+                        addon: {
+                          include: {
+                            addonGroup: true,
+                          },
+                        },
+                      },
+                    },
                   },
                 },
                 table: {
@@ -1690,7 +1732,18 @@ export class OrderService extends BaseService {
           for (const order of orders) {
             const items = await this.prisma.orderItem.findMany({
               where: { orderId: order.id },
-              include: { menuItem: true },
+              include: {
+                menuItem: true,
+                addons: {
+                  include: {
+                    addon: {
+                      include: {
+                        addonGroup: true,
+                      },
+                    },
+                  },
+                },
+              },
             });
             order.items = items;
 
@@ -1735,7 +1788,20 @@ export class OrderService extends BaseService {
         where: { tableId },
         orderBy: { createdAt: 'desc' },
         include: {
-          items: true,
+          items: {
+            include: {
+              menuItem: true,
+              addons: {
+                include: {
+                  addon: {
+                    include: {
+                      addonGroup: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
           table: {
             select: { id: true, name: true },
           },
@@ -1774,6 +1840,15 @@ export class OrderService extends BaseService {
           items: {
             include: {
               menuItem: true,
+              addons: {
+                include: {
+                  addon: {
+                    include: {
+                      addonGroup: true,
+                    },
+                  },
+                },
+              },
             },
           },
           table: {
@@ -1815,7 +1890,20 @@ export class OrderService extends BaseService {
         where: { userId },
         orderBy: { createdAt: 'desc' },
         include: {
-          items: true,
+          items: {
+            include: {
+              menuItem: true,
+              addons: {
+                include: {
+                  addon: {
+                    include: {
+                      addonGroup: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
           table: {
             select: { id: true, name: true },
           },
@@ -1883,7 +1971,20 @@ export class OrderService extends BaseService {
         take: params.limit || 100,
         skip: params.offset || 0,
         include: {
-          items: true,
+          items: {
+            include: {
+              menuItem: true,
+              addons: {
+                include: {
+                  addon: {
+                    include: {
+                      addonGroup: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
           table: {
             select: { id: true, name: true },
           },

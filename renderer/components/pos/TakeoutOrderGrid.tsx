@@ -320,10 +320,10 @@ const TakeoutOrderGrid = memo(() => {
   useEffect(() => {
     fetchAllOrders();
 
-    // Optimized refresh interval - slower when offline
+    // Optimized refresh interval - reduced frequency to prevent duplication
     const refreshInterval = setInterval(
       fetchAllOrders,
-      isOnline ? 30000 : 60000
+      isOnline ? 60000 : 120000 // 60s when online (was 30s), 120s when offline (was 60s)
     );
 
     return () => {

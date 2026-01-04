@@ -345,12 +345,23 @@ export class LebanesReceiptGenerator {
 
   /**
    * Calculate totals with Lebanese VAT
+   * ✅ FIX: Calculate from items instead of trusting database
    */
   private static calculateTotals(order: any): ReceiptCalculations {
-    const subtotal = order.subtotal || 0;
+    // ✅ Calculate subtotal from items instead of using stale DB value
+    let calculatedSubtotal = 0;
+
+    // Sum all item totals (item.totalPrice already includes addon prices)
+    order.items?.forEach((item: any) => {
+      const itemTotal = Number(item.totalPrice) || 0;
+      calculatedSubtotal += itemTotal;
+    });
+
+    const subtotal = calculatedSubtotal;
+    const deliveryFee = Number(order.deliveryFee) || 0;
     const vatRate = this.VAT_RATE;
     const vatAmount = subtotal * vatRate;
-    const total = subtotal + vatAmount;
+    const total = subtotal + deliveryFee + vatAmount;
 
     return {
       subtotal,

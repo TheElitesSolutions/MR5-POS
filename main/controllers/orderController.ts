@@ -76,7 +76,8 @@ export class OrderController extends BaseController {
     this.addonService = new AddonService(prisma as any);
     this.addonExtensions = new OrderControllerAddonExtensions(
       prisma as any,
-      this.addonService
+      this.addonService,
+      this.orderModel
     );
 
     // this.initialize(); // Removed: StartupManager calls initialize() explicitly

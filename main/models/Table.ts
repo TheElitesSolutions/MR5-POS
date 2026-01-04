@@ -31,9 +31,10 @@ export class TableModel {
         items: [], // Will be populated with item count for display purposes
         status: table.orderStatus || 'PENDING',
         type: table.orderType || 'DINE_IN',
-        total: parseFloat(table.orderTotal || '0'),
+        // ✅ FIX: Use Number() to properly convert Decimal objects from Prisma raw query
+        total: Number(table.orderTotal || 0),
         tax: 0, // Will be calculated when needed
-        subtotal: parseFloat(table.orderTotal || '0'),
+        subtotal: Number(table.orderTotal || 0),
         createdAt: table.orderCreatedAt || getCurrentLocalDateTime(),
         updatedAt:
           table.orderUpdatedAt ||

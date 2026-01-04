@@ -86,10 +86,10 @@ export function getOrderItemUnitPrice(
 }
 
 /**
- * Get the total price for an order item based on unit price and quantity
+ * Get the total price for an order item based on unit price, quantity, and addons
  *
  * @param orderItem The order item
- * @returns The calculated total price
+ * @returns The calculated total price including addons
  */
 export function getOrderItemTotalPrice(
   orderItem: OrderItem | null | undefined
@@ -98,18 +98,30 @@ export function getOrderItemTotalPrice(
 
   const quantity = orderItem.quantity || 1;
 
-  // If we already have a valid total price, use it
+  // Calculate base item price
+  let basePrice = 0;
   if (orderItem.totalPrice && orderItem.totalPrice > 0) {
-    return orderItem.totalPrice;
+    basePrice = orderItem.totalPrice;
+  } else if (orderItem.subtotal && orderItem.subtotal > 0) {
+    basePrice = orderItem.subtotal;
+  } else {
+    const unitPrice = getOrderItemUnitPrice(orderItem);
+    basePrice = unitPrice * quantity;
   }
 
-  if (orderItem.subtotal && orderItem.subtotal > 0) {
-    return orderItem.subtotal;
-  }
+  // ✅ FIX: Add addon prices from the addons array, scaled by item quantity
+  // This ensures addons are always included and correctly scaled
+  const addonTotal = (orderItem.addons || []).reduce((sum, addon) => {
+    // Calculate per-item addon cost (unitPrice × addon quantity)
+    const addonPerItemCost = Number(addon.unitPrice) * addon.quantity;
 
-  // Otherwise calculate from unit price and quantity
-  const unitPrice = getOrderItemUnitPrice(orderItem);
-  return unitPrice * quantity;
+    // Scale by item quantity
+    const scaledAddonCost = addonPerItemCost * (orderItem.quantity || 1);
+
+    return sum + scaledAddonCost;
+  }, 0);
+
+  return basePrice + addonTotal;
 }
 
 /**

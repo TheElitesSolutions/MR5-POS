@@ -124,16 +124,9 @@ export default function POSPage() {
     setPendingCustomization(null);
   }, []);
 
-  // Clear pending customization after processing with a longer timeout
-  // to ensure the TakeoutOrderPanel has time to process it
-  useEffect(() => {
-    if (pendingCustomization) {
-      // Increased timeout to avoid race conditions - give component time to process
-      const timer = setTimeout(clearPendingCustomization, 2000);
-      return () => clearTimeout(timer);
-    }
-    return undefined;
-  }, [pendingCustomization, clearPendingCustomization]);
+  // ✅ FIX: Use callback-based clearing instead of timeout
+  // The TakeoutOrderPanel will call clearPendingCustomization after processing completes
+  // This eliminates the timing window that caused duplicate items
 
   // Memoize order item count to prevent recalculation
   const orderItemCount = useMemo(() => {
@@ -376,12 +369,16 @@ export default function POSPage() {
             {/* Right panel - Order details (desktop only) */}
             {orderType === 'DINE_IN' ? (
               <div className='hidden w-[24rem] border-l border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 lg:block xl:w-[28rem]'>
-                <OrderPanel pendingCustomization={pendingCustomization} />
+                <OrderPanel
+                  pendingCustomization={pendingCustomization}
+                  onCustomizationProcessed={clearPendingCustomization}
+                />
               </div>
             ) : (
               <div className='hidden w-[24rem] border-l border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800 lg:block xl:w-[28rem]'>
                 <TakeoutOrderPanel
                   pendingCustomization={pendingCustomization}
+                  onCustomizationProcessed={clearPendingCustomization}
                 />
               </div>
             )}
@@ -402,10 +399,14 @@ export default function POSPage() {
                     className='w-full p-0 sm:w-80 md:w-96'
                   >
                     {orderType === 'DINE_IN' ? (
-                      <OrderPanel pendingCustomization={pendingCustomization} />
+                      <OrderPanel
+                        pendingCustomization={pendingCustomization}
+                        onCustomizationProcessed={clearPendingCustomization}
+                      />
                     ) : (
                       <TakeoutOrderPanel
                         pendingCustomization={pendingCustomization}
+                        onCustomizationProcessed={clearPendingCustomization}
                       />
                     )}
                   </SheetContent>

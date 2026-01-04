@@ -77,10 +77,12 @@ export interface RemoveOrderItemAddonRequest {
 export class OrderControllerAddonExtensions {
   private addonService: AddonService;
   private prisma: any;
+  private orderModel: any;
 
-  constructor(prisma: any, addonService: AddonService) {
+  constructor(prisma: any, addonService: AddonService, orderModel: any) {
     this.prisma = prisma;
     this.addonService = addonService;
+    this.orderModel = orderModel;
   }
 
   /**
@@ -393,9 +395,19 @@ export class OrderControllerAddonExtensions {
         };
       }
 
+      // ✅ FIX: Recalculate order totals after addon addition
+      // This ensures single source of truth and prevents precision errors
+      const orderId = result.data.orderId;
+      await this.orderModel.recalculateOrderTotals(orderId);
+
+      logInfo(
+        `Order totals recalculated after adding add-ons to order: ${orderId}`,
+        'OrderController'
+      );
+
       return {
         success: true,
-        data: result.data,
+        data: result.data.assignments, // Return just the assignments, not the orderId
         message: 'Add-ons added to order item successfully',
         timestamp: getCurrentLocalDateTime(),
       };
@@ -437,9 +449,19 @@ export class OrderControllerAddonExtensions {
         };
       }
 
+      // ✅ FIX: Recalculate order totals after addon removal
+      // This ensures single source of truth and prevents precision errors
+      const orderId = result.data.orderId;
+      await this.orderModel.recalculateOrderTotals(orderId);
+
+      logInfo(
+        `Order totals recalculated after removing add-on from order: ${orderId}`,
+        'OrderController'
+      );
+
       return {
         success: true,
-        data: result.data,
+        data: { removed: result.data.removed }, // Return just removed flag, not orderId
         message: 'Add-on removed from order item successfully',
         timestamp: getCurrentLocalDateTime(),
       };

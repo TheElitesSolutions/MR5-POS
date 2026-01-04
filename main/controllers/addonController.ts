@@ -588,13 +588,25 @@ export class AddonController extends BaseController {
     request: AddAddonsToOrderItemRequest
   ): Promise<IPCResponse> {
     try {
+      console.log('🔍 [AddonController] addAddonsToOrderItem IPC called', {
+        orderItemId: request.orderItemId,
+        selectionsCount: request.addonSelections?.length || 0,
+        selections: request.addonSelections?.map(s => ({
+          addonId: s.addonId,
+          quantity: s.quantity,
+          unitPrice: s.unitPrice
+        }))
+      });
+
       const { orderItemId, addonSelections } = request;
 
       if (!orderItemId || typeof orderItemId !== 'string') {
+        console.error('❌ [AddonController] Invalid order item ID');
         return this.createErrorResponse('Valid order item ID is required');
       }
 
       if (!Array.isArray(addonSelections) || addonSelections.length === 0) {
+        console.error('❌ [AddonController] Invalid addon selections');
         return this.createErrorResponse(
           'At least one add-on selection is required'
         );
@@ -606,14 +618,30 @@ export class AddonController extends BaseController {
       );
 
       if (!result.success) {
-        return this.createErrorResponse((result as any).error.message);
+        const errorMessage = (result as any).error.message;
+        const errorCode = (result as any).error?.code;
+        const errorStatusCode = (result as any).error?.statusCode;
+        console.error('❌ [AddonController] Service returned error', {
+          errorMessage,
+          errorCode,
+          errorStatusCode
+        });
+        return this.createErrorResponse(errorMessage);
       }
+
+      console.log(`✅ [AddonController] Successfully added ${result.data?.length || 0} addons`);
 
       return this.createSuccessResponse(
         result.data,
         'Add-ons added to order item successfully'
       );
     } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Unknown error';
+      const errorStack = error instanceof Error ? error.stack : undefined;
+      console.error('❌ [AddonController] Exception in addAddonsToOrderItem', {
+        error: errorMsg,
+        stack: errorStack
+      });
       logError(error, 'AddonController.addAddonsToOrderItem');
       return this.createErrorResponse(
         error instanceof Error

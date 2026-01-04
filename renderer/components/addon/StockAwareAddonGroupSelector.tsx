@@ -256,8 +256,10 @@ export const StockAwareAddonGroupSelector: React.FC<
   const validationStatus = getValidationStatus();
 
   // Handle individual addon selection
+  // ✅ FIX: Remove selections from deps to prevent stale state during rapid updates
   const handleAddonSelection = useCallback(
     (addon: Addon, quantity: number) => {
+      // Always work with fresh selections prop (not captured in closure)
       const newSelections = [...selections];
       const existingIndex = newSelections.findIndex(
         s => s.addonId === addon.id
@@ -285,7 +287,6 @@ export const StockAwareAddonGroupSelector: React.FC<
       }
     },
     [
-      selections,
       group.id,
       onSelectionChange,
       enableStockChecking,
@@ -294,8 +295,10 @@ export const StockAwareAddonGroupSelector: React.FC<
   );
 
   // Handle addon deselection
+  // ✅ FIX: Remove selections from deps to prevent stale state during rapid updates
   const handleAddonDeselect = useCallback(
     (addonId: string) => {
+      // Always work with fresh selections prop (not captured in closure)
       const newSelections = selections.filter(s => s.addonId !== addonId);
       onSelectionChange(group.id, newSelections);
 
@@ -305,7 +308,6 @@ export const StockAwareAddonGroupSelector: React.FC<
       }
     },
     [
-      selections,
       group.id,
       onSelectionChange,
       enableStockChecking,
@@ -314,8 +316,10 @@ export const StockAwareAddonGroupSelector: React.FC<
   );
 
   // Handle alternative selection
+  // ✅ FIX: Remove selections from deps to prevent stale state during rapid updates
   const handleAlternativeSelect = useCallback(
     (originalAddon: Addon, alternativeAddon: Addon, quantity: number) => {
+      // Always work with fresh selections prop (not captured in closure)
       // Remove original addon and add alternative
       const newSelections = selections
         .filter(s => s.addonId !== originalAddon.id)
@@ -336,7 +340,6 @@ export const StockAwareAddonGroupSelector: React.FC<
       }
     },
     [
-      selections,
       group.id,
       onSelectionChange,
       onAlternativeSelect,

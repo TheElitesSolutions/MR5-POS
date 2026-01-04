@@ -43,6 +43,32 @@ export async function generateEnhancedKitchenTicket(
     totalOrderItems: order?.items?.length || 0,
   });
 
+  // ✨ DETAILED DEBUG: Show actual parameters received
+  console.log('📋 DETAILED PARAMETERS:', {
+    cancelledItemsCount: cancelledItems?.length || 0,
+    cancelledItems: cancelledItems,
+    updatedItemIdsCount: updatedItemIds?.length || 0,
+    updatedItemIds: updatedItemIds,
+    changeDetailsCount: changeDetails?.length || 0,
+    changeDetails: changeDetails,
+    onlyUnprinted: onlyUnprinted,
+  });
+
+  //  ℹ️ ANALYSIS: Determine if this should be STANDARD or UPDATE ticket
+  const orderItems = order?.items || [];
+  const newItemsInOrder = orderItems.filter((item: any) => {
+    // An item is "new" if it wasn't previously printed (no printedAt timestamp)
+    return !item.printedAt;
+  });
+
+  console.log('🔍 ORDER ANALYSIS:', {
+    totalItems: orderItems.length,
+    newItems: newItemsInOrder.length,
+    newItemIds: newItemsInOrder.map((i: any) => i.id),
+    updatedItemIdsProvided: updatedItemIds,
+    shouldBeStandard: newItemsInOrder.length === orderItems.length && orderItems.length > 0,
+  });
+
   // Route to appropriate ticket generator based on content
   if (cancelledItems && cancelledItems.length > 0) {
     console.log('🎯 Routing to: generateEnhancedRemovalTicket (cancelled items)');
@@ -426,11 +452,13 @@ function generateEnhancedStandardTicket(
 
         printableAddons.forEach((addon: any) => {
           const addonName = addon.addonName || addon.addon?.name || 'Addon';
-          const addonQty = addon.quantity || 1;
+          const perItemQty = addon.quantity || 1;
+          // ✅ FIX: Show total addon quantity (per-item qty × item qty)
+          const totalAddonQty = perItemQty * quantity;
 
           printData.push({
             type: 'text',
-            value: `       + ${addonName}${addonQty > 1 ? ` (x${addonQty})` : ''}`,
+            value: `       + ${totalAddonQty}x ${addonName}`,
             style: {
               fontSize: '16px',
               fontFamily: 'Arial, sans-serif',
@@ -677,11 +705,13 @@ function generateEnhancedRemovalTicket(
 
       printableAddons.forEach((addon: any) => {
         const addonName = addon.addonName || addon.addon?.name || 'Addon';
-        const addonQty = addon.quantity || 1;
+        const perItemQty = addon.quantity || 1;
+        // ✅ FIX: Show total addon quantity (per-item qty × item qty)
+        const totalAddonQty = perItemQty * quantity;
 
         printData.push({
           type: 'text',
-          value: `       + ${addonName}${addonQty > 1 ? ` (x${addonQty})` : ''}`,
+          value: `       + ${totalAddonQty}x ${addonName}`,
           style: {
             fontSize: '16px',
             fontFamily: 'Arial, sans-serif',
@@ -889,6 +919,7 @@ function generateEnhancedUpdateTicket(
     }
 
     // Format change display
+    // For UPDATE tickets, show the CHANGE amount (what to add/remove), not total quantity
     let changeDisplay = `${quantity}x  ${itemName}`;
     if (change && change.netChange !== undefined) {
       const operator = change.netChange > 0 ? '+' : '';
@@ -919,11 +950,14 @@ function generateEnhancedUpdateTicket(
 
       printableAddons.forEach((addon: any) => {
         const addonName = addon.addonName || addon.addon?.name || 'Addon';
-        const addonQty = addon.quantity || 1;
+        const perItemQty = addon.quantity || 1;
+        // ✅ FIX: For UPDATE tickets, show addon change quantity (per-item qty × netChange)
+        // Not total quantity - kitchen needs to know how many addons to ADD/REDUCE
+        const addonChangeQty = perItemQty * (change?.netChange || quantity);
 
         printData.push({
           type: 'text',
-          value: `       + ${addonName}${addonQty > 1 ? ` (x${addonQty})` : ''}`,
+          value: `       + ${addonChangeQty}x ${addonName}`,
           style: {
             fontSize: '16px',
             fontFamily: 'Arial, sans-serif',

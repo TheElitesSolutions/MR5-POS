@@ -217,8 +217,10 @@ export const EnhancedAddonGroupSelector: React.FC<
   const validationStatus = getValidationStatus();
 
   // Handle individual addon selection
+  // ✅ FIX: Remove selections from deps to prevent stale state during rapid updates
   const handleAddonSelection = useCallback(
     (addon: Addon, quantity: number) => {
+      // Always work with fresh selections prop (not captured in closure)
       const newSelections = [...selections];
       const existingIndex = newSelections.findIndex(
         s => s.addonId === addon.id
@@ -240,16 +242,18 @@ export const EnhancedAddonGroupSelector: React.FC<
 
       onSelectionChange(group.id, newSelections);
     },
-    [selections, group.id, onSelectionChange]
+    [group.id, onSelectionChange]
   );
 
   // Handle addon deselection
+  // ✅ FIX: Remove selections from deps to prevent stale state during rapid updates
   const handleAddonDeselect = useCallback(
     (addonId: string) => {
+      // Always work with fresh selections prop (not captured in closure)
       const newSelections = selections.filter(s => s.addonId !== addonId);
       onSelectionChange(group.id, newSelections);
     },
-    [selections, group.id, onSelectionChange]
+    [group.id, onSelectionChange]
   );
 
   // Get selection for specific addon

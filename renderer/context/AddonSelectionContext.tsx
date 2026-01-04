@@ -189,15 +189,21 @@ export const AddonSelectionProvider: React.FC<AddonSelectionProviderProps> = ({
           notes: '',
         };
 
+        // ✅ FIX: Create NEW array instead of mutating
+        let newSelections: AddonSelection[];
         if (existingIndex >= 0) {
-          // Update existing selection
-          currentSelections[existingIndex] = addonSelection;
+          // Update existing selection - create new array with updated item
+          newSelections = [
+            ...currentSelections.slice(0, existingIndex),
+            addonSelection,
+            ...currentSelections.slice(existingIndex + 1),
+          ];
         } else {
-          // Add new selection
-          currentSelections.push(addonSelection);
+          // Add new selection - create new array with added item
+          newSelections = [...currentSelections, addonSelection];
         }
 
-        newSelectedAddons.set(menuItemId, currentSelections);
+        newSelectedAddons.set(menuItemId, newSelections);
 
         return {
           ...prev,
@@ -246,13 +252,19 @@ export const AddonSelectionProvider: React.FC<AddonSelectionProviderProps> = ({
         if (selectionIndex >= 0 && quantity > 0) {
           const selection = currentSelections[selectionIndex];
           if (selection) {
-            currentSelections[selectionIndex] = {
+            // ✅ FIX: Create NEW array instead of mutating
+            const updatedSelection = {
               ...selection,
               quantity,
               totalPrice: selection.unitPrice * quantity,
             };
+            const newSelections = [
+              ...currentSelections.slice(0, selectionIndex),
+              updatedSelection,
+              ...currentSelections.slice(selectionIndex + 1),
+            ];
+            newSelectedAddons.set(menuItemId, newSelections);
           }
-          newSelectedAddons.set(menuItemId, currentSelections);
         }
 
         return {

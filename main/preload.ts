@@ -87,6 +87,7 @@ const diagnosticAPI = {
 // App control API for renderer process
 const appAPI = {
   quit: () => ipcRenderer.invoke('app:quit'),
+  toggleDevTools: () => ipcRenderer.invoke('app:toggle-devtools'),
 }
 
 // Expose at the correct path that matches TypeScript definitions

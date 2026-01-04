@@ -40,6 +40,7 @@ class ShortcutManager {
     this.shortcuts.set("CmdOrCtrl+,", "Settings");
     this.shortcuts.set("CmdOrCtrl+Shift+D", "Toggle Dark Mode");
     this.shortcuts.set("F11", "Toggle Fullscreen");
+    this.shortcuts.set("F12", "Toggle DevTools"); // Enable F12 in all modes
 
     // Search
     this.shortcuts.set("CmdOrCtrl+F", "Find");
@@ -125,10 +126,9 @@ class ShortcutManager {
         this.toggleFullscreen();
         break;
 
+      case "F12":
       case "CmdOrCtrl+Shift+I":
-        if (getIsDev()) {
-          this.toggleDevTools();
-        }
+        this.toggleDevTools();
         break;
 
       case "CmdOrCtrl+,":
@@ -363,6 +363,7 @@ class ShortcutManager {
         "CmdOrCtrl+, - Settings",
         "CmdOrCtrl+Shift+D - Toggle Dark Mode",
         "F11 - Toggle Fullscreen",
+        "F12 - Toggle DevTools",
       ],
       Search: ["CmdOrCtrl+F - Find", "CmdOrCtrl+Shift+F - Find Menu Item"],
       "POS Specific": [

@@ -53,30 +53,55 @@ interface TakeoutOrderPanelProps {
     specialNotes: string;
     addonSelections?: any[]; // Include addon selections from menu flow
   } | null;
+  onCustomizationProcessed?: () => void;  // ✅ ADD: Callback to parent
 }
 
 /**
- * Compare addon selections to determine if two items have the same addons
- * Used to detect if an item with the same addons already exists in the order
+ * Compare addon selections to determine if two items have the EXACT SAME addons with EXACT SAME quantities
+ * Used to detect if an item with identical addon configuration already exists in the order
+ * ✅ CRITICAL FIX: Now compares both addon IDs AND quantities to prevent incorrect item deduplication
  * (Port from OrderPanel for feature parity)
  */
 function areAddonsEqual(
   existingAddons: any[],
   selectedAddons: any[]
 ): boolean {
+  // If lengths don't match, they're not equal
   if (existingAddons.length !== selectedAddons.length) {
     return false;
   }
+
+  // If both are empty, they're equal
   if (existingAddons.length === 0 && selectedAddons.length === 0) {
     return true;
   }
-  const selectedHasAllExisting = existingAddons.every(existing => {
-    return selectedAddons.some(selected => selected.addonId === existing.addonId);
+
+  // Create quantity maps for exact comparison (ID → quantity)
+  const existingMap = new Map<string, number>();
+  existingAddons.forEach(addon => {
+    existingMap.set(addon.addonId, addon.quantity || 1);
   });
-  const existingHasAllSelected = selectedAddons.every(selected => {
-    return existingAddons.some(existing => existing.addonId === selected.addonId);
+
+  const selectedMap = new Map<string, number>();
+  selectedAddons.forEach(addon => {
+    selectedMap.set(addon.addonId, addon.quantity || 1);
   });
-  return selectedHasAllExisting && existingHasAllSelected;
+
+  // Verify all existing addons match selected with SAME quantities
+  for (const [addonId, qty] of existingMap.entries()) {
+    if (selectedMap.get(addonId) !== qty) {
+      return false; // Different quantity or addon doesn't exist
+    }
+  }
+
+  // Verify all selected addons match existing with SAME quantities
+  for (const [addonId, qty] of selectedMap.entries()) {
+    if (existingMap.get(addonId) !== qty) {
+      return false; // Different quantity or addon doesn't exist
+    }
+  }
+
+  return true; // All addons match with exact quantities
 }
 
 /**
@@ -85,6 +110,7 @@ function areAddonsEqual(
  */
 const TakeoutOrderPanel = ({
   pendingCustomization,
+  onCustomizationProcessed,
 }: TakeoutOrderPanelProps) => {
   // Parse SQLite datetime as local time (not UTC)
   const parseLocalDateTime = (dateString: string): Date => {
@@ -148,6 +174,7 @@ const TakeoutOrderPanel = ({
 
   // ✅ FIX: Track if we're currently processing a customization to prevent duplicates
   const isProcessingCustomizationRef = useRef<boolean>(false);
+  const processedCustomizationRef = useRef<typeof pendingCustomization | null>(null);
 
   // Get delivery fee from current order or default to 0
   const currentDeliveryFee = currentOrder?.deliveryFee || 0;
@@ -181,7 +208,7 @@ const TakeoutOrderPanel = ({
     // No tax calculation - total is just items + delivery fee
     // Final total: subtotal + delivery fee (no tax)
     return itemsTotal + effectiveDeliveryFee;
-  }, [currentOrder, currentDeliveryFee, localDeliveryFee]);
+  }, [currentOrder, currentOrder?.items, currentDeliveryFee, localDeliveryFee]);  // ✅ FIX: Include items array in dependencies
 
   // Order changes are automatically reset by useOrderTracking when order changes
 
@@ -408,6 +435,15 @@ const TakeoutOrderPanel = ({
       {
         onSuccess: (result) => {
           setUpdatingItemId(null);
+
+          console.log('🟡 QUANTITY CHANGE - About to track:', {
+            orderItemId: result.orderItemId,
+            itemName: result.itemName,
+            menuItemId: result.menuItemId,
+            oldQuantity: result.oldQuantity,
+            newQuantity: result.newQuantity,
+          });
+
           // ✅ SIMPLE: Track this quantity change using simple tracking system
           trackQuantityChange(
             result.orderItemId,
@@ -416,6 +452,9 @@ const TakeoutOrderPanel = ({
             result.oldQuantity,
             result.newQuantity
           );
+
+          console.log('🟡 QUANTITY CHANGE - Tracked');
+
           toast({
             title: 'Quantity Updated',
             description: `${result.itemName} quantity changed to ${result.newQuantity}`,
@@ -666,8 +705,15 @@ const TakeoutOrderPanel = ({
       return;
     }
 
+    // ✅ FIX: Don't process the same customization twice
+    if (processedCustomizationRef.current === pendingCustomization) {
+      orderLogger.debug('Skipping - this customization was already processed');
+      return;
+    }
+
     // Mark that we're processing
     isProcessingCustomizationRef.current = true;
+    processedCustomizationRef.current = pendingCustomization;  // Mark as being processed
 
     // Function to process item addition
     const processItemAddition = async () => {
@@ -907,6 +953,33 @@ const TakeoutOrderPanel = ({
 
               if (addonResult.success) {
                 orderLogger.debug('Addons added successfully to takeout order item');
+
+                // ✅ CRITICAL FIX: VALIDATE that addons were actually assigned
+                if (!addonResult.data || addonResult.data.length === 0) {
+                  orderLogger.error('Addon assignment returned success but no addons assigned', {
+                    orderItemId: actualItem.id,
+                    requestedAddons: addonSelections.length,
+                    resultAddons: addonResult.data?.length || 0,
+                    addonResult: addonResult,
+                  });
+                  toast({
+                    title: 'Warning: Addon Assignment Issue',
+                    description: `Item added but ${addonSelections.length} addon(s) may not have been assigned. Please verify the order.`,
+                    variant: 'destructive',
+                  });
+                } else if (addonResult.data.length !== addonSelections.length) {
+                  orderLogger.warn('Addon count mismatch after assignment', {
+                    requested: addonSelections.length,
+                    assigned: addonResult.data.length,
+                    orderItemId: actualItem.id,
+                  });
+                  toast({
+                    title: 'Warning: Partial Addon Assignment',
+                    description: `Expected ${addonSelections.length} addons, but only ${addonResult.data.length} were assigned.`,
+                    variant: 'default',
+                  });
+                }
+
                 // Small delay to ensure database transaction is fully committed
                 await new Promise(resolve => setTimeout(resolve, 100));
               } else {
@@ -949,7 +1022,8 @@ const TakeoutOrderPanel = ({
                   price: item.price,
                 }))] : [],
               };
-              updateOrderInStore(orderWithItems as any);
+              // ✅ CRITICAL FIX: Force update to bypass timestamp check (ORDER updatedAt doesn't change when addons are added)
+              updateOrderInStore(orderWithItems as any, true);
               orderLogger.debug('Updated posStore with refreshed order (including addons)');
 
               // Find the ACTUAL item in the refreshed order
@@ -998,37 +1072,62 @@ const TakeoutOrderPanel = ({
                   itemId: matchingItem.id,
                 });
 
-                // Track this item addition
+                console.log('🔵 ABOUT TO TRACK NEW ITEM:', {
+                  itemId: matchingItem.id,
+                  name: matchingItem.menuItem?.name || (matchingItem as any).menuItemName || selectedItem.name,
+                  menuItemId: matchingItem.menuItemId,
+                  quantity: matchingItem.quantity,
+                  orderId: currentOrder.id,
+                });
+
+                // ✅ FIX: Track this as a NEW item for kitchen printing
+                // The tracking system needs to know this is NEW (not yet printed)
+                // so it generates a STANDARD ticket instead of UPDATE ticket
                 trackNewItem(
                   matchingItem.id,
-                  matchingItem.name ||
-                    matchingItem.menuItemName ||
-                    selectedItem.name,
-                  selectedItem.id,
-                  itemQuantity
+                  matchingItem.menuItem?.name || (matchingItem as any).menuItemName || selectedItem.name,
+                  matchingItem.menuItemId,
+                  matchingItem.quantity
                 );
 
-                orderLogger.debug('Successfully tracked refreshed item', {
+                console.log('✅ TRACKED AS NEW ITEM - tracking state should now have this item');
+
+                orderLogger.debug('Successfully tracked new item for kitchen printing', {
                   itemId: matchingItem.id,
+                  quantity: matchingItem.quantity,
                 });
               } else {
-                orderLogger.warn(
-                  'Could not find matching item in refreshed order'
+                orderLogger.debug(
+                  'Item not found in refresh but is in DB (actualItem.id exists)'
                 );
-                // ✅ SIMPLE: Fallback to tracking with actualItem using simple tracking
-                trackNewItem(
-                  actualItem.id,
-                  actualItem.name ||
-                    actualItem.menuItemName ||
+                // Fallback: Track using actualItem data
+                if (actualItem?.id) {
+                  trackNewItem(
+                    actualItem.id,
                     selectedItem.name,
-                  selectedItem.id,
-                  itemQuantity
-                );
+                    actualItem.menuItemId,
+                    actualItem.quantity
+                  );
+                  orderLogger.debug('Fallback: Tracked actualItem as new', {
+                    itemId: actualItem.id,
+                  });
+                }
               }
             }
           } catch (refreshError) {
             orderLogger.error('Failed to refresh order', refreshError);
-            // Fallback: Item addition was already tracked above
+            // Fallback: Track using actualItem if available
+            if (actualItem?.id) {
+              trackNewItem(
+                actualItem.id,
+                selectedItem.name,
+                actualItem.menuItemId,
+                actualItem.quantity
+              );
+              orderLogger.debug('Fallback after refresh error: Tracked actualItem', {
+                itemId: actualItem.id,
+              });
+            }
           }
         } else {
           orderLogger.warn('No actualAddedItem in response - using fallback');
@@ -1043,7 +1142,16 @@ const TakeoutOrderPanel = ({
                 orderLogger.debug('Using latest item from refreshed order', {
                   itemId: latestItem.id,
                 });
-                // Latest item tracking already handled above
+                // ✅ FIX: Track the latest item as NEW
+                trackNewItem(
+                  latestItem.id,
+                  (latestItem as any).menuItem?.name || (latestItem as any).menuItemName || selectedItem.name,
+                  latestItem.menuItemId,
+                  latestItem.quantity
+                );
+                orderLogger.debug('Fallback path: Tracked latest item as new', {
+                  itemId: latestItem.id,
+                });
               }
             }
           } catch (fallbackError) {
@@ -1058,6 +1166,14 @@ const TakeoutOrderPanel = ({
         });
 
         orderLogger.debug('Item added successfully');
+
+        // ✅ FIX: Reset flags AFTER successful processing completes
+        isProcessingCustomizationRef.current = false;
+
+        // ✅ FIX: Notify parent to clear pendingCustomization
+        if (onCustomizationProcessed) {
+          onCustomizationProcessed();
+        }
       } catch (error) {
         orderLogger.error('Failed to add item to order:', error);
         toast({
@@ -1065,9 +1181,13 @@ const TakeoutOrderPanel = ({
           description: 'Failed to add item to order',
           variant: 'destructive',
         });
-      } finally {
-        // ✅ FIX: Reset processing flag when done (success or error)
+
+        // ✅ FIX: Reset flags even on error to prevent deadlock
         isProcessingCustomizationRef.current = false;
+      } finally {
+        // ✅ FIX: Don't reset here - let the success/error handlers reset the flags
+        // This prevents the flag from being reset before store sync completes
+        // isProcessingCustomizationRef.current = false;  // ❌ REMOVED
       }
     };
 
@@ -1238,10 +1358,10 @@ const TakeoutOrderPanel = ({
                               >
                                 <span>
                                   + {addon.addonName || addon.addon?.name} (×
-                                  {addon.quantity})
+                                  {addon.quantity * item.quantity})
                                 </span>
                                 <span className='font-medium'>
-                                  ${Number(addon.totalPrice || 0).toFixed(2)}
+                                  ${(Number(addon.totalPrice || 0) * item.quantity).toFixed(2)}
                                 </span>
                               </div>
                             ))}
@@ -1437,15 +1557,34 @@ const TakeoutOrderPanel = ({
                           return;
                         }
 
+                        // ✅ FIX: For initial orders, use STANDARD ticket (empty updatedItemIds)
+                        // Initial order = has NEW items AND changes cover all items
+                        // Update order = ONLY updates (no NEW items)
+                        const totalChangedItems = newItems.length + updates.length;
+                        const totalOrderItems = currentOrder.items?.length || 0;
+                        const isInitialOrder = newItems.length > 0 && totalChangedItems >= totalOrderItems;
+
+                        // 🔍 DEBUG: Log the decision logic
+                        console.log('🎯 TICKET TYPE DECISION:', {
+                          newItemsCount: newItems.length,
+                          newItemsIds: newItems.map(i => i.itemId),
+                          updatesCount: updates.length,
+                          updatesIds: updates.map(i => i.itemId),
+                          totalChangedItems,
+                          totalOrderItems,
+                          isInitialOrder,
+                          willSend: isInitialOrder ? 'STANDARD ticket (empty updatedItemIds)' : 'UPDATE ticket (with updatedItemIds)'
+                        });
+
                         const result = await printerAPI.PrinterAPI.printKitchenOrder(
                           currentOrder.id,
                           defaultPrinter.name,
                           1,
                           user.id,
                           false,
-                          [],
-                          [...newItems, ...updates].map(item => item.itemId),
-                          filteredChangesSummary
+                          [], // No cancelled items
+                          isInitialOrder ? [] : [...newItems, ...updates].map(item => item.itemId), // Empty for initial orders
+                          isInitialOrder ? [] : filteredChangesSummary // Empty changeDetails for initial orders
                         );
 
                         if (result.success) {
@@ -1544,6 +1683,13 @@ const TakeoutOrderPanel = ({
                         const updates = changesSummary.filter(c => c.changeType === 'UPDATE' && c.netChange > 0);
                         const removals = changesSummary.filter(c => c.changeType === 'REMOVE');
 
+                        // ✅ FIX: For initial orders, use STANDARD ticket (empty updatedItemIds)
+                        // Initial order = has NEW items AND changes cover all items
+                        // Update order = ONLY updates (no NEW items)
+                        const totalChangedItems = newItems.length + updates.length;
+                        const totalOrderItems = currentOrder.items?.length || 0;
+                        const isInitialOrder = newItems.length > 0 && totalChangedItems >= totalOrderItems && removals.length === 0;
+
                         const result = await printerAPI.PrinterAPI.printKitchenOrder(
                           currentOrder.id,
                           defaultPrinter.name,
@@ -1551,8 +1697,8 @@ const TakeoutOrderPanel = ({
                           user.id,
                           false,
                           removals.map(item => item.itemId),
-                          [...newItems, ...updates].map(item => item.itemId),
-                          changesSummary
+                          isInitialOrder ? [] : [...newItems, ...updates].map(item => item.itemId),
+                          isInitialOrder ? [] : changesSummary
                         );
 
                         if (result.success) {

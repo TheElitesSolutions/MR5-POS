@@ -227,6 +227,41 @@ export class OrderModel {
   }
 
   /**
+   * Normalizes addon set for comparison
+   * Converts addon array to sorted array of {addonId, quantity} objects
+   */
+  private normalizeAddonSet(addons: any[] | null | undefined): Array<{addonId: string, quantity: number}> {
+    if (!addons || addons.length === 0) return [];
+
+    return addons
+      .map(a => ({ addonId: a.addonId, quantity: a.quantity }))
+      .sort((a, b) => a.addonId.localeCompare(b.addonId));
+  }
+
+  /**
+   * Creates a unique signature string for an addon set
+   * Used for comparing addon combinations
+   */
+  private createAddonSignature(addons: any[] | null | undefined): string {
+    const normalized = this.normalizeAddonSet(addons);
+    if (normalized.length === 0) return 'NO_ADDONS';
+
+    return normalized
+      .map(a => `${a.addonId}:${a.quantity}`)
+      .join('|');
+  }
+
+  /**
+   * Checks if two addon sets are equal
+   * Items with different addon combinations should NOT be merged
+   */
+  private addonsAreEqual(addons1: any[] | null | undefined, addons2: any[] | null | undefined): boolean {
+    const sig1 = this.createAddonSignature(addons1);
+    const sig2 = this.createAddonSignature(addons2);
+    return sig1 === sig2;
+  }
+
+  /**
    * Helper method to manually fetch order items with all relationships
    * Needed because the Prisma wrapper doesn't support include clauses
    */
@@ -252,34 +287,51 @@ export class OrderModel {
           'all keys': menuItem ? Object.keys(menuItem) : 'null',
         });
 
-        // Fetch addons for this order item
-        const addons = await this.prisma.orderItemAddon.findMany({
-          where: { orderItemId: item.id },
-        });
+        // ✅ CRITICAL FIX: Wrap addon fetching in try-catch to prevent silent data loss
+        // If addon fetching fails, return item with empty addons array instead of failing entirely
+        let addonsWithDetails: any[] = [];
+        try {
+          // Fetch addons for this order item
+          const addons = await this.prisma.orderItemAddon.findMany({
+            where: { orderItemId: item.id },
+          });
 
-        // Fetch addon details for each addon
-        const addonsWithDetails = await Promise.all(
-          addons.map(async (addon: any) => {
-            const addonDetails = await this.prisma.addon.findUnique({
-              where: { id: addon.addonId },
-            });
+          // Fetch addon details for each addon
+          addonsWithDetails = await Promise.all(
+            addons.map(async (addon: any) => {
+              try {
+                const addonDetails = await this.prisma.addon.findUnique({
+                  where: { id: addon.addonId },
+                  include: { addonGroup: true }, // ✅ Use include to fetch addonGroup in single query
+                });
 
-            let addonGroup = null;
-            if (addonDetails?.addonGroupId) {
-              addonGroup = await this.prisma.addonGroup.findUnique({
-                where: { id: addonDetails.addonGroupId },
-              });
-            }
-
-            return {
-              ...addon,
-              addon: addonDetails ? {
-                ...addonDetails,
-                addonGroup
-              } : null
-            };
-          })
-        );
+                return {
+                  ...addon,
+                  addon: addonDetails || null,
+                  addonName: addonDetails?.name || addon.addonName || 'Unknown Addon',
+                };
+              } catch (addonError) {
+                logger.error(
+                  `Failed to fetch addon details for addon ${addon.id} on item ${item.id}: ${addonError}`,
+                  'OrderModel'
+                );
+                // Return addon assignment without details instead of failing
+                return {
+                  ...addon,
+                  addon: null,
+                  addonName: addon.addonName || 'Unknown Addon',
+                };
+              }
+            })
+          );
+        } catch (error) {
+          logger.error(
+            `Failed to fetch addons for order item ${item.id}: ${error}`,
+            'OrderModel'
+          );
+          // Return item with empty addons array on error (prevents order processing failure)
+          addonsWithDetails = [];
+        }
 
         return { ...item, menuItem, addons: addonsWithDetails };
       })
@@ -410,8 +462,9 @@ export class OrderModel {
         updatedAt: item.updatedAt instanceof Date
           ? dateToLocalDateTime(item.updatedAt)
           : (item.updatedAt || getCurrentLocalDateTime()),
-        // ✅ FIX: Include addons if present with addonGroup for invoice generation
-        ...(item.addons && item.addons.length > 0 ? { addons: item.addons.map((addon: any) => ({
+        // ✅ CRITICAL FIX: ALWAYS include addons array (even if empty) to prevent data loss
+        // Using conditional spread operator was silently dropping addon data when falsy
+        addons: (item.addons || []).map((addon: any) => ({
           id: addon.id,
           orderItemId: addon.orderItemId,
           addonId: addon.addonId,
@@ -431,7 +484,7 @@ export class OrderModel {
               name: addon.addon.addonGroup.name,
             } : undefined,
           } : undefined,
-        })) } : {}),
+        })),
         // ✅ FIX: Include menuItem object for kitchen ticket filtering
         menuItem: item.menuItem ? {
           id: item.menuItem.id,
@@ -449,6 +502,25 @@ export class OrderModel {
         hasAddonsInMapped: !!(mapped as any).addons,
         addonsCountInMapped: ((mapped as any).addons?.length || 0),
       });
+
+      // ✅ VALIDATION: Detect potential addon data loss
+      const basePrice = (item.unitPrice || item.price || 0) * item.quantity;
+      const expectedAddonPrice = (item.totalPrice || 0) - basePrice;
+      if (mapped.addons.length === 0 && expectedAddonPrice > 0.01) {
+        logger.warn(
+          `Item ${item.id} has empty addons array but totalPrice suggests addons exist - potential data loss`,
+          'OrderModel',
+          {
+            itemId: item.id,
+            menuItemId: item.menuItemId,
+            basePrice,
+            totalPrice: item.totalPrice,
+            expectedAddonPrice,
+            hasAddonsProperty: item.hasOwnProperty('addons'),
+            addonsValue: item.addons,
+          }
+        );
+      }
 
       // Bulletproof serialization: strip any remaining non-serializable properties
       const serialized = JSON.parse(JSON.stringify(mapped));
@@ -855,6 +927,15 @@ export class OrderModel {
           items: {
             include: {
               menuItem: true,
+              addons: {
+                include: {
+                  addon: {
+                    include: {
+                      addonGroup: true
+                    }
+                  }
+                }
+              }
             },
           },
           payments: true,
@@ -894,6 +975,15 @@ export class OrderModel {
           items: {
             include: {
               menuItem: true,
+              addons: {
+                include: {
+                  addon: {
+                    include: {
+                      addonGroup: true
+                    }
+                  }
+                }
+              }
             },
           },
           payments: true,
@@ -1455,8 +1545,9 @@ export class OrderModel {
         // Normalize notes for comparison (null vs empty string vs undefined should be treated the same)
         const normalizedNotes = item.notes?.trim() || null;
 
-        // Check for existing item with same menuItemId, unitPrice, and notes
-        const existingItem = await tx.orderItem.findFirst({
+        // ✅ FIX: Fetch ALL candidate items with same menuItemId, unitPrice, and notes
+        // Then compare addon sets to find exact match
+        const candidateItems = await tx.orderItem.findMany({
           where: {
             orderId,
             menuItemId: item.menuItemId,
@@ -1465,8 +1556,28 @@ export class OrderModel {
           },
           include: {
             menuItem: true,
+            addons: {
+              include: { addon: true }
+            }
           },
         });
+
+        // Normalize incoming addon selections for comparison
+        const incomingAddons = item.addonSelections?.map(sel => ({
+          addonId: sel.addonId,
+          quantity: sel.quantity,
+        })) || [];
+
+        // Find item with IDENTICAL addon set
+        // Items with different addon combinations should NEVER be merged
+        let existingItem = null;
+        if (candidateItems.length > 0) {
+          existingItem = candidateItems.find(candidate => {
+            const candidateAddons = candidate.addons || [];
+            const isEqual = this.addonsAreEqual(candidateAddons, incomingAddons);
+            return isEqual;
+          });
+        }
 
         // CRITICAL FIX: Deduct stock BEFORE modifying order items
         if (inventoryItems && inventoryItems.length > 0) {
@@ -1562,6 +1673,15 @@ export class OrderModel {
             },
             include: {
               menuItem: true,
+              addons: {
+                include: {
+                  addon: {
+                    include: {
+                      addonGroup: true
+                    }
+                  }
+                }
+              }
             },
           });
 
@@ -1590,6 +1710,15 @@ export class OrderModel {
             data: orderItemData as any,
             include: {
               menuItem: true,
+              addons: {
+                include: {
+                  addon: {
+                    include: {
+                      addonGroup: true
+                    }
+                  }
+                }
+              }
             },
           });
 
@@ -2023,14 +2152,25 @@ export class OrderModel {
           }
         });
 
-        // ✅ FIX: Calculate addon contribution to total price (per-item addon total)
+        // ✅ NEW APPROACH: addon.quantity represents PER-ITEM quantity (never changes)
+        // Calculate total addon cost by multiplying per-item cost by NEW item quantity
         let addonTotalPerItem = new DecimalJS(0);
         for (const addon of addons) {
-          addonTotalPerItem = addDecimals(addonTotalPerItem, addon.totalPrice);
+          const addonUnitPrice = new DecimalJS(addon.unitPrice || 0);
+          const addonQtyPerItem = new DecimalJS(addon.quantity || 0); // This is per-item, never changes
+          const addonCostPerItem = addonUnitPrice.mul(addonQtyPerItem);
+          addonTotalPerItem = addDecimals(addonTotalPerItem, addonCostPerItem);
         }
 
-        // ✅ FIX: Scale addon total by item quantity
+        // Scale addon cost by NEW item quantity (addons qty in DB stays constant)
         const addonTotalScaled = new DecimalJS(addonTotalPerItem).mul(newQuantity);
+
+        // ✅ CRITICAL: Do NOT modify addon quantities in database - they represent per-item quantities
+        // Frontend will multiply addon.quantity × item.quantity for display
+
+        logger.debug(
+          `📦 ADDON CALCULATION: Per-item cost: ${addonTotalPerItem}, Item qty: ${newQuantity}, Total: ${addonTotalScaled}`
+        );
 
         logger.info(
           `💰 PRICE CALCULATION: Item ${orderItem.menuItem?.name || 'Unknown'} - Base: ${unitPrice} × ${newQuantity} = ${new DecimalJS(newQuantity).mul(unitPrice || 0)}, Addons: ${addonTotalPerItem} × ${newQuantity} = ${addonTotalScaled}, Total: ${new DecimalJS(newQuantity).mul(unitPrice || 0).add(addonTotalScaled)}`
@@ -2076,15 +2216,19 @@ export class OrderModel {
         return { updatedItem, orderId: orderItem.orderId };
       });
 
-      // Recalculate order totals (outside transaction is fine)
+      // ✅ FIX: Wait for recalculation to complete before returning
       await this.recalculateOrderTotals(result.orderId);
 
-      // ✅ FIX: Use mapPrismaOrderItem to properly include addons in response
-      const mappedItem = this.mapPrismaOrderItem(result.updatedItem);
+      // ✅ FIX: Fetch fresh order with updated totals to avoid race condition
+      // Frontend was calling getById() immediately, racing with recalculation
+      const freshOrder = await this.findById(result.orderId);
+      if (!freshOrder.success) {
+        throw new Error('Failed to fetch updated order after quantity change');
+      }
 
       return {
         success: true,
-        data: mappedItem,
+        data: freshOrder.data,  // ✅ Return fresh order with correct totals
         timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
@@ -2102,7 +2246,7 @@ export class OrderModel {
     }
   }
 
-  private async recalculateOrderTotals(orderId: string): Promise<void> {
+  public async recalculateOrderTotals(orderId: string): Promise<void> {
     // ✅ FIX: Include addons for visibility/debugging
     // Note: item.totalPrice should already include addon prices after Fix #1
     const orderItems = await this.prisma.orderItem.findMany({

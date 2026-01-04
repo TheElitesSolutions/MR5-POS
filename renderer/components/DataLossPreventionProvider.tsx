@@ -153,24 +153,31 @@ export default function DataLossPreventionProvider({
     toast,
   ]);
 
-  // Periodic auto-save for extra safety (every 30 seconds)
+  // Periodic auto-save for extra safety (every 60 seconds, coordinated with fetch)
   useEffect(() => {
     const intervalId = setInterval(() => {
       if (hasUnsavedChanges && currentOrder?.id) {
-        console.log('⏰ PERIODIC AUTO-SAVE: Saving pending changes');
-        savePendingChanges(currentOrder.id, { silent: true, maxRetries: 1 })
-          .then(success => {
-            if (!success) {
-              console.warn(
-                '⚠️ PERIODIC AUTO-SAVE: Failed to save, changes backed up'
-              );
-            }
-          })
-          .catch(error => {
-            console.error('❌ PERIODIC AUTO-SAVE: Error occurred', error);
-          });
+        // Check if a fetch is in progress before saving to avoid conflicts
+        const { fetchInProgress } = usePOSStore.getState();
+
+        if (!fetchInProgress) {
+          console.log('⏰ PERIODIC AUTO-SAVE: Saving pending changes');
+          savePendingChanges(currentOrder.id, { silent: true, maxRetries: 1 })
+            .then(success => {
+              if (!success) {
+                console.warn(
+                  '⚠️ PERIODIC AUTO-SAVE: Failed to save, changes backed up'
+                );
+              }
+            })
+            .catch(error => {
+              console.error('❌ PERIODIC AUTO-SAVE: Error occurred', error);
+            });
+        } else {
+          console.log('⏭️ PERIODIC AUTO-SAVE: Skipping - fetch in progress');
+        }
       }
-    }, 30000); // 30 seconds
+    }, 60000); // 60 seconds (increased from 30s to reduce frequency)
 
     return () => clearInterval(intervalId);
   }, [hasUnsavedChanges, currentOrder, savePendingChanges]);

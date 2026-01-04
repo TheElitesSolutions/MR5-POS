@@ -506,13 +506,9 @@ const OrderPanelWithAddons = ({
         );
 
         if (response.success) {
-          const addedItem = response.data;
-          trackNewItem(
-            addedItem.id,
-            addedItem.name || selectedItem.name,
-            selectedItem.id,
-            itemQuantity
-          );
+          // 🔧 FIX: Don't track items that are already saved to DB
+          // addItemWithAddons already saves directly - tracking would cause duplicates
+          // when savePendingChanges runs later
 
           toast({
             title: 'Item Added with Add-ons',
@@ -528,16 +524,9 @@ const OrderPanelWithAddons = ({
           specialNotes || undefined
         );
 
-        // Track the addition
-        if (response && (response as any).__actualAddedItem) {
-          const actualItem = (response as any).__actualAddedItem;
-          trackNewItem(
-            actualItem.id,
-            actualItem.name || selectedItem.name,
-            selectedItem.id,
-            itemQuantity
-          );
-        }
+        // 🔧 FIX: Don't track items that are already saved to DB
+        // addOrderItem already saves directly - tracking would cause duplicates
+        // when savePendingChanges runs later
 
         toast({
           title: 'Item Added',

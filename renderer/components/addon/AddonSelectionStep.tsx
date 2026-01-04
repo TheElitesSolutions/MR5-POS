@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -142,34 +142,40 @@ export const AddonSelectionStep: React.FC<AddonSelectionStepProps> = ({
   }, [state.availableGroups]);
 
   // Handle addon selection for a specific group
-  const handleGroupSelectionChange = (
-    groupId: string,
-    selections: AddonSelection[]
-  ) => {
-    // Clear existing selections for this group
-    const otherGroupSelections = currentSelections.filter(
-      sel => sel.addon.addonGroupId !== groupId
-    );
+  // ✅ FIX: Wrap in useCallback and work with fresh selections
+  const handleGroupSelectionChange = useCallback(
+    (groupId: string, selections: AddonSelection[]) => {
+      // Get fresh current selections
+      const freshCurrentSelections = getSelectionsForMenuItem(selectedItem.id);
 
-    // Combine with new selections
-    const allSelections = [...otherGroupSelections, ...selections];
+      // Clear existing selections for this group
+      const otherGroupSelections = freshCurrentSelections.filter(
+        sel => sel.addon.addonGroupId !== groupId
+      );
 
-    // Update selections
-    allSelections.forEach(selection => {
-      selectAddon(selectedItem.id, selection.addon, selection.quantity);
-    });
+      // Combine with new selections for this group
+      const allSelections = [...otherGroupSelections, ...selections];
 
-    // Remove deselected addons
-    const selectedAddonIds = new Set(allSelections.map(s => s.addonId));
-    currentSelections.forEach(currentSel => {
-      if (
-        currentSel.addon.addonGroupId === groupId &&
-        !selectedAddonIds.has(currentSel.addonId)
-      ) {
-        deselectAddon(selectedItem.id, currentSel.addonId);
-      }
-    });
-  };
+      // Batch updates: first remove deselected, then add/update selected
+      const selectedAddonIds = new Set(selections.map(s => s.addonId));
+
+      // Remove addons from this group that are no longer selected
+      freshCurrentSelections.forEach(currentSel => {
+        if (
+          currentSel.addon.addonGroupId === groupId &&
+          !selectedAddonIds.has(currentSel.addonId)
+        ) {
+          deselectAddon(selectedItem.id, currentSel.addonId);
+        }
+      });
+
+      // Add or update selected addons
+      selections.forEach(selection => {
+        selectAddon(selectedItem.id, selection.addon, selection.quantity);
+      });
+    },
+    [selectedItem.id, getSelectionsForMenuItem, selectAddon, deselectAddon]
+  );
 
   // Check if can continue
   const canContinue = useMemo(() => {

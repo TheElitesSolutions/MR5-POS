@@ -78,6 +78,7 @@ interface PosState {
   isSaving: boolean;
   hasUnsavedChanges: boolean;
   saveRetryCount: Map<string, number>;
+  fetchInProgress: boolean; // Prevents concurrent fetch operations
   setOrderChanges: (changes: Map<string, SimpleOrderTracking>) => void;
   savePendingChanges: (
     orderId: string,
@@ -105,7 +106,7 @@ interface PosState {
   // Global orders management
   fetchAllOrders: (retryCount?: number) => Promise<void>;
   refreshOrders: () => Promise<void>;
-  updateOrderInStore: (updatedOrder: Order) => void;
+  updateOrderInStore: (updatedOrder: Order, forceUpdate?: boolean) => void;
   removeOrderFromStore: (orderId: string) => void;
   // Network and offline handling
   setOnlineStatus: (isOnline: boolean) => void;
@@ -166,6 +167,7 @@ export const usePOSStore = create<PosState>((set, get) => ({
   isSaving: false,
   hasUnsavedChanges: false,
   saveRetryCount: new Map(),
+  fetchInProgress: false,
   setOrderChanges: (changes: Map<string, SimpleOrderTracking>) => {
     const hasAnyChanges = Array.from(changes.values()).some(
       tracking =>
@@ -424,13 +426,31 @@ export const usePOSStore = create<PosState>((set, get) => ({
                 ? convertIPCOrderToRendererOrder(orderResp.data as IPCOrder)
                 : table.activeOrder;
 
-            // CRITICAL FIX: Create completely fresh object references to force React re-render
+            // CRITICAL FIX: Deduplicate items and create completely fresh object references to force React re-render
+            const deduplicatedItems = freshOrder.items ? (() => {
+              const uniqueItemsMap = new Map<string, any>();
+              freshOrder.items.forEach((item: any) => {
+                uniqueItemsMap.set(item.id, { ...item });
+              });
+              return Array.from(uniqueItemsMap.values());
+            })() : [];
+
             const ultraFreshOrder = {
               ...freshOrder,
-              items: freshOrder.items
-                ? freshOrder.items.map(item => ({ ...item }))
-                : [],
+              items: deduplicatedItems,
             };
+
+            if (freshOrder.items && freshOrder.items.length !== deduplicatedItems.length) {
+              console.log('🔧 DEDUP (selectTable): Removed duplicate items', {
+                tableId: table.id,
+                tableName: table.name,
+                orderId: freshOrder.id,
+                originalCount: freshOrder.items.length,
+                deduplicatedCount: deduplicatedItems.length,
+                duplicatesRemoved: freshOrder.items.length - deduplicatedItems.length,
+                timestamp: new Date().toISOString(),
+              });
+            }
 
             set({
               selectedTable: table,
@@ -913,13 +933,30 @@ export const usePOSStore = create<PosState>((set, get) => ({
           ? convertIPCOrderToRendererOrder(orderResp.data as IPCOrder)
           : order;
 
-      // CRITICAL FIX: Create completely fresh object references to force React re-render
+      // CRITICAL FIX: Deduplicate items and create completely fresh object references to force React re-render
+      const deduplicatedItems = freshOrder.items ? (() => {
+        const uniqueItemsMap = new Map<string, any>();
+        freshOrder.items.forEach((item: any) => {
+          uniqueItemsMap.set(item.id, { ...item });
+        });
+        return Array.from(uniqueItemsMap.values());
+      })() : [];
+
       const ultraFreshOrder = {
         ...freshOrder,
-        items: freshOrder.items
-          ? freshOrder.items.map(item => ({ ...item }))
-          : [],
+        items: deduplicatedItems,
       };
+
+      if (freshOrder.items && freshOrder.items.length !== deduplicatedItems.length) {
+        console.log('🔧 DEDUP (selectTakeaway): Removed duplicate items', {
+          orderId: freshOrder.id,
+          orderType: freshOrder.type,
+          originalCount: freshOrder.items.length,
+          deduplicatedCount: deduplicatedItems.length,
+          duplicatesRemoved: freshOrder.items.length - deduplicatedItems.length,
+          timestamp: new Date().toISOString(),
+        });
+      }
 
       set({
         currentOrder: ultraFreshOrder,
@@ -1336,17 +1373,13 @@ export const usePOSStore = create<PosState>((set, get) => ({
         userId,
       });
 
-      if (!response.success) {
+      if (!response.success || !response.data) {
         throw new Error(response.error || 'Failed to update item quantity');
       }
 
-      // Fetch the updated order
-      const orderResp = await orderAPI.getById(currentOrder.id);
-      if (!orderResp.success || !orderResp.data) {
-        throw new Error(orderResp.error || 'Failed to fetch updated order');
-      }
-
-      const updatedOrder = convertIPCOrderToRendererOrder(orderResp.data as IPCOrder);
+      // ✅ FIX: Use response data directly - backend now returns fresh order with updated totals
+      // No need to fetch again, which eliminates race condition with recalculateOrderTotals()
+      const updatedOrder = convertIPCOrderToRendererOrder(response.data as IPCOrder);
 
       set({
         currentOrder: updatedOrder,
@@ -1657,7 +1690,16 @@ export const usePOSStore = create<PosState>((set, get) => ({
 
   // Global orders management methods
   fetchAllOrders: async (retryCount: number = 0) => {
-    const { isLoadingOrders, lastOrdersRefresh } = get();
+    const { isLoadingOrders, lastOrdersRefresh, fetchInProgress } = get();
+
+    // Prevent concurrent fetches
+    if (fetchInProgress && retryCount === 0) {
+      console.log('⏭️ FETCH: Skipping - fetch already in progress', {
+        timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
     if (isLoadingOrders && retryCount === 0) return; // Prevent duplicate calls unless retrying
 
     // Performance optimization: Skip if recently fetched (< 10 seconds ago)
@@ -1673,11 +1715,12 @@ export const usePOSStore = create<PosState>((set, get) => ({
     const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 5000); // Exponential backoff, max 5s
 
     try {
-      set({ isLoadingOrders: true, ordersError: null });
+      set({ isLoadingOrders: true, fetchInProgress: true, ordersError: null });
 
-      const [takeoutResponse, deliveryResponse] = await Promise.all([
+      const [takeoutResponse, deliveryResponse, dineInResponse] = await Promise.all([
         orderAPI.getByType('TAKEOUT'),
         orderAPI.getByType('DELIVERY'),
+        orderAPI.getByType('DINE_IN'),
       ]);
 
       const allOrders: Order[] = [];
@@ -1700,8 +1743,36 @@ export const usePOSStore = create<PosState>((set, get) => ({
         allOrders.push(...activeDelivery);
       }
 
-      // Sort by status priority and creation time
-      const sortedOrders = allOrders.sort((a, b) => {
+      // Process DINE_IN orders
+      if (dineInResponse?.success && Array.isArray(dineInResponse.data)) {
+        const activeDineIn = (dineInResponse.data as IPCOrder[])
+          .map(convertIPCOrderToRendererOrder)
+          .filter((order: Order) =>
+            ['PENDING', 'READY'].includes(order.status)
+          );
+        allOrders.push(...activeDineIn);
+      }
+
+      // Deduplicate orders by ID (keep most recently updated)
+      const uniqueOrdersMap = new Map<string, Order>();
+      allOrders.forEach(order => {
+        const existing = uniqueOrdersMap.get(order.id);
+        if (!existing || new Date(order.updatedAt).getTime() > new Date(existing.updatedAt).getTime()) {
+          uniqueOrdersMap.set(order.id, order);
+        }
+      });
+
+      const deduplicatedOrders = Array.from(uniqueOrdersMap.values());
+
+      if (allOrders.length !== deduplicatedOrders.length) {
+        console.log(`📊 FETCH: Deduplicated ${allOrders.length} → ${deduplicatedOrders.length} orders`, {
+          duplicatesRemoved: allOrders.length - deduplicatedOrders.length,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Sort by status priority and creation time (immutable - create new array)
+      const sortedOrders = [...deduplicatedOrders].sort((a, b) => {
         const statusPriority = { READY: 0, PENDING: 1 };
         const aPriority =
           statusPriority[a.status as keyof typeof statusPriority] ?? 2;
@@ -1720,15 +1791,91 @@ export const usePOSStore = create<PosState>((set, get) => ({
       set({
         allOrders: sortedOrders,
         isLoadingOrders: false,
+        fetchInProgress: false,
         lastOrdersRefresh: Date.now(),
       });
 
-      if (process.env.NODE_ENV === 'development') {
-        console.log(
-          'POS Store: Fetched all orders successfully',
-          sortedOrders.length
-        );
+      // 🔧 CRITICAL FIX: Reconcile tracking data with fetched orders
+      // This prevents savePendingChanges from re-adding items that are already in the database
+      const currentOrderChanges = get().orderChanges;
+      if (currentOrderChanges.size > 0) {
+        const reconciledChanges = new Map(currentOrderChanges);
+        let totalReconciledItems = 0;
+
+        sortedOrders.forEach(order => {
+          const tracking = reconciledChanges.get(order.id);
+          if (tracking && tracking.newItems.length > 0) {
+            const itemsBeforeReconciliation = tracking.newItems.length;
+
+            // Filter out newItems that already exist in the fetched order AND have been printed
+            const reconciledNewItems = tracking.newItems.filter(newItem => {
+              // ✅ FIX: Check if this specific item (by ID) has been printed
+              // Don't remove items just because they exist in DB - only remove if printed!
+              const matchingItem = order.items?.find(existingItem =>
+                existingItem.id === newItem.id
+              );
+
+              if (matchingItem && matchingItem.printedAt) {
+                console.log('🔧 RECONCILE: Removing tracked item (already printed)', {
+                  orderId: order.id,
+                  itemId: matchingItem.id,
+                  menuItemId: newItem.menuItemId,
+                  quantity: newItem.quantity,
+                  printedAt: matchingItem.printedAt,
+                  timestamp: new Date().toISOString(),
+                });
+                return false; // Remove from tracking - item has been printed
+              }
+              return true; // Keep in tracking - item not printed yet
+            });
+
+            const reconciledCount = itemsBeforeReconciliation - reconciledNewItems.length;
+            if (reconciledCount > 0) {
+              totalReconciledItems += reconciledCount;
+
+              if (reconciledNewItems.length === 0 &&
+                  Object.keys(tracking.netChanges).length === 0 &&
+                  tracking.removedItems.length === 0) {
+                // No more changes to track for this order
+                reconciledChanges.delete(order.id);
+                console.log('🔧 RECONCILE: Cleared tracking for order (no pending changes)', {
+                  orderId: order.id,
+                  timestamp: new Date().toISOString(),
+                });
+              } else {
+                // Update tracking with filtered newItems
+                reconciledChanges.set(order.id, {
+                  ...tracking,
+                  newItems: reconciledNewItems,
+                });
+              }
+            }
+          }
+        });
+
+        if (totalReconciledItems > 0) {
+          console.log('✅ RECONCILE: Cleared tracked items that exist in DB', {
+            totalReconciledItems,
+            trackingEntriesBefore: currentOrderChanges.size,
+            trackingEntriesAfter: reconciledChanges.size,
+            timestamp: new Date().toISOString(),
+          });
+          set({ orderChanges: reconciledChanges });
+        }
       }
+
+      console.log('📊 FETCH STATS:', {
+        fetchedCount: allOrders.length,
+        deduplicatedCount: deduplicatedOrders.length,
+        finalCount: sortedOrders.length,
+        duplicatesRemoved: allOrders.length - deduplicatedOrders.length,
+        breakdown: {
+          takeout: takeoutResponse.data?.length || 0,
+          delivery: deliveryResponse.data?.length || 0,
+          dineIn: dineInResponse.data?.length || 0,
+        },
+        timestamp: new Date().toISOString(),
+      });
     } catch (error) {
       console.error(
         `POS Store: Failed to fetch orders (attempt ${retryCount + 1})`,
@@ -1761,6 +1908,7 @@ export const usePOSStore = create<PosState>((set, get) => ({
       set({
         ordersError: userFriendlyMessage,
         isLoadingOrders: false,
+        fetchInProgress: false,
       });
     }
   },
@@ -1770,18 +1918,64 @@ export const usePOSStore = create<PosState>((set, get) => ({
     await fetchAllOrders();
   },
 
-  updateOrderInStore: (updatedOrder: Order) => {
+  updateOrderInStore: (updatedOrder: Order, forceUpdate: boolean = false) => {
+    // ✅ CRITICAL FIX: Deduplicate order items by ID before storing
+    const deduplicatedItems = updatedOrder.items ? (() => {
+      const uniqueItemsMap = new Map<string, any>();
+      updatedOrder.items.forEach((item: any) => {
+        const existing = uniqueItemsMap.get(item.id);
+        // Keep the most recently updated version if duplicates exist
+        if (!existing || (item.updatedAt && existing.updatedAt &&
+            new Date(item.updatedAt).getTime() > new Date(existing.updatedAt).getTime())) {
+          uniqueItemsMap.set(item.id, item);
+        }
+      });
+
+      const deduplicated = Array.from(uniqueItemsMap.values());
+
+      if (updatedOrder.items.length !== deduplicated.length) {
+        console.log('🔧 DEDUP: Removed duplicate items from order', {
+          orderId: updatedOrder.id,
+          originalCount: updatedOrder.items.length,
+          deduplicatedCount: deduplicated.length,
+          duplicatesRemoved: updatedOrder.items.length - deduplicated.length,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      return deduplicated;
+    })() : [];
+
+    // Create order with deduplicated items
+    const cleanedOrder = {
+      ...updatedOrder,
+      items: deduplicatedItems,
+    };
+
     const { allOrders } = get();
     const updatedOrders = allOrders.map(order =>
-      order.id === updatedOrder.id ? updatedOrder : order
+      order.id === cleanedOrder.id ? cleanedOrder : order
     );
 
     set({ allOrders: updatedOrders });
 
-    // If this is the current order, update it too
+    // If this is the current order, update it only if the fetched data is newer
     const { currentOrder } = get();
-    if (currentOrder?.id === updatedOrder.id) {
-      set({ currentOrder: updatedOrder, activeOrder: updatedOrder });
+    if (currentOrder?.id === cleanedOrder.id) {
+      // ✅ CRITICAL FIX: Allow forced updates (e.g., after addon assignment where ORDER updatedAt doesn't change)
+      if (forceUpdate) {
+        set({ currentOrder: cleanedOrder, activeOrder: cleanedOrder });
+      } else {
+        // ✅ SAFETY CHECK: Compare timestamps to avoid overwriting newer data with older data
+        const currentTimestamp = new Date(currentOrder.updatedAt).getTime();
+        const updatedTimestamp = new Date(cleanedOrder.updatedAt).getTime();
+
+        // Only overwrite if the fetched data is NEWER than what we have
+        if (updatedTimestamp > currentTimestamp) {
+          set({ currentOrder: cleanedOrder, activeOrder: cleanedOrder });
+        }
+        // Otherwise, keep the current data (it's fresher than what database returned)
+      }
     }
   },
 
