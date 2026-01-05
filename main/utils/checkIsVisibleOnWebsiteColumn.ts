@@ -6,9 +6,15 @@
 import { getPrismaClient } from '../prisma';
 
 export async function checkAndAddIsVisibleOnWebsiteColumn(): Promise<void> {
-  const prisma = getPrismaClient();
-
   try {
+    const prisma = getPrismaClient();
+
+    // Safety check: ensure prisma and db are available
+    if (!prisma || !(prisma as any).db) {
+      console.error('⚠️ Prisma client or database not available, skipping isVisibleOnWebsite migration');
+      return;
+    }
+
     console.log('🔍 Checking if isVisibleOnWebsite column exists...');
 
     // Try to query the column directly
@@ -67,7 +73,9 @@ export async function checkAndAddIsVisibleOnWebsiteColumn(): Promise<void> {
       }
     });
 
-  } catch (error) {
-    console.error('❌ Error checking isVisibleOnWebsite column:', error);
+  } catch (outerError) {
+    console.error('❌ Error checking isVisibleOnWebsite column:', outerError);
+    // Don't re-throw - we don't want migration failures to crash the app
+    console.error('⚠️ Migration failed but app will continue running');
   }
 }

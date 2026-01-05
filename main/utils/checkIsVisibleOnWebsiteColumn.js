@@ -2,74 +2,57 @@
  * Check and add isVisibleOnWebsite column to menu_items table
  * This runs on app startup to ensure the column exists
  */
-
-const { getPrismaClient } = require('../prisma');
-
-async function checkAndAddIsVisibleOnWebsiteColumn() {
-  const prisma = getPrismaClient();
-
-  try {
-    console.log('🔍 Checking if isVisibleOnWebsite column exists...');
-
-    // Try to query the column directly
+import { getPrismaClient } from '../prisma';
+export async function checkAndAddIsVisibleOnWebsiteColumn() {
     try {
-      const result = prisma.db.prepare(
-        'SELECT isVisibleOnWebsite FROM menu_items LIMIT 1'
-      ).get();
+        const prisma = getPrismaClient();
 
-      console.log('✅ isVisibleOnWebsite column already exists!');
-      console.log('📋 Sample value:', result);
-      return;
+        // Safety check: ensure prisma and db are available
+        if (!prisma || !prisma.db) {
+            console.error('⚠️ Prisma client or database not available, skipping isVisibleOnWebsite migration');
+            return;
+        }
 
-    } catch (error) {
-      if (error.message.includes('no such column')) {
-        console.log('⚠️ Column isVisibleOnWebsite does NOT exist. Adding it now...');
-
-        // Add the column
-        prisma.db.prepare(
-          'ALTER TABLE menu_items ADD COLUMN isVisibleOnWebsite INTEGER DEFAULT 1'
-        ).run();
-
-        console.log('✅ Column added successfully!');
-
-        // Create index for the new column
-        console.log('🔍 Creating index on isVisibleOnWebsite...');
-        prisma.db.prepare(
-          'CREATE INDEX IF NOT EXISTS idx_menu_items_isVisibleOnWebsite ON menu_items(isVisibleOnWebsite)'
-        ).run();
-
-        // Create composite index for common query pattern
-        console.log('🔍 Creating composite index...');
-        prisma.db.prepare(
-          'CREATE INDEX IF NOT EXISTS idx_menu_items_isActive_isVisibleOnWebsite ON menu_items(isActive, isVisibleOnWebsite) WHERE isActive = 1 AND isVisibleOnWebsite = 1'
-        ).run();
-
-        // Verify
-        const verifyResult = prisma.db.prepare(
-          'SELECT isVisibleOnWebsite FROM menu_items LIMIT 1'
-        ).get();
-
-        console.log('✅ Verification successful! Sample value:', verifyResult);
-      } else {
-        throw error;
-      }
+        console.log('🔍 Checking if isVisibleOnWebsite column exists...');
+        // Try to query the column directly
+        try {
+            const result = prisma.db.prepare('SELECT isVisibleOnWebsite FROM menu_items LIMIT 1').get();
+            console.log('✅ isVisibleOnWebsite column already exists!');
+            console.log('📋 Sample value:', result);
+            return;
+        }
+        catch (error) {
+            if (error.message.includes('no such column')) {
+                console.log('⚠️ Column isVisibleOnWebsite does NOT exist. Adding it now...');
+                // Add the column
+                prisma.db.prepare('ALTER TABLE menu_items ADD COLUMN isVisibleOnWebsite INTEGER DEFAULT 1').run();
+                console.log('✅ Column added successfully!');
+                // Create index for the new column
+                console.log('🔍 Creating index on isVisibleOnWebsite...');
+                prisma.db.prepare('CREATE INDEX IF NOT EXISTS idx_menu_items_isVisibleOnWebsite ON menu_items(isVisibleOnWebsite)').run();
+                // Create composite index for common query pattern
+                console.log('🔍 Creating composite index...');
+                prisma.db.prepare('CREATE INDEX IF NOT EXISTS idx_menu_items_isActive_isVisibleOnWebsite ON menu_items(isActive, isVisibleOnWebsite) WHERE isActive = 1 AND isVisibleOnWebsite = 1').run();
+                // Verify
+                const verifyResult = prisma.db.prepare('SELECT isVisibleOnWebsite FROM menu_items LIMIT 1').get();
+                console.log('✅ Verification successful! Sample value:', verifyResult);
+            }
+            else {
+                throw error;
+            }
+        }
+        // Also check menu_items table structure
+        const tableInfo = prisma.db.prepare('PRAGMA table_info(menu_items)').all();
+        console.log('📋 menu_items table columns:');
+        tableInfo.forEach((col) => {
+            if (col.name.toLowerCase().includes('visible') || col.name.toLowerCase().includes('website')) {
+                console.log(`  ✨ ${col.name}: ${col.type} (default: ${col.dflt_value})`);
+            }
+        });
     }
-
-    // Also check menu_items table structure
-    const tableInfo = prisma.db.prepare(
-      'PRAGMA table_info(menu_items)'
-    ).all();
-
-    console.log('📋 menu_items table columns:');
-    tableInfo.forEach((col) => {
-      if (col.name.toLowerCase().includes('visible') || col.name.toLowerCase().includes('website')) {
-        console.log(`  ✨ ${col.name}: ${col.type} (default: ${col.dflt_value})`);
-      }
-    });
-
-  } catch (error) {
-    console.error('❌ Error checking isVisibleOnWebsite column:', error);
-  }
+    catch (outerError) {
+        console.error('❌ Error checking isVisibleOnWebsite column:', outerError);
+        // Don't re-throw - we don't want migration failures to crash the app
+        console.error('⚠️ Migration failed but app will continue running');
+    }
 }
-
-module.exports = { checkAndAddIsVisibleOnWebsiteColumn };
