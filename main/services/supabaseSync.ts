@@ -1,20 +1,218 @@
-// @supabase/supabase-js is optional - only needed if syncing to Supabase
-let createClient: any;
-let SupabaseClient: any;
-try {
-  const supabase = require('@supabase/supabase-js');
-  createClient = supabase.createClient;
-  SupabaseClient = supabase.SupabaseClient;
-} catch (e) {
-  // Supabase package not installed - sync functionality will be disabled
-  createClient = null;
-  SupabaseClient = null;
-}
-
 import { PrismaClient } from '../db/prisma-wrapper';
+import { getDatabase } from '../db/index';
 import { logInfo, logError } from '../error-handler';
 import Decimal from 'decimal.js';
 import { getCurrentLocalDateTime } from '../utils/dateTime';
+import https from 'https';
+
+// Hardcoded Supabase credentials
+const SUPABASE_URL = 'https://buivobulqaryifxesvqo.supabase.co';
+const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1aXZvYnVscWFyeWlmeGVzdnFvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDcyNDUxNSwiZXhwIjoyMDY2MzAwNTE1fQ.-G0GXB57aRlD9VldrkTeBb_l5lDlkXl385-qYpgdpoE';
+
+/**
+ * Convert SQLite hex ID to PostgreSQL UUID format
+ * Input: 32 hex characters (e.g., "550e8400e29b41d4a716446655440000")
+ * Output: UUID format (e.g., "550e8400-e29b-41d4-a716-446655440000")
+ *
+ * If input is not 32 characters, pads with zeros
+ * If input contains invalid hex characters, sanitizes them
+ */
+function formatHexAsUuid(hexId: string): string {
+  if (!hexId || typeof hexId !== 'string') {
+    throw new Error(`Invalid hex ID: ${hexId}`);
+  }
+
+  // Remove any existing hyphens
+  let cleanHex = hexId.replace(/-/g, '').toLowerCase();
+
+  // Check for invalid hex characters and sanitize
+  if (!/^[0-9a-f]*$/i.test(cleanHex)) {
+    const invalidChars = cleanHex.match(/[^0-9a-f]/gi);
+    logInfo(`⚠️ Invalid hex ID detected: "${hexId}" - contains non-hex characters: ${invalidChars?.join(', ')}`);
+    logInfo(`   This is likely a test record. Sanitizing by replacing invalid chars with '0'`);
+
+    // Sanitize: replace invalid hex chars with '0'
+    cleanHex = cleanHex.replace(/[^0-9a-f]/gi, '0');
+    logInfo(`   Sanitized to: "${cleanHex}"`);
+  }
+
+  // If too short, pad with zeros on the right
+  let paddedHex = cleanHex;
+  if (cleanHex.length < 32) {
+    logInfo(`⚠️ Short hex ID detected (${cleanHex.length} chars): "${hexId}" - padding to 32 chars`);
+    paddedHex = cleanHex.padEnd(32, '0');
+  } else if (cleanHex.length > 32) {
+    // If too long, truncate (shouldn't happen but handle it)
+    logInfo(`⚠️ Long hex ID detected (${cleanHex.length} chars): "${hexId}" - truncating to 32 chars`);
+    paddedHex = cleanHex.substring(0, 32);
+  }
+
+  // Format as UUID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+  const uuid = [
+    paddedHex.substring(0, 8),
+    paddedHex.substring(8, 12),
+    paddedHex.substring(12, 16),
+    paddedHex.substring(16, 20),
+    paddedHex.substring(20, 32)
+  ].join('-');
+
+  return uuid;
+}
+
+/**
+ * Simple HTTP client for Supabase REST API
+ * This bypasses the need for the @supabase/supabase-js SDK which has loading issues in Electron
+ */
+class SupabaseHTTPClient {
+  private baseUrl: string;
+  private apiKey: string;
+
+  constructor(url: string, apiKey: string) {
+    this.baseUrl = url;
+    this.apiKey = apiKey;
+  }
+
+  private async request(method: string, path: string, body?: any, customHeaders?: Record<string, string>): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const url = new URL(path, this.baseUrl);
+
+      // LOG REQUEST
+      logInfo(`[Sync HTTP] ${method} ${url.pathname}${url.search}`);
+      console.log(`[Sync HTTP] 🔍 ${method} ${url.pathname}${url.search}`);
+      if (body) {
+        logInfo(`[Sync HTTP] Body: ${JSON.stringify(body)}`);
+        console.log(`[Sync HTTP] 📦 Body:`, body);
+      }
+
+      const options = {
+        hostname: url.hostname,
+        path: url.pathname + url.search,
+        method: method,
+        headers: {
+          'apikey': this.apiKey,
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation',
+          ...customHeaders,  // Merge custom headers (can override Prefer)
+        },
+      };
+
+      const req = https.request(options, (res) => {
+        let data = '';
+        res.on('data', (chunk) => { data += chunk; });
+        res.on('end', () => {
+          // LOG RESPONSE
+          logInfo(`[Sync HTTP] Response ${res.statusCode}`);
+          console.log(`[Sync HTTP] 📥 Response ${res.statusCode}`);
+
+          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+            try {
+              resolve(data ? JSON.parse(data) : null);
+            } catch (e) {
+              const errorMsg = `Failed to parse JSON: ${e}`;
+              logError(new Error(errorMsg), 'request');
+              console.error(`[Sync HTTP] ❌ ${errorMsg}`);
+              reject(new Error(errorMsg));
+            }
+          } else {
+            const errorMsg = `HTTP ${res.statusCode}: ${data}`;
+            logError(new Error(errorMsg), 'request');
+            console.error(`[Sync HTTP] ❌ ${errorMsg}`);
+            reject(new Error(errorMsg));
+          }
+        });
+      });
+
+      req.on('error', (e) => {
+        logError(e, 'request');
+        console.error(`[Sync HTTP] ❌ Request error:`, e.message);
+        reject(e);
+      });
+      if (body) {
+        req.write(JSON.stringify(body));
+      }
+      req.end();
+    });
+  }
+
+  from(table: string) {
+    return {
+      select: (columns: string = '*') => {
+        // Return a query builder that is properly awaitable
+        let url = `/rest/v1/${table}?select=${columns}`;
+        const self = this;
+        
+        const builder: any = {
+          eq: (column: string, value: any) => {
+            url += `&${column}=eq.${value}`;
+            return {
+              single: async () => {
+                const data = await self.request('GET', url);
+                return { data: Array.isArray(data) ? data[0] : data, error: null };
+              }
+            };
+          }
+        };
+        
+        // Make the builder awaitable
+        builder.then = function(resolve: any, reject: any) {
+          return self.request('GET', url)
+            .then(data => resolve({ data, error: null }))
+            .catch(err => reject ? reject(err) : resolve({ data: null, error: err }));
+        };
+        
+        return builder;
+      },
+      insert: async (records: any | any[]) => {
+        try {
+          const data = await this.request('POST', `/rest/v1/${table}`, records);
+          return { data, error: null };
+        } catch (err) {
+          return { data: null, error: err };
+        }
+      },
+      upsert: async (records: any | any[], options?: { onConflict?: string }) => {
+        try {
+          // Build query params - onConflict must be string, not array
+          // columns parameter does NOT exist in Supabase API
+          const params = new URLSearchParams();
+          if (options?.onConflict) {
+            params.append('on_conflict', options.onConflict);  // ✅ String param
+          }
+          // Note: 'resolution' parameter does NOT exist - removed to fix PGRST100 error
+          const queryString = params.toString() ? `?${params.toString()}` : '';
+
+          // Add Prefer header for upsert to work correctly (merge on conflict)
+          const data = await this.request('POST', `/rest/v1/${table}${queryString}`, records, {
+            'Prefer': 'resolution=merge-duplicates'
+          });
+          return { data, error: null };
+        } catch (err) {
+          return { data: null, error: err };
+        }
+      },
+      delete: () => ({
+        eq: async (column: string, value: any) => {
+          try {
+            const data = await this.request('DELETE', `/rest/v1/${table}?${column}=eq.${value}`);
+            return { data, error: null };
+          } catch (err) {
+            return { data: null, error: err };
+          }
+        },
+        in: async (column: string, values: any[]) => {
+          try {
+            const data = await this.request('DELETE', `/rest/v1/${table}?${column}=in.(${values.map(v => `"${v}"`).join(',')})`);
+            return { data, error: null };
+          } catch (err) {
+            return { data: null, error: err };
+          }
+        },
+      }),
+    };
+  }
+}
 
 /**
  * Supabase Sync Service
@@ -22,7 +220,7 @@ import { getCurrentLocalDateTime } from '../utils/dateTime';
  * Only syncs items where isActive = true
  */
 export class SupabaseSyncService {
-  private supabase: any | null = null;
+  private supabase: SupabaseHTTPClient;
   private prisma: PrismaClient;
   private isSyncing: boolean = false;
   private lastSyncTime: Date | null = null;
@@ -31,37 +229,19 @@ export class SupabaseSyncService {
 
   constructor(prisma: PrismaClient) {
     this.prisma = prisma;
-    this.initializeSupabase();
-  }
-
-  /**
-   * Initialize Supabase client
-   */
-  private initializeSupabase(): void {
-    try {
-      const supabaseUrl = process.env.SUPABASE_URL;
-      const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
-
-      if (!supabaseUrl || !supabaseKey) {
-        logError(
-          new Error('SUPABASE_URL or SUPABASE_SERVICE_KEY not configured'),
-          'SupabaseSync'
-        );
-        return;
-      }
-
-      this.supabase = createClient(supabaseUrl, supabaseKey);
-      logInfo('Supabase client initialized successfully');
-    } catch (error) {
-      logError(error as Error, 'SupabaseSync initialization');
-    }
+    // CRITICAL: Ensure Prisma client is fully initialized before use
+    // This triggers lazy initialization of all model properties (menuItem, category, etc.)
+    this.prisma.ensureInitialized();
+    this.supabase = new SupabaseHTTPClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+    logInfo('✅ Supabase HTTP client initialized with hardcoded credentials');
+    logInfo('✅ Prisma client initialized for sync service');
   }
 
   /**
    * Check if Supabase is configured and available
    */
   public isConfigured(): boolean {
-    return this.supabase !== null;
+    return true; // Always configured with hardcoded credentials
   }
 
   /**
@@ -162,241 +342,360 @@ export class SupabaseSyncService {
   }
 
   /**
-   * Sync categories to Supabase (only active ones)
-   * Note: Supabase uses auto-incrementing IDs, so we don't send local UUIDs
+   * Sync categories to Supabase using UUID-based upsert with soft deletes
+   * Phase 1: Get Supabase snapshot (UUIDs of non-deleted records)
+   * Phase 2: Get local active categories (SQLite UUIDs)
+   * Phase 3: Classify into upsert vs soft delete
+   * Phase 4: Execute batch operations
+   * Phase 5: Validate sync (implicit via logging)
    */
   private async syncCategories(): Promise<number> {
     if (!this.supabase) throw new Error('Supabase not initialized');
+    const db = getDatabase();
 
-    // Get only active categories from local DB
-    const categories = await this.prisma.category.findMany({
-      where: { isActive: true },
-      select: {
-        name: true, // Only sync name, let Supabase generate IDs
-      },
-      orderBy: { sortOrder: 'asc' },
-    });
-
-    // Get all category names from Supabase
-    const { data: existingCategories } = await this.supabase
+    // Phase 1: Get Supabase snapshot (non-deleted UUIDs)
+    const { data: existingCategories, error: selectError } = await this.supabase
       .from('category')
-      .select('name');
+      .select('uuid, id');
 
-    const existingNames = new Set(
-      existingCategories?.map((c: any) => c.name) || []
+    if (selectError) throw selectError;
+
+    // Filter to only non-deleted (if deleted_at column exists, filter it; otherwise all are non-deleted)
+    const supabaseUUIDs = new Set(
+      (existingCategories || [])
+        .filter((c: any) => !c.deleted_at)  // Filter out soft-deleted
+        .map((c: any) => c.uuid)
     );
-    const activeNames = new Set(categories.map(c => c.name));
 
-    // Delete categories that are no longer active
-    const namesToDelete = Array.from(existingNames).filter(
-      name => !activeNames.has(name)
-    );
-    if (namesToDelete.length > 0) {
-      await this.supabase.from('category').delete().in('name', namesToDelete);
-      logInfo(
-        `Removed ${namesToDelete.length} inactive categories from Supabase`
-      );
-    }
+    // Phase 2: Get local active categories (SQLite id IS the UUID)
+    const localCategories = db.prepare(`
+      SELECT id as uuid, name
+      FROM categories
+      WHERE isActive = 1
+      ORDER BY sortOrder
+    `).all() as Array<{ uuid: string; name: string }>;
 
-    // Upsert active categories (using name as unique key)
-    if (categories.length > 0) {
-      const { error } = await this.supabase
+    // Format local hex IDs to UUID format for PostgreSQL
+    const formattedLocalCategories = localCategories.map(cat => ({
+      ...cat,
+      uuid: formatHexAsUuid(cat.uuid)
+    }));
+
+    const localUUIDs = new Set(formattedLocalCategories.map(c => c.uuid));
+
+    // Phase 3: Classify records
+    const toUpsert = formattedLocalCategories.map(cat => ({
+      uuid: cat.uuid,
+      name: cat.name,
+      // Note: sortOrder and color fields excluded as they don't exist in Supabase category table
+      deleted_at: null  // Ensure not marked deleted
+    }));
+
+    const toMarkDeleted = Array.from(supabaseUUIDs)
+      .filter(uuid => !localUUIDs.has(uuid))
+      .map(uuid => ({
+        uuid: uuid,
+        deleted_at: new Date().toISOString()
+      }));
+
+    // Phase 4: Execute batch operations
+    let syncedCount = 0;
+
+    if (toUpsert.length > 0) {
+      const { data, error } = await this.supabase
         .from('category')
-        .upsert(categories, { onConflict: 'name' });
+        .upsert(toUpsert, { onConflict: 'uuid' });
 
       if (error) throw error;
+      syncedCount = toUpsert.length;
+      logInfo(`✅ Upserted ${toUpsert.length} categories`);
     }
 
-    logInfo(`Synced ${categories.length} active categories`);
-    return categories.length;
+    if (toMarkDeleted.length > 0) {
+      const { error } = await this.supabase
+        .from('category')
+        .upsert(toMarkDeleted, { onConflict: 'uuid' });
+
+      if (error) throw error;
+      logInfo(`🗑️ Soft deleted ${toMarkDeleted.length} categories`);
+    }
+
+    // Phase 5: Log validation
+    logInfo(`Synced ${syncedCount} active categories (${toMarkDeleted.length} soft deleted)`);
+    return syncedCount;
   }
 
   /**
-   * Sync active menu items only
-   * Note: Supabase uses auto-incrementing IDs, we map by name + category lookup
+   * Sync menu items to Supabase using UUID-based upsert with soft deletes
+   * Includes FK resolution (category UUID → Supabase ID)
+   * Phase 1: Get category UUID → ID mapping
+   * Phase 2: Get Supabase snapshot (UUIDs of non-deleted items)
+   * Phase 3: Get local active items with FK resolution
+   * Phase 4: Classify into upsert vs soft delete
+   * Phase 5: Execute batch operations
    */
   private async syncMenuItems(): Promise<number> {
     if (!this.supabase) throw new Error('Supabase not initialized');
+    const db = getDatabase();
 
-    // Get ONLY active items from local DB
-    const items = await this.prisma.menuItem.findMany({
-      where: {
-        isActive: true,
-        category: { isActive: true }, // Also ensure category is active
-      },
-      select: {
-        name: true,
-        price: true,
-        description: true,
-        category: {
-          select: {
-            name: true,
-          },
-        },
-      },
-      orderBy: { sortOrder: 'asc' },
-    });
-
-    // Get category name-to-ID mapping from Supabase
-    const { data: supabaseCategories } = await this.supabase
+    // Phase 1: Get category UUID → Supabase ID mapping
+    const { data: supabaseCategories, error: catError } = await this.supabase
       .from('category')
-      .select('id, name');
-    
+      .select('id, uuid');
+
+    if (catError) throw catError;
+
     const categoryMap = new Map(
-      (supabaseCategories || []).map((c: any) => [c.name, c.id])
+      (supabaseCategories || [])
+        .filter((c: any) => !c.deleted_at)  // Only non-deleted categories
+        .map((c: any) => [c.uuid, c.id])
     );
 
-    // Transform to Supabase format
-    const supabaseItems = items
+    // Phase 2: Get Supabase snapshot (non-deleted UUIDs)
+    const { data: existingItems, error: selectError } = await this.supabase
+      .from('item')
+      .select('uuid, id');
+
+    if (selectError) throw selectError;
+
+    const supabaseUUIDs = new Set(
+      (existingItems || [])
+        .filter((i: any) => !i.deleted_at)  // Filter out soft-deleted
+        .map((i: any) => i.uuid)
+    );
+
+    // Phase 3: Get local active items (SQLite id IS the UUID)
+    const localItems = db.prepare(`
+      SELECT
+        m.id as uuid,
+        m.name,
+        m.price,
+        m.categoryId as category_uuid,
+        m.isVisibleOnWebsite
+      FROM menu_items m
+      WHERE m.isActive = 1
+    `).all() as Array<{
+      uuid: string;
+      name: string;
+      price: string;
+      category_uuid: string;
+      isVisibleOnWebsite: number;
+    }>;
+
+    // Format local hex IDs to UUID format for PostgreSQL
+    const formattedLocalItems = localItems.map(item => ({
+      ...item,
+      uuid: formatHexAsUuid(item.uuid),
+      category_uuid: formatHexAsUuid(item.category_uuid)
+    }));
+
+    const localUUIDs = new Set(formattedLocalItems.map(i => i.uuid));
+
+    // Phase 4: Classify and transform with FK resolution
+    const toUpsert = formattedLocalItems
       .map(item => {
-        const categoryId = categoryMap.get(item.category.name);
-        if (!categoryId) {
-          logInfo(`Skipping item "${item.name}" - category "${item.category.name}" not found in Supabase`);
+        const category_id = categoryMap.get(item.category_uuid);
+        if (!category_id) {
+          logInfo(`⚠️ Skipping item "${item.name}" - category UUID ${item.category_uuid} not found in Supabase`);
           return null;
         }
         return {
+          uuid: item.uuid,
           name: item.name,
-          price: item.price.toString(), // Convert Decimal to string
-          is_special: false,
-          category_id: categoryId,
+          price: item.price,
+          // Note: description field excluded as it doesn't exist in Supabase item table
+          // Note: is_special field excluded as it doesn't exist in Supabase item table
+          category_id: category_id,
+          isVisibleOnWebsite: item.isVisibleOnWebsite === 1,
+          deleted_at: null
         };
       })
       .filter(item => item !== null);
 
-    // Get all existing item names from Supabase
-    const { data: existingItems } = await this.supabase
-      .from('item')
-      .select('name');
+    const toMarkDeleted = Array.from(supabaseUUIDs)
+      .filter(uuid => !localUUIDs.has(uuid))
+      .map(uuid => ({
+        uuid: uuid,
+        deleted_at: new Date().toISOString()
+      }));
 
-    const existingNames = new Set(
-      existingItems?.map((i: any) => i.name) || []
-    );
-    const activeNames = new Set(supabaseItems.map((i: any) => i.name));
+    // Phase 5: Execute batch operations
+    let syncedCount = 0;
 
-    // Delete items that are no longer active
-    const namesToDelete = Array.from(existingNames).filter(
-      name => !activeNames.has(name)
-    );
-    if (namesToDelete.length > 0) {
-      await this.supabase.from('item').delete().in('name', namesToDelete);
-      logInfo(`Removed ${namesToDelete.length} inactive items from Supabase`);
-    }
-
-    // Upsert active items (name must be unique in Supabase)
-    if (supabaseItems.length > 0) {
-      const { error } = await this.supabase
+    if (toUpsert.length > 0) {
+      const { data, error } = await this.supabase
         .from('item')
-        .upsert(supabaseItems, { onConflict: 'name' });
+        .upsert(toUpsert, { onConflict: 'uuid' });
 
       if (error) throw error;
+      syncedCount = toUpsert.length;
+      logInfo(`✅ Upserted ${toUpsert.length} menu items`);
     }
 
-    logInfo(`Synced ${supabaseItems.length} active menu items`);
-    return supabaseItems.length;
+    if (toMarkDeleted.length > 0) {
+      const { error } = await this.supabase
+        .from('item')
+        .upsert(toMarkDeleted, { onConflict: 'uuid' });
+
+      if (error) throw error;
+      logInfo(`🗑️ Soft deleted ${toMarkDeleted.length} menu items`);
+    }
+
+    logInfo(`Synced ${syncedCount} active menu items (${toMarkDeleted.length} soft deleted)`);
+    return syncedCount;
   }
 
   /**
-   * Sync active add-ons with category assignments
-   * Note: Supabase schema has description (no name field) and category_id
+   * Sync add-ons to Supabase using UUID-based upsert with soft deletes
+   * Note: Each local addon can have multiple category assignments
+   *       = multiple Supabase records (one per addon-category pair)
+   * Uses composite key matching: addon_uuid + category_id
    */
   private async syncAddOns(): Promise<number> {
     if (!this.supabase) throw new Error('Supabase not initialized');
+    const db = getDatabase();
 
-    // Get active add-ons from local DB
-    const addOns = await this.prisma.addon.findMany({
-      where: {
-        isActive: true,
-      },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        price: true,
-      },
-      orderBy: { sortOrder: 'asc' },
-    });
-
-    // Get addon category assignments
-    const addonIds = addOns.map(a => a.id);
-    const addonAssignments = await this.prisma.addonCategoryAssignment.findMany({
-      where: {
-        addonId: { in: addonIds },
-        isActive: true,
-      },
-      include: {
-        category: {
-          select: {
-            name: true,
-          },
-        },
-      },
-    });
-
-    // Get category name-to-ID mapping from Supabase
-    const { data: supabaseCategories } = await this.supabase
+    // Phase 1: Get category UUID → Supabase ID mapping
+    const { data: supabaseCategories, error: catError } = await this.supabase
       .from('category')
-      .select('id, name');
-    
+      .select('id, uuid');
+
+    if (catError) throw catError;
+
     const categoryMap = new Map(
-      (supabaseCategories || []).map((c: any) => [c.name, c.id])
+      (supabaseCategories || [])
+        .filter((c: any) => !c.deleted_at)  // Only non-deleted categories
+        .map((c: any) => [c.uuid, c.id])
     );
 
-    // Build addon-to-categories mapping
+    // Phase 2: Get local active add-ons (SQLite id IS the UUID)
+    const addOns = db.prepare(`
+      SELECT id as uuid, name, description, price
+      FROM addons
+      WHERE isActive = 1
+      ORDER BY sortOrder ASC
+    `).all() as Array<{
+      uuid: string;
+      name: string;
+      description: string | null;
+      price: string;
+    }>;
+
+    // Format local hex IDs to UUID format for PostgreSQL
+    const formattedAddOns = addOns.map(addon => ({
+      ...addon,
+      uuid: formatHexAsUuid(addon.uuid)
+    }));
+
+    // Get addon category assignments with category UUIDs
+    const addonIds = addOns.map(a => a.uuid);  // Use original hex IDs for SQL query
+    if (addonIds.length === 0) {
+      logInfo('No active add-ons to sync');
+      return 0;
+    }
+
+    const placeholders = addonIds.map(() => '?').join(',');
+    const addonAssignments = db.prepare(`
+      SELECT
+        a.id as addonUuid,
+        aca.categoryId as category_uuid
+      FROM addons a
+      INNER JOIN category_addon_groups aca ON a.addonGroupId = aca.addonGroupId
+      WHERE a.id IN (${placeholders})
+        AND aca.isActive = 1
+    `).all(...addonIds) as Array<{
+      addonUuid: string;
+      category_uuid: string;
+    }>;
+
+    // Format assignment UUIDs and build addon-to-categories mapping
+    const formattedAssignments = addonAssignments.map(a => ({
+      addonUuid: formatHexAsUuid(a.addonUuid),
+      category_uuid: formatHexAsUuid(a.category_uuid)
+    }));
+
     const addonCategoryMap = new Map<string, number[]>();
-    for (const assignment of addonAssignments) {
-      const supabaseCategoryId = categoryMap.get(assignment.category.name);
+    for (const assignment of formattedAssignments) {
+      const supabaseCategoryId = categoryMap.get(assignment.category_uuid);
       if (supabaseCategoryId) {
-        if (!addonCategoryMap.has(assignment.addonId)) {
-          addonCategoryMap.set(assignment.addonId, []);
+        if (!addonCategoryMap.has(assignment.addonUuid)) {
+          addonCategoryMap.set(assignment.addonUuid, []);
         }
-        addonCategoryMap.get(assignment.addonId)!.push(supabaseCategoryId);
+        addonCategoryMap.get(assignment.addonUuid)!.push(supabaseCategoryId);
+      } else {
+        logInfo(`⚠️ Addon assignment category UUID ${assignment.category_uuid} not in Supabase (addonId: ${assignment.addonUuid})`);
       }
     }
 
-    // Transform to Supabase format
-    // Each addon can have multiple category assignments = multiple records
-    const supabaseAddOns: any[] = [];
-    for (const addon of addOns) {
-      const categoryIds = addonCategoryMap.get(addon.id) || [null];
+    // Phase 3: Create Supabase records (one per addon-category pair)
+    // Each has addon UUID + category_id for composite uniqueness
+    const toUpsert: any[] = [];
+    const activeCompositeKeys = new Set<string>();
+
+    for (const addon of formattedAddOns) {
+      const categoryIds = addonCategoryMap.get(addon.uuid) || [null];
       for (const categoryId of categoryIds) {
-        supabaseAddOns.push({
-          description: addon.name || addon.description || '', // Use name as description
+        const compositeKey = `${addon.uuid}|${categoryId || 'null'}`;
+        activeCompositeKeys.add(compositeKey);
+
+        toUpsert.push({
+          addon_uuid: addon.uuid,  // Store addon UUID for matching (now in UUID format)
+          description: addon.name || addon.description || '',
           price: addon.price?.toString() || '0',
           category_id: categoryId,
+          deleted_at: null
         });
       }
     }
 
-    // Get all existing addon descriptions from Supabase
-    const { data: existingAddOns } = await this.supabase
+    // Phase 4: Get Supabase snapshot
+    const { data: existingAddOns, error: selectError } = await this.supabase
       .from('add_on')
-      .select('description');
+      .select('addon_uuid, category_id, id');
 
-    const existingDescriptions = new Set(
-      existingAddOns?.map((a: any) => a.description) || []
-    );
-    const activeDescriptions = new Set(supabaseAddOns.map(a => a.description));
+    if (selectError) throw selectError;
 
-    // Delete add-ons that are no longer active
-    const descriptionsToDelete = Array.from(existingDescriptions).filter(
-      desc => !activeDescriptions.has(desc)
-    );
-    if (descriptionsToDelete.length > 0) {
-      await this.supabase.from('add_on').delete().in('description', descriptionsToDelete);
-      logInfo(`Removed ${descriptionsToDelete.length} inactive add-ons from Supabase`);
+    // Find records to soft delete (exist in Supabase but not in local active)
+    const toMarkDeleted: any[] = [];
+    for (const existing of existingAddOns || []) {
+      if (existing.deleted_at) continue;  // Already soft-deleted
+
+      const compositeKey = `${existing.addon_uuid}|${existing.category_id || 'null'}`;
+      if (!activeCompositeKeys.has(compositeKey)) {
+        toMarkDeleted.push({
+          addon_uuid: existing.addon_uuid,
+          category_id: existing.category_id,
+          deleted_at: new Date().toISOString()
+        });
+      }
     }
 
-    // Upsert active add-ons (description as unique key)
-    if (supabaseAddOns.length > 0) {
-      const { error } = await this.supabase
+    // Phase 5: Execute batch operations
+    let syncedCount = 0;
+
+    if (toUpsert.length > 0) {
+      // Note: onConflict would need composite key support
+      // For now, use addon_uuid (may need schema adjustment)
+      const { data, error } = await this.supabase
         .from('add_on')
-        .upsert(supabaseAddOns, { onConflict: 'description' });
+        .upsert(toUpsert, { onConflict: 'addon_uuid,category_id' });
 
       if (error) throw error;
+      syncedCount = toUpsert.length;
+      logInfo(`✅ Upserted ${toUpsert.length} add-on assignments`);
     }
 
-    logInfo(`Synced ${supabaseAddOns.length} active add-on assignments`);
-    return supabaseAddOns.length;
+    if (toMarkDeleted.length > 0) {
+      const { error } = await this.supabase
+        .from('add_on')
+        .upsert(toMarkDeleted, { onConflict: 'addon_uuid,category_id' });
+
+      if (error) throw error;
+      logInfo(`🗑️ Soft deleted ${toMarkDeleted.length} add-on assignments`);
+    }
+
+    logInfo(`Synced ${syncedCount} active add-on assignments (${toMarkDeleted.length} soft deleted)`);
+    return syncedCount;
   }
 
   /**
@@ -459,18 +758,19 @@ export class SupabaseSyncService {
 
       if (!category || !category.isActive) {
         // Category deleted or inactive - remove from Supabase
-        // Also remove all items in this category
-        await this.supabase.from('item').delete().eq('category_id', categoryId);
-        await this.supabase.from('category').delete().eq('id', categoryId);
-        logInfo(`Removed category ${categoryId} from Supabase`);
+        if (category && category.name) {
+          // Delete category by name (Supabase should handle cascading deletes or orphaned items)
+          await this.supabase.from('category').delete().eq('name', category.name);
+          logInfo(`Removed category ${category.name} from Supabase`);
+        }
         return;
       }
 
       // Category is active - upsert to Supabase
+      // Using 'columns' parameter to bypass PostgREST schema validation
       const { error } = await this.supabase.from('category').upsert({
-        id: category.id,
         name: category.name,
-      });
+      }, { onConflict: 'name', columns: 'name' });
 
       if (error) throw error;
       logInfo(`Synced category: ${category.name}`);

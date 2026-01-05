@@ -4,6 +4,7 @@
  */
 
 import { IpcMainInvokeEvent, dialog } from 'electron';
+import { randomUUID } from 'crypto';
 import { BaseController } from './baseController';
 import { REPORT_CHANNELS } from '../../shared/ipc-channels';
 import type {
@@ -81,13 +82,43 @@ export class ReportController extends BaseController {
     _event: IpcMainInvokeEvent,
     dateRange: ReportDateRange
   ): Promise<IPCResponse<SalesReportData>> {
+    const requestId = randomUUID();
+    const startTime = performance.now();
+
     enhancedLogger.info(
-      `Getting sales report from ${dateRange.startDate} to ${dateRange.endDate}`,
+      `[${requestId}] Getting sales report from ${dateRange.startDate} to ${dateRange.endDate}`,
       LogCategory.BUSINESS,
       'ReportController'
     );
 
-    return await this.reportService.getSalesReport(dateRange);
+    try {
+      const result = await this.reportService.getSalesReport(dateRange);
+      const duration = (performance.now() - startTime).toFixed(2);
+
+      if (result.success) {
+        enhancedLogger.info(
+          `[${requestId}] Sales report completed successfully in ${duration}ms`,
+          LogCategory.BUSINESS,
+          'ReportController'
+        );
+      } else {
+        enhancedLogger.warn(
+          `[${requestId}] Sales report failed in ${duration}ms: ${result.error}`,
+          LogCategory.BUSINESS,
+          'ReportController'
+        );
+      }
+
+      return result;
+    } catch (error) {
+      const duration = (performance.now() - startTime).toFixed(2);
+      enhancedLogger.error(
+        `[${requestId}] Sales report error after ${duration}ms: ${error}`,
+        LogCategory.BUSINESS,
+        'ReportController'
+      );
+      throw error; // Re-throw to ensure IPC layer catches
+    }
   }
 
   /**
@@ -97,13 +128,43 @@ export class ReportController extends BaseController {
     _event: IpcMainInvokeEvent,
     dateRange: ReportDateRange
   ): Promise<IPCResponse<InventoryReportData>> {
+    const requestId = randomUUID();
+    const startTime = performance.now();
+
     enhancedLogger.info(
-      `Getting inventory report from ${dateRange.startDate} to ${dateRange.endDate}`,
+      `[${requestId}] Getting inventory report from ${dateRange.startDate} to ${dateRange.endDate}`,
       LogCategory.BUSINESS,
       'ReportController'
     );
 
-    return await this.reportService.getInventoryReport(dateRange);
+    try {
+      const result = await this.reportService.getInventoryReport(dateRange);
+      const duration = (performance.now() - startTime).toFixed(2);
+
+      if (result.success) {
+        enhancedLogger.info(
+          `[${requestId}] Inventory report completed successfully in ${duration}ms`,
+          LogCategory.BUSINESS,
+          'ReportController'
+        );
+      } else {
+        enhancedLogger.warn(
+          `[${requestId}] Inventory report failed in ${duration}ms: ${result.error}`,
+          LogCategory.BUSINESS,
+          'ReportController'
+        );
+      }
+
+      return result;
+    } catch (error) {
+      const duration = (performance.now() - startTime).toFixed(2);
+      enhancedLogger.error(
+        `[${requestId}] Inventory report error after ${duration}ms: ${error}`,
+        LogCategory.BUSINESS,
+        'ReportController'
+      );
+      throw error; // Re-throw to ensure IPC layer catches
+    }
   }
 
   /**
@@ -253,13 +314,43 @@ export class ReportController extends BaseController {
     _event: IpcMainInvokeEvent,
     dateRange: ReportDateRange
   ): Promise<IPCResponse<ProfitReportData>> {
+    const requestId = randomUUID();
+    const startTime = performance.now();
+
     enhancedLogger.info(
-      `Getting profit report from ${dateRange.startDate} to ${dateRange.endDate}`,
+      `[${requestId}] Getting profit report from ${dateRange.startDate} to ${dateRange.endDate}`,
       LogCategory.BUSINESS,
       'ReportController'
     );
 
-    return await this.reportService.getProfitReport(dateRange);
+    try {
+      const result = await this.reportService.getProfitReport(dateRange);
+      const duration = (performance.now() - startTime).toFixed(2);
+
+      if (result.success) {
+        enhancedLogger.info(
+          `[${requestId}] Profit report completed successfully in ${duration}ms`,
+          LogCategory.BUSINESS,
+          'ReportController'
+        );
+      } else {
+        enhancedLogger.warn(
+          `[${requestId}] Profit report failed in ${duration}ms: ${result.error}`,
+          LogCategory.BUSINESS,
+          'ReportController'
+        );
+      }
+
+      return result;
+    } catch (error) {
+      const duration = (performance.now() - startTime).toFixed(2);
+      enhancedLogger.error(
+        `[${requestId}] Profit report error after ${duration}ms: ${error}`,
+        LogCategory.BUSINESS,
+        'ReportController'
+      );
+      throw error; // Re-throw to ensure IPC layer catches
+    }
   }
 
   /**

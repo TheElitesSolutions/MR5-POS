@@ -16,7 +16,7 @@ function ReportsPage() {
 
   return (
     <POSLayout>
-      <div className='h-full space-y-4 overflow-y-auto p-6'>
+      <div className='h-full space-y-3 lg:space-y-4 overflow-y-auto p-4 lg:p-6'>
         {/* Header Section */}
         <div className='flex flex-col space-y-3'>
           <div>

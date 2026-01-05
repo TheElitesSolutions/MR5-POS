@@ -1,0 +1,147 @@
+import { useAuthStore, useUserPermissions } from '@/stores/authStore';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState, useRef } from 'react';
+/**
+ * Hook to handle authentication and permission checks without race conditions
+ * Prevents multiple simultaneous auth checks and provides stable loading states
+ */
+export const useAuthGuard = (options = {}) => {
+    const { requiredRoles = [], redirectTo = '/login', requireAuth = true, } = options;
+    const router = useRouter();
+    const { isAuthenticated, user, isLoading: authLoading, _hasHydrated // Track hydration status
+     } = useAuthStore();
+    const permissions = useUserPermissions();
+    // Component-level states to prevent race conditions
+    const [isInitializing, setIsInitializing] = useState(true);
+    const [authCheckComplete, setAuthCheckComplete] = useState(false);
+    const [permissionCheckComplete, setPermissionCheckComplete] = useState(false);
+    const [hasAccess, setHasAccess] = useState(false);
+    const [error, setError] = useState(null);
+    // Ref to prevent multiple simultaneous checks
+    const checkInProgress = useRef(false);
+    const lastCheckTime = useRef(0);
+    const CHECK_DEBOUNCE_MS = 100; // Debounce rapid auth checks
+    // Stable permission check function
+    const checkPermissions = useCallback(() => {
+        // Only log significant permission checks
+        if (process.env.NODE_ENV === 'development' && requiredRoles.length > 0) {
+            console.log('AuthGuard: Checking permissions', {
+                isAuthenticated,
+                user: user?.username,
+                role: user?.role,
+                requiredRoles,
+            });
+        }
+        if (!isAuthenticated || !user) {
+            return { hasAccess: false, shouldRedirect: requireAuth };
+        }
+        // If no specific roles required, just need to be authenticated
+        if (requiredRoles.length === 0) {
+            return { hasAccess: true, shouldRedirect: false };
+        }
+        // Check if user has any of the required roles
+        const hasRequiredRole = requiredRoles.some(role => permissions.hasRole(role));
+        return {
+            hasAccess: hasRequiredRole,
+            shouldRedirect: !hasRequiredRole && isAuthenticated && user
+        };
+    }, [isAuthenticated, user, requiredRoles, permissions, requireAuth]);
+    // Sequential auth and permission check
+    const performAuthCheck = useCallback(async () => {
+        // CRITICAL: Wait for store hydration first
+        if (!_hasHydrated) {
+            console.log('AuthGuard: Waiting for store hydration...');
+            return;
+        }
+        // Debounce rapid auth checks
+        const now = Date.now();
+        if (now - lastCheckTime.current < CHECK_DEBOUNCE_MS) {
+            return;
+        }
+        if (checkInProgress.current || authLoading || permissions.isLoading) {
+            return;
+        }
+        lastCheckTime.current = now;
+        checkInProgress.current = true;
+        setIsInitializing(true);
+        setError(null);
+        try {
+            // Reduce logging noise
+            if (process.env.NODE_ENV === 'development' && requiredRoles.length > 0) {
+                console.log('AuthGuard: Starting auth check (store hydrated)');
+            }
+            // Wait for auth loading to complete
+            if (authLoading) {
+                console.log('AuthGuard: Waiting for auth loading');
+                return;
+            }
+            setAuthCheckComplete(true);
+            // Wait for permissions loading to complete
+            if (permissions.isLoading) {
+                console.log('AuthGuard: Waiting for permissions loading');
+                return;
+            }
+            // Perform permission check
+            const permissionResult = checkPermissions();
+            setPermissionCheckComplete(true);
+            setHasAccess(permissionResult.hasAccess);
+            // Handle redirects
+            if (permissionResult.shouldRedirect) {
+                console.log('AuthGuard: Redirecting due to auth/permission check', {
+                    redirectTo,
+                    reason: !isAuthenticated ? 'not_authenticated' : 'insufficient_permissions'
+                });
+                router.push(redirectTo);
+                return;
+            }
+            // Only log meaningful completions
+            if (process.env.NODE_ENV === 'development' && requiredRoles.length > 0) {
+                console.log('AuthGuard: Auth check completed', {
+                    hasAccess: permissionResult.hasAccess,
+                    isAuthenticated,
+                    user: user?.username,
+                });
+            }
+        }
+        catch (error) {
+            console.error('AuthGuard: Auth check error:', error);
+            setError(error instanceof Error ? error.message : 'Authentication check failed');
+        }
+        finally {
+            setIsInitializing(false);
+            checkInProgress.current = false;
+        }
+    }, [
+        _hasHydrated, // Add hydration dependency
+        authLoading,
+        permissions.isLoading,
+        checkPermissions,
+        isAuthenticated,
+        user,
+        router,
+        redirectTo
+    ]);
+    // Run auth check when dependencies change
+    useEffect(() => {
+        performAuthCheck();
+    }, [performAuthCheck]);
+    // Reset state when user changes or hydration status changes
+    useEffect(() => {
+        if (!user || !_hasHydrated) {
+            setAuthCheckComplete(false);
+            setPermissionCheckComplete(false);
+            setHasAccess(false);
+            checkInProgress.current = false;
+        }
+    }, [user, _hasHydrated]);
+    // Include hydration status in loading state
+    const isLoading = !_hasHydrated || authLoading || permissions.isLoading || isInitializing || !authCheckComplete || !permissionCheckComplete;
+    return {
+        isLoading,
+        isAuthenticated: isAuthenticated && !!user,
+        hasAccess,
+        user,
+        permissions,
+        error,
+    };
+};

@@ -104,6 +104,7 @@ const StockItemForm = ({ itemId, onClose }: StockItemFormProps) => {
       costPerUnit: 0,
       category: '',
     },
+    mode: 'onBlur', // Validate when user leaves field, not on every keystroke
   });
 
   // Show error messages from service layer if any
@@ -391,12 +392,18 @@ const StockItemForm = ({ itemId, onClose }: StockItemFormProps) => {
                   <Input
                     type='text'
                     placeholder='0'
-                    value={field.value?.toString() || '0'}
+                    value={field.value?.toString() || ''}
                     onChange={e => {
-                      const value = e.target.value.replace(/[^0-9.]/g, '');
-                      field.onChange(parseFloat(value) || 0);
+                      // Let user type freely
+                      field.onChange(e.target.value);
                     }}
-                    onBlur={field.onBlur}
+                    onBlur={e => {
+                      // Sanitize and parse when user leaves field
+                      const value = e.target.value.replace(/[^0-9.]/g, '');
+                      const numValue = parseFloat(value) || 0;
+                      field.onChange(numValue);
+                      field.onBlur();
+                    }}
                     name={field.name}
                     ref={field.ref}
                   />
@@ -417,12 +424,18 @@ const StockItemForm = ({ itemId, onClose }: StockItemFormProps) => {
                   <Input
                     type='text'
                     placeholder='0'
-                    value={field.value?.toString() || '0'}
+                    value={field.value?.toString() || ''}
                     onChange={e => {
-                      const value = e.target.value.replace(/[^0-9.]/g, '');
-                      field.onChange(parseFloat(value) || 0);
+                      // Let user type freely
+                      field.onChange(e.target.value);
                     }}
-                    onBlur={field.onBlur}
+                    onBlur={e => {
+                      // Sanitize and parse when user leaves field
+                      const value = e.target.value.replace(/[^0-9.]/g, '');
+                      const numValue = parseFloat(value) || 0;
+                      field.onChange(numValue);
+                      field.onBlur();
+                    }}
                     name={field.name}
                     ref={field.ref}
                   />
@@ -445,12 +458,18 @@ const StockItemForm = ({ itemId, onClose }: StockItemFormProps) => {
                 <Input
                   type='text'
                   placeholder='0.00'
-                  value={field.value?.toString() || '0'}
+                  value={field.value?.toString() || ''}
                   onChange={e => {
-                    const value = e.target.value.replace(/[^0-9.]/g, '');
-                    field.onChange(parseFloat(value) || 0);
+                    // Let user type freely
+                    field.onChange(e.target.value);
                   }}
-                  onBlur={field.onBlur}
+                  onBlur={e => {
+                    // Sanitize and parse when user leaves field
+                    const value = e.target.value.replace(/[^0-9.]/g, '');
+                    const numValue = parseFloat(value) || 0;
+                    field.onChange(numValue);
+                    field.onBlur();
+                  }}
                   name={field.name}
                   ref={field.ref}
                 />

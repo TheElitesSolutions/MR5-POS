@@ -115,24 +115,39 @@ export const useReportsStore = create<ReportsState>((set, get) => ({
       const currentDateRange = dateRange || get().dateRange;
       const reportDateRange = toReportDateRange(currentDateRange);
 
+      console.log('📊 Fetching sales report', { dateRange: reportDateRange });
+
       // Call IPC API to get sales report
       const response = await ipcAPI.report.getSalesReport(reportDateRange);
 
+      console.log('📊 Sales report response received', {
+        success: response.success,
+        hasData: !!response.data,
+        error: response.error,
+      });
+
       if (!response.success) {
-        throw new Error(response.error || 'Failed to fetch sales report');
+        const errorMsg = response.error || 'Failed to fetch sales report';
+        console.error('❌ Sales report failed:', errorMsg);
+        throw new Error(errorMsg);
       }
 
       set({
         salesReport: response.data || null,
         isLoading: false,
       });
+
+      console.log('✅ Sales report loaded successfully');
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to fetch sales report';
+
+      console.error('❌ Sales report error caught in store:', errorMessage, error);
+
       set({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Failed to fetch sales report',
+        error: errorMessage,
         isLoading: false,
+        salesReport: null, // Clear stale data on error
       });
     }
   },
@@ -145,24 +160,39 @@ export const useReportsStore = create<ReportsState>((set, get) => ({
       const currentDateRange = dateRange || get().dateRange;
       const reportDateRange = toReportDateRange(currentDateRange);
 
+      console.log('📦 Fetching inventory report', { dateRange: reportDateRange });
+
       // Call IPC API to get inventory report
       const response = await ipcAPI.report.getInventoryReport(reportDateRange);
 
+      console.log('📦 Inventory report response received', {
+        success: response.success,
+        hasData: !!response.data,
+        error: response.error,
+      });
+
       if (!response.success) {
-        throw new Error(response.error || 'Failed to fetch inventory report');
+        const errorMsg = response.error || 'Failed to fetch inventory report';
+        console.error('❌ Inventory report failed:', errorMsg);
+        throw new Error(errorMsg);
       }
 
       set({
         inventoryReport: response.data || null,
         isLoading: false,
       });
+
+      console.log('✅ Inventory report loaded successfully');
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to fetch inventory report';
+
+      console.error('❌ Inventory report error caught in store:', errorMessage, error);
+
       set({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Failed to fetch inventory report',
+        error: errorMessage,
         isLoading: false,
+        inventoryReport: null, // Clear stale data on error
       });
     }
   },
@@ -215,24 +245,39 @@ export const useReportsStore = create<ReportsState>((set, get) => ({
       const currentDateRange = dateRange || get().dateRange;
       const reportDateRange = toReportDateRange(currentDateRange);
 
+      console.log('💰 Fetching profit report', { dateRange: reportDateRange });
+
       // Call IPC API to get profit report
       const response = await ipcAPI.report.getProfitReport(reportDateRange);
 
+      console.log('💰 Profit report response received', {
+        success: response.success,
+        hasData: !!response.data,
+        error: response.error,
+      });
+
       if (!response.success) {
-        throw new Error(response.error || 'Failed to fetch profit report');
+        const errorMsg = response.error || 'Failed to fetch profit report';
+        console.error('❌ Profit report failed:', errorMsg);
+        throw new Error(errorMsg);
       }
 
       set({
         profitReport: response.data || null,
         isLoading: false,
       });
+
+      console.log('✅ Profit report loaded successfully');
     } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : 'Failed to fetch profit report';
+
+      console.error('❌ Profit report error caught in store:', errorMessage, error);
+
       set({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Failed to fetch profit report',
+        error: errorMessage,
         isLoading: false,
+        profitReport: null, // Clear stale data on error
       });
     }
   },

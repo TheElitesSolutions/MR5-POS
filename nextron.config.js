@@ -6,6 +6,9 @@
 const TerserPlugin = require('terser-webpack-plugin');
 
 module.exports = {
+  // Fix: Explicitly set renderer port to match Next.js dev server
+  rendererPort: 8888,
+
   webpack: (defaultConfig, env) => {
     // Only modify production builds
     if (env === 'production') {

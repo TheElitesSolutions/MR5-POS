@@ -10,19 +10,20 @@ import {
   TrendingDown,
   Download,
   Printer,
+  AlertCircle,
 } from 'lucide-react';
 import { useReportsStore } from '@/stores/reportsStore';
 import { useToast } from '@/hooks/use-toast';
 
 const InventoryReports = () => {
-  const { inventoryReport, fetchInventoryReport, exportInventoryReport, dateRange, isLoading } =
+  const { inventoryReport, fetchInventoryReport, exportInventoryReport, dateRange, isLoading, error } =
     useReportsStore();
   const [isExporting, setIsExporting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchInventoryReport(dateRange);
-  }, [dateRange]);
+  }, [dateRange, fetchInventoryReport]);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -51,6 +52,21 @@ const InventoryReports = () => {
     return (
       <div className='flex h-96 items-center justify-center'>
         <div className='h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600'></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className='flex h-96 items-center justify-center'>
+        <div className='text-center'>
+          <AlertCircle className='h-12 w-12 text-red-500 mx-auto mb-4' />
+          <p className='text-red-600 dark:text-red-400 mb-2'>Failed to load inventory report</p>
+          <p className='text-sm text-gray-600 dark:text-gray-400 mb-4'>{error}</p>
+          <Button onClick={() => fetchInventoryReport(dateRange)} variant='outline'>
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
@@ -89,7 +105,7 @@ const InventoryReports = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+      <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4'>
         <Card>
           <CardContent className='p-4'>
             <div className='flex items-center space-x-3'>
@@ -97,7 +113,7 @@ const InventoryReports = () => {
                 <Package className='h-5 w-5 text-blue-600' />
               </div>
               <div>
-                <div className='text-2xl font-bold text-gray-900 dark:text-white'>
+                <div className='text-xl lg:text-2xl font-bold text-gray-900 dark:text-white'>
                   {inventoryReport.totalItems}
                 </div>
                 <div className='text-sm text-gray-600 dark:text-gray-400'>
@@ -115,7 +131,7 @@ const InventoryReports = () => {
                 <DollarSign className='h-5 w-5 text-green-600' />
               </div>
               <div>
-                <div className='text-2xl font-bold text-gray-900 dark:text-white'>
+                <div className='text-xl lg:text-2xl font-bold text-gray-900 dark:text-white'>
                   {formatCurrency(inventoryReport.totalInventoryValue)}
                 </div>
                 <div className='text-sm text-gray-600 dark:text-gray-400'>
@@ -133,7 +149,7 @@ const InventoryReports = () => {
                 <AlertTriangle className='h-5 w-5 text-orange-600' />
               </div>
               <div>
-                <div className='text-2xl font-bold text-gray-900 dark:text-white'>
+                <div className='text-xl lg:text-2xl font-bold text-gray-900 dark:text-white'>
                   {inventoryReport.lowStockCount}
                 </div>
                 <div className='text-sm text-gray-600 dark:text-gray-400'>
@@ -151,7 +167,7 @@ const InventoryReports = () => {
                 <TrendingDown className='h-5 w-5 text-red-600' />
               </div>
               <div>
-                <div className='text-2xl font-bold text-gray-900 dark:text-white'>
+                <div className='text-xl lg:text-2xl font-bold text-gray-900 dark:text-white'>
                   {inventoryReport.outOfStockCount}
                 </div>
                 <div className='text-sm text-gray-600 dark:text-gray-400'>
@@ -178,11 +194,11 @@ const InventoryReports = () => {
                 <thead>
                   <tr className='border-b bg-gray-50 dark:bg-gray-800'>
                     <th className='p-3 text-left text-sm font-medium'>Item Name</th>
-                    <th className='p-3 text-left text-sm font-medium'>Category</th>
+                    <th className='p-3 text-left text-sm font-medium hidden lg:table-cell'>Category</th>
                     <th className='p-3 text-right text-sm font-medium'>Current Stock</th>
-                    <th className='p-3 text-right text-sm font-medium'>Min Stock</th>
+                    <th className='p-3 text-right text-sm font-medium hidden lg:table-cell'>Min Stock</th>
                     <th className='p-3 text-right text-sm font-medium'>Shortage</th>
-                    <th className='p-3 text-left text-sm font-medium'>Unit</th>
+                    <th className='p-3 text-left text-sm font-medium hidden xl:table-cell'>Unit</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -192,7 +208,7 @@ const InventoryReports = () => {
                       className='border-b hover:bg-gray-50 dark:hover:bg-gray-800'
                     >
                       <td className='p-3 font-medium'>{item.name}</td>
-                      <td className='p-3 text-gray-600 dark:text-gray-400'>
+                      <td className='p-3 text-gray-600 dark:text-gray-400 hidden lg:table-cell'>
                         {item.category}
                       </td>
                       <td className='p-3 text-right'>
@@ -206,13 +222,13 @@ const InventoryReports = () => {
                           {item.currentStock}
                         </span>
                       </td>
-                      <td className='p-3 text-right'>{item.minimumStock}</td>
+                      <td className='p-3 text-right hidden lg:table-cell'>{item.minimumStock}</td>
                       <td className='p-3 text-right'>
                         <span className='font-medium text-red-600'>
                           {item.shortageAmount}
                         </span>
                       </td>
-                      <td className='p-3'>{item.unit}</td>
+                      <td className='p-3 hidden xl:table-cell'>{item.unit}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -236,12 +252,12 @@ const InventoryReports = () => {
               <thead>
                 <tr className='border-b bg-gray-50 dark:bg-gray-800'>
                   <th className='p-3 text-left text-sm font-medium'>Item Name</th>
-                  <th className='p-3 text-left text-sm font-medium'>Category</th>
+                  <th className='p-3 text-left text-sm font-medium hidden lg:table-cell'>Category</th>
                   <th className='p-3 text-right text-sm font-medium'>Current Stock</th>
-                  <th className='p-3 text-right text-sm font-medium'>Min Stock</th>
-                  <th className='p-3 text-left text-sm font-medium'>Unit</th>
-                  <th className='p-3 text-right text-sm font-medium'>Cost/Unit</th>
-                  <th className='p-3 text-right text-sm font-medium'>Total Value</th>
+                  <th className='p-3 text-right text-sm font-medium hidden xl:table-cell'>Min Stock</th>
+                  <th className='p-3 text-left text-sm font-medium hidden xl:table-cell'>Unit</th>
+                  <th className='p-3 text-right text-sm font-medium hidden xl:table-cell'>Cost/Unit</th>
+                  <th className='p-3 text-right text-sm font-medium hidden lg:table-cell'>Total Value</th>
                   <th className='p-3 text-center text-sm font-medium'>Status</th>
                 </tr>
               </thead>
@@ -252,14 +268,14 @@ const InventoryReports = () => {
                     className='border-b hover:bg-gray-50 dark:hover:bg-gray-800'
                   >
                     <td className='p-3 font-medium'>{item.name}</td>
-                    <td className='p-3 text-gray-600 dark:text-gray-400'>
+                    <td className='p-3 text-gray-600 dark:text-gray-400 hidden lg:table-cell'>
                       {item.category}
                     </td>
                     <td className='p-3 text-right'>{item.currentStock}</td>
-                    <td className='p-3 text-right'>{item.minimumStock}</td>
-                    <td className='p-3'>{item.unit}</td>
-                    <td className='p-3 text-right'>{formatCurrency(item.costPerUnit)}</td>
-                    <td className='p-3 text-right font-medium'>
+                    <td className='p-3 text-right hidden xl:table-cell'>{item.minimumStock}</td>
+                    <td className='p-3 hidden xl:table-cell'>{item.unit}</td>
+                    <td className='p-3 text-right hidden xl:table-cell'>{formatCurrency(item.costPerUnit)}</td>
+                    <td className='p-3 text-right font-medium hidden lg:table-cell'>
                       {formatCurrency(item.totalValue)}
                     </td>
                     <td className='p-3 text-center'>
@@ -302,10 +318,10 @@ const InventoryReports = () => {
                 <thead>
                   <tr className='border-b bg-gray-50 dark:bg-gray-800'>
                     <th className='p-3 text-left text-sm font-medium'>Item Name</th>
-                    <th className='p-3 text-left text-sm font-medium'>Category</th>
+                    <th className='p-3 text-left text-sm font-medium hidden lg:table-cell'>Category</th>
                     <th className='p-3 text-right text-sm font-medium'>Total Used</th>
                     <th className='p-3 text-right text-sm font-medium'>Avg Daily</th>
-                    <th className='p-3 text-left text-sm font-medium'>Unit</th>
+                    <th className='p-3 text-left text-sm font-medium hidden xl:table-cell'>Unit</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -315,12 +331,12 @@ const InventoryReports = () => {
                       className='border-b hover:bg-gray-50 dark:hover:bg-gray-800'
                     >
                       <td className='p-3 font-medium'>{item.itemName}</td>
-                      <td className='p-3 text-gray-600 dark:text-gray-400'>
+                      <td className='p-3 text-gray-600 dark:text-gray-400 hidden lg:table-cell'>
                         {item.category}
                       </td>
                       <td className='p-3 text-right'>{item.totalUsed.toFixed(2)}</td>
                       <td className='p-3 text-right'>{item.averageDaily.toFixed(2)}</td>
-                      <td className='p-3'>{item.unit}</td>
+                      <td className='p-3 hidden xl:table-cell'>{item.unit}</td>
                     </tr>
                   ))}
                 </tbody>

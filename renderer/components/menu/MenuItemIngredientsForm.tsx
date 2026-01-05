@@ -57,6 +57,7 @@ export const MenuItemIngredientsForm: React.FC<
     defaultValues: {
       ingredients: initialIngredients.length > 0 ? initialIngredients : [],
     },
+    mode: 'onBlur', // Validate when user leaves field, not on every keystroke
   });
 
   const { fields, append, remove } = useFieldArray({
@@ -100,7 +101,7 @@ export const MenuItemIngredientsForm: React.FC<
     };
 
     loadIngredients();
-  }, [menuItemId, form, toast]);
+  }, [menuItemId, toast]); // Removed 'form' - it's stable and doesn't need to trigger reloads
 
   const addIngredient = () => {
     if (stockItems.length === 0) {
@@ -261,12 +262,16 @@ export const MenuItemIngredientsForm: React.FC<
                             placeholder='0'
                             className='w-24'
                             {...field}
+                            value={field.value?.toString() || ''}
                             onChange={e => {
-                              const value = e.target.value.replace(
-                                /[^0-9.]/g,
-                                ''
-                              );
-                              field.onChange(parseFloat(value) || 0);
+                              // Let user type freely
+                              field.onChange(e.target.value);
+                            }}
+                            onBlur={e => {
+                              // Sanitize and parse when user leaves field
+                              const value = e.target.value.replace(/[^0-9.]/g, '');
+                              const numValue = parseFloat(value) || 0;
+                              field.onChange(numValue);
                             }}
                           />
                         </FormControl>

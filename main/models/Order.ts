@@ -965,6 +965,46 @@ export class OrderModel {
 
   async update(id: string, updateData: any): Promise<IPCResponse<Order>> {
     try {
+      // CRITICAL FIX: If deliveryFee is being updated, recalculate total
+      if (updateData.deliveryFee !== undefined) {
+        logger.info(
+          `🚨 [DELIVERY FEE UPDATE] Updating deliveryFee for order ${id}, will recalculate total`
+        );
+
+        // Get current order to calculate new total
+        const currentOrder = await this.prisma.order.findUnique({
+          where: { id },
+          include: {
+            items: {
+              select: { totalPrice: true }
+            }
+          }
+        });
+
+        if (!currentOrder) {
+          throw new AppError(`Order ${id} not found`, true);
+        }
+
+        // Calculate subtotal from items
+        let subtotal = new DecimalJS(0);
+        for (const item of currentOrder.items) {
+          subtotal = addDecimals(subtotal, item.totalPrice);
+        }
+
+        // Calculate new total with updated delivery fee
+        const deliveryFee = new DecimalJS(updateData.deliveryFee || 0);
+        const total = subtotal.add(deliveryFee);
+
+        // Add calculated fields to updateData
+        updateData.subtotal = subtotal.toNumber();
+        updateData.total = total.toNumber();
+
+        logger.info(
+          `✅ [DELIVERY FEE UPDATE] Recalculated total for order ${id}: ` +
+          `subtotal=${subtotal}, deliveryFee=${deliveryFee}, total=${total}`
+        );
+      }
+
       const order = await this.prisma.order.update({
         where: { id },
         data: updateData,
@@ -1729,14 +1769,50 @@ export class OrderModel {
           };
         }
 
+        // CRITICAL FIX: Calculate and update totals INSIDE transaction
+        // This ensures atomicity - items and totals updated together
+        await this.calculateAndUpdateTotalsInTransaction(tx, orderId);
+
+        logger.info(
+          `✅ [TRANSACTION] Item added and totals updated atomically for order ${orderId}`
+        );
+
         return resultOrderItem;
       }, {
         maxWait: 5000, // Maximum time to wait for transaction to start (5 seconds)
         timeout: 10000, // Maximum time for transaction to complete (10 seconds)
       });
 
-      // Recalculate order totals (outside transaction is fine)
-      await this.recalculateOrderTotals(orderId);
+      // Post-transaction validation to detect any edge cases
+      try {
+        const validationOrder = await this.prisma.order.findUnique({
+          where: { id: orderId },
+          include: { items: { select: { id: true, totalPrice: true } } },
+        });
+
+        if (validationOrder) {
+          const hasItems = validationOrder.items.length > 0;
+          const totalIsZero = new DecimalJS(validationOrder.total).equals(0);
+
+          if (hasItems && totalIsZero) {
+            logger.error(
+              `🚨 CRITICAL: Order ${orderId} has ${validationOrder.items.length} items ` +
+              `but total is $0! Attempting recovery...`
+            );
+
+            // Attempt recovery using the external recalculation method
+            await this.recalculateOrderTotals(orderId);
+          } else {
+            logger.info(
+              `✅ [VALIDATION] Order ${orderId}: ${validationOrder.items.length} items, ` +
+              `Total: $${validationOrder.total} - OK`
+            );
+          }
+        }
+      } catch (validationError) {
+        logger.error(`⚠️ Validation failed for order ${orderId}: ${validationError}`);
+        // Don't throw - validation failure shouldn't block the operation
+      }
 
       return {
         success: true,
@@ -1865,11 +1941,47 @@ export class OrderModel {
           where: { id: orderItemId },
         });
 
+        // CRITICAL FIX: Calculate and update totals INSIDE transaction
+        // This ensures atomicity - item removal and total update happen together
+        await this.calculateAndUpdateTotalsInTransaction(tx, orderItem.orderId);
+
+        logger.info(
+          `✅ [TRANSACTION] Item removed and totals updated atomically for order ${orderItem.orderId}`
+        );
+
         return orderItem.orderId;
       });
 
-      // Recalculate order totals (outside transaction is fine)
-      await this.recalculateOrderTotals(result);
+      // Post-transaction validation to detect any edge cases
+      try {
+        const validationOrder = await this.prisma.order.findUnique({
+          where: { id: result },
+          include: { items: { select: { id: true, totalPrice: true } } },
+        });
+
+        if (validationOrder) {
+          const hasItems = validationOrder.items.length > 0;
+          const totalIsZero = new DecimalJS(validationOrder.total).equals(0);
+
+          if (hasItems && totalIsZero) {
+            logger.error(
+              `🚨 CRITICAL: Order ${result} has ${validationOrder.items.length} items ` +
+              `but total is $0! Attempting recovery...`
+            );
+
+            // Attempt recovery using the external recalculation method
+            await this.recalculateOrderTotals(result);
+          } else {
+            logger.info(
+              `✅ [VALIDATION] Order ${result}: ${validationOrder.items.length} items, ` +
+              `Total: $${validationOrder.total} - OK`
+            );
+          }
+        }
+      } catch (validationError) {
+        logger.error(`⚠️ Validation failed for order ${result}: ${validationError}`);
+        // Don't throw - validation failure shouldn't block the operation
+      }
 
       return {
         success: true,
@@ -2246,7 +2358,31 @@ export class OrderModel {
     }
   }
 
+  /**
+   * Recalculate order totals by querying all items and updating the order.
+   *
+   * ⚠️ WARNING: This method runs OUTSIDE a transaction and may experience
+   * SQLite WAL mode visibility delays. For item add/remove operations,
+   * use calculateAndUpdateTotalsInTransaction() instead to ensure atomicity.
+   *
+   * Use this method for:
+   * - Manual recalculation (admin tools, debugging)
+   * - Batch correction scripts (migrations)
+   * - Recovery mechanisms after validation failures
+   * - Cases where transaction context is not available
+   *
+   * @param orderId - The ID of the order to recalculate
+   */
   public async recalculateOrderTotals(orderId: string): Promise<void> {
+    // Query order to get delivery fee
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new AppError(`Order ${orderId} not found`, true);
+    }
+
     // ✅ FIX: Include addons for visibility/debugging
     // Note: item.totalPrice should already include addon prices after Fix #1
     const orderItems = await this.prisma.orderItem.findMany({
@@ -2263,18 +2399,79 @@ export class OrderModel {
       subtotal = addDecimals(subtotal, item.totalPrice);
     }
 
-    logger.info(
-      `📊 ORDER TOTAL RECALCULATION: Order ${orderId} - Subtotal: ${subtotal} (from ${orderItems.length} items)`
-    );
-
-    // No tax calculation - total equals subtotal as requested
+    // No tax calculation
     const tax = new DecimalJS(0);
-    const total = subtotal; // Total is same as subtotal, no tax added
+
+    // CRITICAL FIX: Include delivery fee in total calculation
+    const deliveryFee = new DecimalJS(order.deliveryFee || 0);
+    const total = subtotal.add(deliveryFee);
+
+    logger.info(
+      `📊 ORDER TOTAL RECALCULATION: Order ${orderId} - Subtotal: ${subtotal} ` +
+      `(from ${orderItems.length} items), DeliveryFee: ${deliveryFee}, Total: ${total}`
+    );
 
     await this.prisma.order.update({
       where: { id: orderId },
       data: { subtotal, tax, total },
     });
+  }
+
+  /**
+   * Calculate and update order totals within an existing transaction.
+   * This ensures atomicity - items and totals are updated together, preventing
+   * race conditions from SQLite WAL mode visibility delays.
+   *
+   * ⚠️ CRITICAL: This method MUST be called from within a Prisma transaction.
+   *
+   * @param tx - Prisma transaction client
+   * @param orderId - Order ID to recalculate
+   * @returns Calculated total for verification
+   */
+  private async calculateAndUpdateTotalsInTransaction(
+    tx: any,
+    orderId: string
+  ): Promise<Decimal> {
+    // Query order to get delivery fee (WITHIN transaction)
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+    });
+
+    if (!order) {
+      throw new AppError(`Order ${orderId} not found in transaction`, true);
+    }
+
+    // Query items WITHIN the transaction (sees uncommitted changes)
+    const orderItems = await tx.orderItem.findMany({
+      where: { orderId },
+      include: { addons: true }, // Include for debugging/verification
+    });
+
+    // Calculate subtotal using Decimal arithmetic
+    let subtotal = new DecimalJS(0);
+    for (const item of orderItems) {
+      subtotal = addDecimals(subtotal, item.totalPrice);
+    }
+
+    // No tax calculation
+    const tax = new DecimalJS(0);
+
+    // CRITICAL FIX: Include delivery fee in total calculation
+    const deliveryFee = new DecimalJS(order.deliveryFee || 0);
+    const total = subtotal.add(deliveryFee);
+
+    logger.info(
+      `📊 [TRANSACTION] Order ${orderId}: ${orderItems.length} items, ` +
+      `Subtotal: ${subtotal}, DeliveryFee: ${deliveryFee}, Total: ${total}`
+    );
+
+    // Update order totals WITHIN the transaction
+    await tx.order.update({
+      where: { id: orderId },
+      data: { subtotal, tax, total },
+    });
+
+    return total;
   }
 
   async getTodaysOrders(): Promise<IPCResponse<Order[]>> {

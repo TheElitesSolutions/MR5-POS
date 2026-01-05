@@ -1,0 +1,4 @@
+/**
+ * Backup type definitions
+ */
+export {};

@@ -202,6 +202,10 @@ export const UpdateMenuItemSchema = z.object({
       if (typeof val === 'number') return val !== 0;
       return val;
     }).pipe(z.boolean()).optional(),
+    isVisibleOnWebsite: z.union([z.boolean(), z.number()]).transform(val => {
+      if (typeof val === 'number') return val !== 0;
+      return val;
+    }).pipe(z.boolean()).optional(),
     imageUrl: z.string().url().optional(),
     preparationTime: nonNegativeNumberSchema.int().optional(),
     ingredients: z.array(IngredientSchema).optional(), // ✅ ADDED

@@ -521,6 +521,11 @@ export class AddonInvoiceGenerator {
       { label: 'Items Total:', value: `$${subtotal.toFixed(2)}` },
     ];
 
+    // Add delivery fee if present
+    if (deliveryFee > 0) {
+      totalsData.push({ label: 'Delivery Fee:', value: `$${deliveryFee.toFixed(2)}` });
+    }
+
     if (tax > 0) {
       totalsData.push({ label: 'Tax:', value: `$${tax.toFixed(2)}` });
     }

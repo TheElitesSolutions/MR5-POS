@@ -17,6 +17,11 @@ import { orderLogger } from '@/utils/logger';
 import { getIngredientNameSafe } from '@/utils/ingredientUtils';
 import { useSimpleOrderTracking, type SimpleOrderChange } from '@/hooks/useSimpleOrderTracking';
 import { useOrderActionQueue } from '@/hooks/useOrderActionQueue';
+import {
+  areAddonsEqual,
+  scaleAddonsForQuantityChange,
+  prepareKitchenPrintData,
+} from '@/utils/orderPanelUtils';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -60,55 +65,7 @@ interface OrderPanelProps {
   onCustomizationProcessed?: () => void;  // ✅ ADD: Callback to parent
 }
 
-/**
- * Helper function to compare two addon configurations
- * Returns true if both configurations have the EXACT SAME addons with EXACT SAME quantities
- * This prevents incorrect item deduplication (e.g., burger + 2x cheese vs burger + 1x cheese are DIFFERENT items)
- */
-// ✅ CRITICAL FIX: Compare both addon IDs AND quantities to prevent incorrect item deduplication
-// Previous implementation only compared IDs, causing items with same addons but different quantities
-// to be incorrectly merged (e.g., burger + 2x cheese was merged with burger + 1x cheese)
-function areAddonsEqual(
-  existingAddons: any[],
-  selectedAddons: any[]
-): boolean {
-  // If lengths don't match, they're not equal
-  if (existingAddons.length !== selectedAddons.length) {
-    return false;
-  }
-
-  // If both are empty, they're equal
-  if (existingAddons.length === 0 && selectedAddons.length === 0) {
-    return true;
-  }
-
-  // Create quantity maps for exact comparison (ID → quantity)
-  const existingMap = new Map<string, number>();
-  existingAddons.forEach(addon => {
-    existingMap.set(addon.addonId, addon.quantity || 1);
-  });
-
-  const selectedMap = new Map<string, number>();
-  selectedAddons.forEach(addon => {
-    selectedMap.set(addon.addonId, addon.quantity || 1);
-  });
-
-  // Verify all existing addons match selected with SAME quantities
-  for (const [addonId, qty] of existingMap.entries()) {
-    if (selectedMap.get(addonId) !== qty) {
-      return false; // Different quantity or addon doesn't exist
-    }
-  }
-
-  // Verify all selected addons match existing with SAME quantities
-  for (const [addonId, qty] of selectedMap.entries()) {
-    if (existingMap.get(addonId) !== qty) {
-      return false; // Different quantity or addon doesn't exist
-    }
-  }
-
-  return true; // All addons match with exact quantities
-}
+// ✅ areAddonsEqual function now imported from @/utils/orderPanelUtils (shared with TakeoutOrderPanel)
 
 const OrderPanel = ({ pendingCustomization, onCustomizationProcessed }: OrderPanelProps) => {
   // Parse SQLite datetime as local time (not UTC)
@@ -310,29 +267,20 @@ const OrderPanel = ({ pendingCustomization, onCustomizationProcessed }: OrderPan
             addonCount: itemAddons.length,
             quantityChange,
           });
-          try {
-            const addonResult = await (window as any).electronAPI.ipc.invoke(
-              'addon:scaleAddonQuantities',
-              {
-                orderItemId: itemId,
-                quantityToAdd: quantityChange,
-              }
-            );
-            if (addonResult.success) {
-              orderLogger.debug('Addon quantities scaled successfully');
-              // Refresh order to show updated addon quantities
-              const orderAPI = await import('@/lib/ipc-api');
-              const refreshResp = await orderAPI.orderAPI.getById(currentOrder.id);
-              if (refreshResp.success && refreshResp.data) {
-                const { updateOrderInStore } = usePOSStore.getState();
-                updateOrderInStore(refreshResp.data as any);
-                orderLogger.debug('Order refreshed with updated addon quantities');
-              }
-            } else {
-              orderLogger.error('Failed to scale addon quantities:', addonResult.error);
-            }
-          } catch (addonError) {
-            orderLogger.error('Error scaling addon quantities:', addonError);
+
+          // Use shared utility function
+          const result = await scaleAddonsForQuantityChange(
+            itemId,
+            quantityChange,
+            currentOrder.id
+          );
+
+          if (result.success && result.order) {
+            const { updateOrderInStore } = usePOSStore.getState();
+            updateOrderInStore(result.order as any);
+            orderLogger.debug('Addon quantities scaled successfully');
+          } else {
+            orderLogger.error('Failed to scale addon quantities:', result.error);
           }
         }
 
@@ -635,53 +583,19 @@ const OrderPanel = ({ pendingCustomization, onCustomizationProcessed }: OrderPan
             quantityToAdd: itemQuantity,
           });
 
-          try {
-            const addonResult = await (window as any).electronAPI.ipc.invoke(
-              'addon:scaleAddonQuantities',
-              {
-                orderItemId: existingItem.id,
-                quantityToAdd: itemQuantity,
-              }
-            );
+          // Use shared utility function
+          const result = await scaleAddonsForQuantityChange(
+            existingItem.id,
+            itemQuantity,
+            currentOrder.id
+          );
 
-            if (addonResult.success) {
-              orderLogger.debug('Addon quantities scaled successfully');
-              
-              // ✅ CRITICAL FIX: Refresh order to show updated addon quantities
-              try {
-                const orderAPI = await import('@/lib/ipc-api');
-                const refreshResp = await orderAPI.orderAPI.getById(currentOrder.id);
-                if (refreshResp.success && refreshResp.data) {
-                  orderLogger.debug('Order refreshed after addon scaling', {
-                    itemCount: refreshResp.data.items?.length,
-                  });
-                  // Update the posStore with refreshed order
-                  const { updateOrderInStore } = usePOSStore.getState();
-                  const refreshedOrder = {
-                    ...refreshResp.data,
-                    items: refreshResp.data.items ? [...refreshResp.data.items.map((item: any) => ({
-                      ...item,
-                      unitPrice: item.unitPrice,
-                      totalPrice: item.totalPrice,
-                      price: item.price,
-                    }))] : [],
-                  };
-                  updateOrderInStore(refreshedOrder as any);
-                  orderLogger.debug('Updated posStore with scaled addon quantities');
-                }
-              } catch (refreshError) {
-                orderLogger.error('Failed to refresh order after addon scaling:', refreshError);
-              }
-            } else {
-              orderLogger.error('Failed to scale addon quantities:', addonResult.error);
-              toast({
-                title: 'Warning',
-                description: 'Item quantity updated but addon quantities may be incorrect',
-                variant: 'default',
-              });
-            }
-          } catch (addonError) {
-            orderLogger.error('Error scaling addon quantities:', addonError);
+          if (result.success && result.order) {
+            const { updateOrderInStore } = usePOSStore.getState();
+            updateOrderInStore(result.order as any);
+            orderLogger.debug('Addon quantities scaled successfully');
+          } else {
+            orderLogger.error('Failed to scale addon quantities:', result.error);
             toast({
               title: 'Warning',
               description: 'Item quantity updated but addon quantities may be incorrect',
@@ -1400,26 +1314,17 @@ const OrderPanel = ({ pendingCustomization, onCustomizationProcessed }: OrderPan
                       const defaultPrinter = printers.find(p => p.isDefault) || printers[0];
 
                       if (defaultPrinter) {
-                        const newItems = changesSummary.filter(c => c.changeType === 'NEW');
-                        // Only include quantity INCREASES (netChange > 0), not decreases
-                        const updates = changesSummary.filter(c => c.changeType === 'UPDATE' && c.netChange > 0);
-                        // Filter out removals AND quantity decreases
-                        const filteredChangesSummary = changesSummary.filter(
-                          c => c.changeType !== 'REMOVE' && (c.changeType !== 'UPDATE' || c.netChange > 0)
+                        // Use shared utility to prepare kitchen print data
+                        const printData = prepareKitchenPrintData(
+                          changesSummary,
+                          currentOrder.items?.length || 0
                         );
 
-                        if (filteredChangesSummary.length === 0) {
+                        if (printData.shouldSkipPrint) {
                           orderLogger.debug('Skip printing: Only removals/decreases occurred');
                           clearTracking();
                           return;
                         }
-
-                        // ✅ FIX: For initial orders, use STANDARD ticket (empty updatedItemIds)
-                        // Initial order = has NEW items AND changes cover all items
-                        // Update order = ONLY updates (no NEW items)
-                        const totalChangedItems = newItems.length + updates.length;
-                        const totalOrderItems = currentOrder.items?.length || 0;
-                        const isInitialOrder = newItems.length > 0 && totalChangedItems >= totalOrderItems;
 
                         const result = await printerAPI.PrinterAPI.printKitchenOrder(
                           currentOrder.id,
@@ -1428,8 +1333,8 @@ const OrderPanel = ({ pendingCustomization, onCustomizationProcessed }: OrderPan
                           user.id,
                           false,
                           [], // No cancelled items
-                          isInitialOrder ? [] : [...newItems, ...updates].map(item => item.itemId), // Empty for initial orders
-                          isInitialOrder ? [] : filteredChangesSummary // Empty changeDetails for initial orders
+                          printData.updatedItemIds,
+                          printData.changeDetails
                         );
 
                         if (result.success) {
@@ -1506,17 +1411,11 @@ const OrderPanel = ({ pendingCustomization, onCustomizationProcessed }: OrderPan
                           totalChanges: changeCount,
                         });
 
-                        const newItems = changesSummary.filter(c => c.changeType === 'NEW');
-                        // Only include quantity INCREASES (netChange > 0), not decreases
-                        const updates = changesSummary.filter(c => c.changeType === 'UPDATE' && c.netChange > 0);
-                        const removals = changesSummary.filter(c => c.changeType === 'REMOVE');
-
-                        // ✅ FIX: For initial orders, use STANDARD ticket (empty updatedItemIds)
-                        // Initial order = has NEW items AND changes cover all items
-                        // Update order = ONLY updates (no NEW items)
-                        const totalChangedItems = newItems.length + updates.length;
-                        const totalOrderItems = currentOrder.items?.length || 0;
-                        const isInitialOrder = newItems.length > 0 && totalChangedItems >= totalOrderItems && removals.length === 0;
+                        // Use shared utility to prepare kitchen print data
+                        const printData = prepareKitchenPrintData(
+                          changesSummary,
+                          currentOrder.items?.length || 0
+                        );
 
                         const result = await printerAPI.PrinterAPI.printKitchenOrder(
                           currentOrder.id,
@@ -1524,9 +1423,9 @@ const OrderPanel = ({ pendingCustomization, onCustomizationProcessed }: OrderPan
                           1,
                           user.id,
                           false,
-                          removals.map(item => item.itemId),
-                          isInitialOrder ? [] : [...newItems, ...updates].map(item => item.itemId),
-                          isInitialOrder ? [] : changesSummary
+                          [], // No cancelled items (removals not printed)
+                          printData.updatedItemIds,
+                          printData.changeDetails
                         );
 
                         if (result.success) {

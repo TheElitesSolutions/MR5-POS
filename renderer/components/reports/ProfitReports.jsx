@@ -1,0 +1,241 @@
+'use client';
+import { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { DollarSign, TrendingUp, TrendingDown, Download, Printer, Package, ShoppingBag, Receipt, Percent, AlertCircle, } from 'lucide-react';
+import { useReportsStore } from '@/stores/reportsStore';
+import { useToast } from '@/hooks/use-toast';
+const ProfitReports = () => {
+    const { profitReport, fetchProfitReport, exportProfitReport, dateRange, isLoading, error } = useReportsStore();
+    const [isExporting, setIsExporting] = useState(false);
+    const { toast } = useToast();
+    useEffect(() => {
+        fetchProfitReport(dateRange);
+    }, [dateRange, fetchProfitReport]);
+    const handleExport = async () => {
+        setIsExporting(true);
+        try {
+            await exportProfitReport(dateRange);
+            toast({
+                title: 'Success',
+                description: 'Profit report exported successfully',
+            });
+        }
+        catch (error) {
+            toast({
+                title: 'Export Failed',
+                description: error instanceof Error ? error.message : 'Failed to export report',
+                variant: 'destructive',
+            });
+        }
+        finally {
+            setIsExporting(false);
+        }
+    };
+    const handlePrint = () => {
+        window.print();
+    };
+    if (isLoading || !profitReport) {
+        return (<div className='flex h-96 items-center justify-center'>
+        <div className='h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600'></div>
+      </div>);
+    }
+    if (error) {
+        return (<div className='flex h-96 items-center justify-center'>
+        <div className='text-center'>
+          <AlertCircle className='h-12 w-12 text-red-500 mx-auto mb-4'/>
+          <p className='text-red-600 dark:text-red-400 mb-2'>Failed to load profit report</p>
+          <p className='text-sm text-gray-600 dark:text-gray-400 mb-4'>{error}</p>
+          <Button onClick={() => fetchProfitReport(dateRange)} variant='outline'>
+            Retry
+          </Button>
+        </div>
+      </div>);
+    }
+    const formatCurrency = (value) => {
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'USD',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }).format(value);
+    };
+    const formatPercent = (value) => {
+        return `${value.toFixed(2)}%`;
+    };
+    const formatDateTime = (dateString) => {
+        return new Date(dateString).toLocaleString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+            hour12: true,
+        });
+    };
+    return (<div className='space-y-6'>
+      {/* Action Buttons */}
+      <div className='flex justify-end space-x-2 print:hidden'>
+        <Button variant='outline' onClick={handleExport} disabled={isExporting}>
+          <Download className='mr-2 h-4 w-4'/>
+          {isExporting ? 'Exporting...' : 'Export'}
+        </Button>
+        <Button variant='outline' onClick={handlePrint}>
+          <Printer className='mr-2 h-4 w-4'/>
+          Print
+        </Button>
+      </div>
+
+      {/* Summary KPI Cards - Row 1 */}
+      <div className='grid gap-4 md:grid-cols-3'>
+        <Card>
+          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+            <CardTitle className='text-sm font-medium'>Total Revenue</CardTitle>
+            <DollarSign className='h-4 w-4 text-green-600'/>
+          </CardHeader>
+          <CardContent>
+            <div className='text-xl lg:text-2xl font-bold text-green-600'>
+              {formatCurrency(profitReport.totalRevenue)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+            <CardTitle className='text-sm font-medium'>Total Cost</CardTitle>
+            <Receipt className='h-4 w-4 text-red-600'/>
+          </CardHeader>
+          <CardContent>
+            <div className='text-xl lg:text-2xl font-bold text-red-600'>
+              {formatCurrency(profitReport.totalCost)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className={profitReport.grossProfit >= 0 ? 'border-green-200' : 'border-red-200'}>
+          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+            <CardTitle className='text-sm font-medium'>Gross Profit</CardTitle>
+            {profitReport.grossProfit >= 0 ? (<TrendingUp className='h-4 w-4 text-green-600'/>) : (<TrendingDown className='h-4 w-4 text-red-600'/>)}
+          </CardHeader>
+          <CardContent>
+            <div className={`text-xl lg:text-2xl font-bold ${profitReport.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {formatCurrency(profitReport.grossProfit)}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Summary KPI Cards - Row 2 */}
+      <div className='grid gap-4 md:grid-cols-3'>
+        <Card>
+          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+            <CardTitle className='text-sm font-medium'>Food Cost</CardTitle>
+            <Package className='h-4 w-4 text-orange-600'/>
+          </CardHeader>
+          <CardContent>
+            <div className='text-xl lg:text-2xl font-bold text-orange-600'>
+              {formatCurrency(profitReport.totalFoodCost)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+            <CardTitle className='text-sm font-medium'>Expenses</CardTitle>
+            <ShoppingBag className='h-4 w-4 text-red-500'/>
+          </CardHeader>
+          <CardContent>
+            <div className='text-xl lg:text-2xl font-bold text-red-500'>
+              {formatCurrency(profitReport.totalExpenses)}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+            <CardTitle className='text-sm font-medium'>Profit Margin</CardTitle>
+            <Percent className='h-4 w-4 text-purple-600'/>
+          </CardHeader>
+          <CardContent>
+            <div className='text-xl lg:text-2xl font-bold text-purple-600'>
+              {formatPercent(profitReport.profitMargin)}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Daily Operations - Unified Orders and Expenses */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Daily Operations</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className='overflow-x-auto'>
+            <table className='w-full text-sm'>
+              <thead>
+                <tr className='border-b bg-gray-50 dark:bg-gray-800'>
+                  <th className='p-2 text-left font-semibold dark:text-white'>Time</th>
+                  <th className='p-2 text-left font-semibold dark:text-white'>Type</th>
+                  <th className='p-2 text-left font-semibold dark:text-white'>Description</th>
+                  <th className='p-2 text-left font-semibold dark:text-white hidden lg:table-cell'>Category</th>
+                  <th className='p-2 text-right font-semibold dark:text-white'>Amount</th>
+                  <th className='p-2 text-left font-semibold dark:text-white hidden xl:table-cell'>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {profitReport.operations.map((operation, index) => (<tr key={index} className={`border-b hover:bg-gray-50 dark:hover:bg-gray-800 ${operation.type === 'expense' ? 'bg-red-50/30 dark:bg-red-900/10' : ''}`}>
+                    <td className='p-2 dark:text-gray-200'>{formatDateTime(operation.timestamp)}</td>
+                    <td className='p-2'>
+                      <span className={`inline-block rounded px-2 py-1 text-xs font-semibold ${operation.type === 'order'
+                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'}`}>
+                        {operation.type === 'order' ? 'Order' : 'Expense'}
+                      </span>
+                    </td>
+                    <td className='p-2 font-medium dark:text-gray-200'>{operation.description}</td>
+                    <td className='p-2 dark:text-gray-200 hidden lg:table-cell'>{operation.category}</td>
+                    <td className={`p-2 text-right font-semibold ${operation.type === 'order' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {operation.type === 'order' ? '+' : '-'}{formatCurrency(Math.abs(operation.amount))}
+                    </td>
+                    <td className='p-2 text-gray-600 dark:text-gray-400 hidden xl:table-cell'>{operation.notes || '-'}</td>
+                  </tr>))}
+              </tbody>
+              <tfoot className='border-t-2 bg-gray-50 dark:bg-gray-800 font-semibold'>
+                <tr>
+                  <td colSpan={4} className='p-3 text-right dark:text-gray-200'>Total Income (Orders):</td>
+                  <td className='p-3 text-right text-green-600 dark:text-green-400 text-base'>
+                    {formatCurrency(profitReport.totalRevenue)}
+                  </td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td colSpan={4} className='p-3 text-right dark:text-gray-200'>Total Expenses:</td>
+                  <td className='p-3 text-right text-red-600 dark:text-red-400 text-base'>
+                    -{formatCurrency(profitReport.totalExpenses)}
+                  </td>
+                  <td></td>
+                </tr>
+                <tr>
+                  <td colSpan={4} className='p-3 text-right dark:text-gray-200'>Total Food Cost:</td>
+                  <td className='p-3 text-right text-orange-600 dark:text-orange-400 text-base'>
+                    -{formatCurrency(profitReport.totalFoodCost)}
+                  </td>
+                  <td></td>
+                </tr>
+                <tr className='border-t-2'>
+                  <td colSpan={4} className='p-3 text-right text-lg dark:text-gray-200'>Net Profit:</td>
+                  <td className={`p-3 text-right text-lg font-bold ${profitReport.grossProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                    {formatCurrency(profitReport.grossProfit)}
+                  </td>
+                  <td className='p-3 text-sm text-gray-600 dark:text-gray-400'>
+                    ({formatPercent(profitReport.profitMargin)} margin)
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+    </div>);
+};
+export default ProfitReports;

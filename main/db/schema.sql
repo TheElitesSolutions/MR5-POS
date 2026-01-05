@@ -77,6 +77,7 @@ CREATE TABLE IF NOT EXISTS menu_items (
   isActive INTEGER DEFAULT 1,
   isCustomizable INTEGER DEFAULT 0,
   isPrintableInKitchen INTEGER DEFAULT 1,
+  isVisibleOnWebsite INTEGER DEFAULT 1,
   imageUrl TEXT,
   preparationTime INTEGER,
   ingredients TEXT DEFAULT '[]', -- JSON array
@@ -90,9 +91,11 @@ CREATE TABLE IF NOT EXISTS menu_items (
 
 CREATE INDEX idx_menu_items_categoryId ON menu_items(categoryId);
 CREATE INDEX idx_menu_items_isActive ON menu_items(isActive);
+CREATE INDEX idx_menu_items_isVisibleOnWebsite ON menu_items(isVisibleOnWebsite);
 -- Composite indexes for common query patterns
 CREATE INDEX idx_menu_items_categoryId_isActive_sortOrder ON menu_items(categoryId, isActive, sortOrder, name);
 CREATE INDEX idx_menu_items_isActive_sortOrder ON menu_items(isActive, sortOrder) WHERE isActive = 1;
+CREATE INDEX idx_menu_items_isActive_isVisibleOnWebsite ON menu_items(isActive, isVisibleOnWebsite) WHERE isActive = 1 AND isVisibleOnWebsite = 1;
 
 -- =============================================
 -- CUSTOMERS TABLE

@@ -15,6 +15,7 @@ export interface UIMenuItem {
   imageUrl?: string;
   isAvailable: boolean;
   isCustomizable: boolean;
+  isVisibleOnWebsite: boolean;
   preparationTime?: number;
   ingredients?: Ingredient[];
   allergens?: string[];
@@ -42,6 +43,7 @@ export function convertToUIMenuItem(item: MenuItem): UIMenuItem {
           : new Date().toISOString(),
     isAvailable: item.isAvailable ?? true,
     isCustomizable: item.isCustomizable ?? false,
+    isVisibleOnWebsite: item.isVisibleOnWebsite ?? true,
   };
 }
 

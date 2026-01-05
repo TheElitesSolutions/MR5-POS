@@ -13,19 +13,20 @@ import {
   ShoppingBag,
   Receipt,
   Percent,
+  AlertCircle,
 } from 'lucide-react';
 import { useReportsStore } from '@/stores/reportsStore';
 import { useToast } from '@/hooks/use-toast';
 
 const ProfitReports = () => {
-  const { profitReport, fetchProfitReport, exportProfitReport, dateRange, isLoading } =
+  const { profitReport, fetchProfitReport, exportProfitReport, dateRange, isLoading, error } =
     useReportsStore();
   const [isExporting, setIsExporting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchProfitReport(dateRange);
-  }, [dateRange]);
+  }, [dateRange, fetchProfitReport]);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -54,6 +55,21 @@ const ProfitReports = () => {
     return (
       <div className='flex h-96 items-center justify-center'>
         <div className='h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600'></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className='flex h-96 items-center justify-center'>
+        <div className='text-center'>
+          <AlertCircle className='h-12 w-12 text-red-500 mx-auto mb-4' />
+          <p className='text-red-600 dark:text-red-400 mb-2'>Failed to load profit report</p>
+          <p className='text-sm text-gray-600 dark:text-gray-400 mb-4'>{error}</p>
+          <Button onClick={() => fetchProfitReport(dateRange)} variant='outline'>
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
@@ -108,7 +124,7 @@ const ProfitReports = () => {
             <DollarSign className='h-4 w-4 text-green-600' />
           </CardHeader>
           <CardContent>
-            <div className='text-2xl font-bold text-green-600'>
+            <div className='text-xl lg:text-2xl font-bold text-green-600'>
               {formatCurrency(profitReport.totalRevenue)}
             </div>
           </CardContent>
@@ -120,7 +136,7 @@ const ProfitReports = () => {
             <Receipt className='h-4 w-4 text-red-600' />
           </CardHeader>
           <CardContent>
-            <div className='text-2xl font-bold text-red-600'>
+            <div className='text-xl lg:text-2xl font-bold text-red-600'>
               {formatCurrency(profitReport.totalCost)}
             </div>
           </CardContent>
@@ -136,7 +152,7 @@ const ProfitReports = () => {
             )}
           </CardHeader>
           <CardContent>
-            <div className={`text-2xl font-bold ${profitReport.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+            <div className={`text-xl lg:text-2xl font-bold ${profitReport.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
               {formatCurrency(profitReport.grossProfit)}
             </div>
           </CardContent>
@@ -151,7 +167,7 @@ const ProfitReports = () => {
             <Package className='h-4 w-4 text-orange-600' />
           </CardHeader>
           <CardContent>
-            <div className='text-2xl font-bold text-orange-600'>
+            <div className='text-xl lg:text-2xl font-bold text-orange-600'>
               {formatCurrency(profitReport.totalFoodCost)}
             </div>
           </CardContent>
@@ -163,7 +179,7 @@ const ProfitReports = () => {
             <ShoppingBag className='h-4 w-4 text-red-500' />
           </CardHeader>
           <CardContent>
-            <div className='text-2xl font-bold text-red-500'>
+            <div className='text-xl lg:text-2xl font-bold text-red-500'>
               {formatCurrency(profitReport.totalExpenses)}
             </div>
           </CardContent>
@@ -175,7 +191,7 @@ const ProfitReports = () => {
             <Percent className='h-4 w-4 text-purple-600' />
           </CardHeader>
           <CardContent>
-            <div className='text-2xl font-bold text-purple-600'>
+            <div className='text-xl lg:text-2xl font-bold text-purple-600'>
               {formatPercent(profitReport.profitMargin)}
             </div>
           </CardContent>
@@ -195,9 +211,9 @@ const ProfitReports = () => {
                   <th className='p-2 text-left font-semibold dark:text-white'>Time</th>
                   <th className='p-2 text-left font-semibold dark:text-white'>Type</th>
                   <th className='p-2 text-left font-semibold dark:text-white'>Description</th>
-                  <th className='p-2 text-left font-semibold dark:text-white'>Category</th>
+                  <th className='p-2 text-left font-semibold dark:text-white hidden lg:table-cell'>Category</th>
                   <th className='p-2 text-right font-semibold dark:text-white'>Amount</th>
-                  <th className='p-2 text-left font-semibold dark:text-white'>Notes</th>
+                  <th className='p-2 text-left font-semibold dark:text-white hidden xl:table-cell'>Notes</th>
                 </tr>
               </thead>
               <tbody>
@@ -217,13 +233,13 @@ const ProfitReports = () => {
                       </span>
                     </td>
                     <td className='p-2 font-medium dark:text-gray-200'>{operation.description}</td>
-                    <td className='p-2 dark:text-gray-200'>{operation.category}</td>
+                    <td className='p-2 dark:text-gray-200 hidden lg:table-cell'>{operation.category}</td>
                     <td className={`p-2 text-right font-semibold ${
                       operation.type === 'order' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
                     }`}>
                       {operation.type === 'order' ? '+' : '-'}{formatCurrency(Math.abs(operation.amount))}
                     </td>
-                    <td className='p-2 text-gray-600 dark:text-gray-400'>{operation.notes || '-'}</td>
+                    <td className='p-2 text-gray-600 dark:text-gray-400 hidden xl:table-cell'>{operation.notes || '-'}</td>
                   </tr>
                 ))}
               </tbody>

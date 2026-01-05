@@ -65,6 +65,20 @@ function mapPrismaMenuItemToAppMenuItem(
     price = 10.0;
   }
 
+  // Debug log the raw database values
+  console.log('🔍 Raw database values:', {
+    id: prismaMenuItem.id,
+    name: prismaMenuItem.name,
+    isActive: prismaMenuItem.isActive,
+    isPrintableInKitchen: (prismaMenuItem as any).isPrintableInKitchen,
+    isVisibleOnWebsite: (prismaMenuItem as any).isVisibleOnWebsite,
+    types: {
+      isActive: typeof prismaMenuItem.isActive,
+      isPrintableInKitchen: typeof (prismaMenuItem as any).isPrintableInKitchen,
+      isVisibleOnWebsite: typeof (prismaMenuItem as any).isVisibleOnWebsite,
+    }
+  });
+
   const mappedItem = {
     id: prismaMenuItem.id,
     name: prismaMenuItem.name,
@@ -75,10 +89,13 @@ function mapPrismaMenuItemToAppMenuItem(
     color: prismaMenuItem.color || undefined, // ✅ NEW: Add color field from menu item
     isActive: prismaMenuItem.isActive,
     isAvailable: prismaMenuItem.isActive,
-    isCustomizable: (prismaMenuItem as any).isCustomizable || false, // ✅ NEW: Add isCustomizable field
+    isCustomizable: !!(prismaMenuItem as any).isCustomizable, // ✅ Convert to boolean explicitly
     isPrintableInKitchen: (prismaMenuItem as any).isPrintableInKitchen !== undefined
-      ? (prismaMenuItem as any).isPrintableInKitchen
-      : true, // ✅ NEW: Add isPrintableInKitchen field (default true for backward compatibility)
+      ? !!(prismaMenuItem as any).isPrintableInKitchen // ✅ Convert to boolean explicitly
+      : true,
+    isVisibleOnWebsite: (prismaMenuItem as any).isVisibleOnWebsite !== undefined
+      ? !!(prismaMenuItem as any).isVisibleOnWebsite // ✅ Convert to boolean explicitly
+      : true,
     imageUrl: prismaMenuItem.imageUrl || null,
     // Use a different approach for compatibility - check with hasOwnProperty
     preparationTime: Object.prototype.hasOwnProperty.call(
@@ -128,6 +145,7 @@ function mapIpcMenuItemToUpdateData(ipcMenuItem: Partial<IpcMenuItem>): {
   isActive?: boolean;
   isCustomizable?: boolean;
   isPrintableInKitchen?: boolean;
+  isVisibleOnWebsite?: boolean;
   imageUrl?: string | null;
   preparationTime?: number | null;
   ingredients?: Ingredient[];
@@ -144,6 +162,7 @@ function mapIpcMenuItemToUpdateData(ipcMenuItem: Partial<IpcMenuItem>): {
     isActive?: boolean;
     isCustomizable?: boolean;
     isPrintableInKitchen?: boolean;
+    isVisibleOnWebsite?: boolean;
     imageUrl?: string | null;
     preparationTime?: number | null;
     ingredients?: Ingredient[];
@@ -190,6 +209,11 @@ function mapIpcMenuItemToUpdateData(ipcMenuItem: Partial<IpcMenuItem>): {
   // ✅ NEW: Handle isPrintableInKitchen field
   if (ipcMenuItem.isPrintableInKitchen !== undefined) {
     updateData.isPrintableInKitchen = ipcMenuItem.isPrintableInKitchen;
+  }
+
+  // ✅ NEW: Handle isVisibleOnWebsite field
+  if (ipcMenuItem.isVisibleOnWebsite !== undefined) {
+    updateData.isVisibleOnWebsite = ipcMenuItem.isVisibleOnWebsite;
   }
 
   if (ipcMenuItem.imageUrl !== undefined) {
@@ -252,6 +276,8 @@ export class MenuItemService extends BaseService {
         isActive: true,
         isAvailable: true,
         isCustomizable: false, // ✅ NEW: Default to false for fallback
+        isPrintableInKitchen: true, // ✅ NEW: Default to true for fallback
+        isVisibleOnWebsite: true, // ✅ NEW: Default to true for fallback
         imageUrl: null,
         preparationTime: null,
         ingredients: [],
@@ -527,12 +553,15 @@ export class MenuItemService extends BaseService {
             updateData.imageUrl !== undefined ? updateData.imageUrl : null,
           // Skip fields that don't exist in the Prisma schema definition
           // but we'll handle them in the application layer
+          // Convert booleans to INTEGER (0/1) for SQLite
           isActive:
-            updateData.isActive !== undefined ? updateData.isActive : true,
+            updateData.isActive !== undefined ? (updateData.isActive ? 1 : 0) : 1,
           isCustomizable:
-            updateData.isCustomizable !== undefined ? updateData.isCustomizable : false,
+            updateData.isCustomizable !== undefined ? (updateData.isCustomizable ? 1 : 0) : 0,
           isPrintableInKitchen:
-            updateData.isPrintableInKitchen !== undefined ? updateData.isPrintableInKitchen : true,
+            updateData.isPrintableInKitchen !== undefined ? (updateData.isPrintableInKitchen ? 1 : 0) : 1,
+          isVisibleOnWebsite:
+            updateData.isVisibleOnWebsite !== undefined ? (updateData.isVisibleOnWebsite ? 1 : 0) : 1,
           // We'll handle these fields in the application layer
           // using transformations in the mapPrismaMenuItem function
         },
@@ -626,6 +655,19 @@ export class MenuItemService extends BaseService {
       // Map IPC MenuItem to update data
       const menuItemUpdateData = mapIpcMenuItemToUpdateData(updateData.updates);
 
+      console.log('🔍 menuItemService.update received:', {
+        id,
+        updates: updateData.updates,
+        isPrintableInKitchen: updateData.updates.isPrintableInKitchen,
+        isVisibleOnWebsite: updateData.updates.isVisibleOnWebsite,
+      });
+
+      console.log('🔍 After mapping:', {
+        menuItemUpdateData,
+        isPrintableInKitchen: menuItemUpdateData.isPrintableInKitchen,
+        isVisibleOnWebsite: menuItemUpdateData.isVisibleOnWebsite,
+      });
+
       // Process price field if provided
       let price: Decimal | undefined;
       if (menuItemUpdateData.price !== undefined) {
@@ -700,16 +742,25 @@ export class MenuItemService extends BaseService {
         updateDataObj.allergens = menuItemUpdateData.allergens;
       // Note: ingredients are handled separately via MenuItemInventory relationships
       if (menuItemUpdateData.isActive !== undefined)
-        updateDataObj.isActive = menuItemUpdateData.isActive;
-      // ✅ NEW: Handle isCustomizable field
+        updateDataObj.isActive = menuItemUpdateData.isActive ? 1 : 0; // Convert boolean to INTEGER for SQLite
+      // ✅ NEW: Handle isCustomizable field - convert boolean to INTEGER for SQLite
       if (menuItemUpdateData.isCustomizable !== undefined)
-        updateDataObj.isCustomizable = menuItemUpdateData.isCustomizable;
-      // ✅ NEW: Handle isPrintableInKitchen field
+        updateDataObj.isCustomizable = menuItemUpdateData.isCustomizable ? 1 : 0;
+      // ✅ NEW: Handle isPrintableInKitchen field - convert boolean to INTEGER for SQLite
       if (menuItemUpdateData.isPrintableInKitchen !== undefined)
-        updateDataObj.isPrintableInKitchen = menuItemUpdateData.isPrintableInKitchen;
+        updateDataObj.isPrintableInKitchen = menuItemUpdateData.isPrintableInKitchen ? 1 : 0;
+      // ✅ NEW: Handle isVisibleOnWebsite field - convert boolean to INTEGER for SQLite
+      if (menuItemUpdateData.isVisibleOnWebsite !== undefined)
+        updateDataObj.isVisibleOnWebsite = menuItemUpdateData.isVisibleOnWebsite ? 1 : 0;
       // Handle color field
       if (menuItemUpdateData.color !== undefined)
         updateDataObj.color = menuItemUpdateData.color;
+
+      console.log('🎯 Final updateDataObj before database:', {
+        updateDataObj,
+        isPrintableInKitchen: updateDataObj.isPrintableInKitchen,
+        isVisibleOnWebsite: updateDataObj.isVisibleOnWebsite,
+      });
 
       const menuItem = await this.prisma.menuItem.update({
         where: { id },
@@ -722,6 +773,13 @@ export class MenuItemService extends BaseService {
             },
           },
         },
+      });
+
+      console.log('✅ Database updated, item returned:', {
+        id: menuItem.id,
+        name: menuItem.name,
+        isPrintableInKitchen: (menuItem as any).isPrintableInKitchen,
+        isVisibleOnWebsite: (menuItem as any).isVisibleOnWebsite,
       });
 
       // 🔥 CRITICAL FIX: Update ingredient relationships if provided

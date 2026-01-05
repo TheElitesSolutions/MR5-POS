@@ -634,12 +634,10 @@ export class OrderService extends BaseService {
           throw new AppError('One or more menu items not found');
         }
 
-        // Calculate order totals for items
-        let subtotal = new Decimal(0);
+        // Calculate order totals for items (don't accumulate in map, use reduce instead)
         orderItems = orderData.items.map(item => {
           const menuItem = menuItems.find(mi => mi.id === item.menuItemId)!;
           const itemSubtotal = menuItem.price.mul(item.quantity);
-          subtotal = subtotal.add(itemSubtotal);
 
           return {
             menuItemId: item.menuItemId,
@@ -656,13 +654,12 @@ export class OrderService extends BaseService {
       }
 
       // Calculate order totals (will be 0 for empty orders)
-      let subtotal = new Decimal(0);
-      if (hasItems) {
-        subtotal = orderItems.reduce(
-          (sum, item) => sum.add(item.subtotal),
-          new Decimal(0)
-        );
-      }
+      const subtotal = hasItems
+        ? orderItems.reduce(
+            (sum, item) => sum.add(item.subtotal),
+            new Decimal(0)
+          )
+        : new Decimal(0);
 
       // No tax calculation - this restaurant doesn't apply taxes
       const tax = new Decimal(0);
@@ -674,6 +671,21 @@ export class OrderService extends BaseService {
 
       // Calculate total (no tax applied)
       const total = subtotal.add(deliveryFee);
+
+      // Debug log for order total calculation
+      console.log('🔍 DEBUG: Order creation total calculation:', {
+        hasItems,
+        itemCount: orderItems.length,
+        subtotal: subtotal.toString(),
+        deliveryFee: deliveryFee.toString(),
+        total: total.toString(),
+        itemDetails: orderItems.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice.toString(),
+          subtotal: item.subtotal.toString(),
+        })),
+      });
 
       // Convert application OrderType to Prisma OrderType
       const prismaOrderType = orderData.type

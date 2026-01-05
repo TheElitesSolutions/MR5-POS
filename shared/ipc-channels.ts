@@ -274,9 +274,9 @@ export const ADDON_CHANNELS = {
  * Supabase sync channels
  */
 export const SYNC_CHANNELS = {
-  MANUAL_SYNC: 'mr5pos:sync:manual-sync',
-  GET_STATUS: 'mr5pos:sync:get-status',
-  SET_AUTO_SYNC: 'mr5pos:sync:set-auto-sync',
+  MANUAL_SYNC: 'mr5pos:sync:manual',
+  GET_STATUS: 'mr5pos:sync:status',
+  SET_AUTO_SYNC: 'mr5pos:sync:set-auto',
   SET_INTERVAL: 'mr5pos:sync:set-interval',
 };
 

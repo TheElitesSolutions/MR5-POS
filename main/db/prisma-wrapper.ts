@@ -923,6 +923,9 @@ let prismaClient: PrismaClient | null = null;
 export function getPrismaClient(): PrismaClient {
   if (!prismaClient) {
     prismaClient = new PrismaClient();
+    // CRITICAL: Ensure initialization happens before first use
+    // This initializes the database connection and all model properties
+    prismaClient.ensureInitialized();
   }
   return prismaClient;
 }
@@ -932,6 +935,11 @@ export function getPrismaClient(): PrismaClient {
 const prismaProxy = new Proxy({} as PrismaClient, {
   get(target, prop) {
     const client = getPrismaClient();
+    // CRITICAL: Defensively ensure initialization on EVERY property access
+    // This handles hot-reload scenarios where singleton might persist with old state
+    if (!client.isInitialized()) {
+      client.ensureInitialized();
+    }
     return (client as any)[prop];
   }
 });

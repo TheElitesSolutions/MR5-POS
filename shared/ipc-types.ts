@@ -209,6 +209,7 @@ export interface MenuItem {
   isAvailable: boolean;
   isCustomizable: boolean;
   isPrintableInKitchen?: boolean; // Controls whether item appears on kitchen tickets
+  isVisibleOnWebsite?: boolean; // Controls whether item syncs to public menu website
   preparationTime?: number;
   ingredients?: Ingredient[];
   allergens?: string[];

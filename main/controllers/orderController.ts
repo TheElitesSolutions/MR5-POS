@@ -1295,16 +1295,28 @@ export class OrderController extends BaseController {
           const allItems = await tx.orderItem.findMany({
             where: { orderId: data.orderId },
           });
-          const subtotal = allItems.reduce(
-            (sum: number, item: any) => sum + Number(item.totalPrice),
-            0
-          );
+
+          // ✅ Use Decimal.js for precise calculation
+          let subtotalDecimal = new Decimal(0);
+          for (const item of allItems) {
+            subtotalDecimal = subtotalDecimal.add(item.totalPrice || 0);
+          }
+
+          const subtotal = Number(subtotalDecimal.toString());
+          const total = subtotal; // No tax
+
+          console.log('🔍 DEBUG: addOrderItem total recalculation:', {
+            orderId: data.orderId,
+            itemCount: allItems.length,
+            subtotal,
+            total,
+          });
 
           await tx.order.update({
             where: { id: data.orderId },
             data: {
               subtotal: subtotal,
-              total: subtotal, // Assuming no tax for simplicity
+              total: total,
             },
           });
 
@@ -1799,6 +1811,32 @@ export class OrderController extends BaseController {
         data.itemId,
         data.quantity
       );
+
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'Unknown error',
+          timestamp: getCurrentLocalDateTime(),
+        };
+      }
+
+      // ✅ FIX: Recalculate order totals after quantity change
+      try {
+        // Get the order ID from the updated item
+        const updatedItem = result.data;
+        if (updatedItem && updatedItem.orderId) {
+          console.log('🔍 DEBUG: Recalculating totals after quantity update:', {
+            orderId: updatedItem.orderId,
+            itemId: data.itemId,
+            newQuantity: data.quantity,
+          });
+
+          await this.orderModel.recalculateOrderTotals(updatedItem.orderId);
+        }
+      } catch (recalcError) {
+        console.error('⚠️ WARNING: Failed to recalculate order totals:', recalcError);
+        // Don't fail the whole operation, just log the error
+      }
 
       // Handle kitchen notification for the quantity change
       if (result.success && result.data) {

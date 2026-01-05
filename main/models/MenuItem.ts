@@ -28,7 +28,13 @@ export function mapPrismaMenuItemToDTO(
     price: decimalToNumber(prismaMenuItem.price),
     category: prismaMenuItem.category || 'Default Category',
     isAvailable: prismaMenuItem.isActive !== undefined ? prismaMenuItem.isActive : true,
-    isCustomizable: (prismaMenuItem as any).isCustomizable || false,
+    isCustomizable: !!(prismaMenuItem as any).isCustomizable,
+    isPrintableInKitchen: (prismaMenuItem as any).isPrintableInKitchen !== undefined
+      ? !!(prismaMenuItem as any).isPrintableInKitchen
+      : true,
+    isVisibleOnWebsite: (prismaMenuItem as any).isVisibleOnWebsite !== undefined
+      ? !!(prismaMenuItem as any).isVisibleOnWebsite
+      : true,
     imageUrl: prismaMenuItem.imageUrl,
     preparationTime: prismaMenuItem.preparationTime,
     ingredients: [],
@@ -56,6 +62,8 @@ export class MenuItemModel {
         isAvailable: item.isActive,
         isActive: item.isActive,
         isCustomizable: (item as any).isCustomizable || false, // ✅ NEW: Add isCustomizable field
+        isPrintableInKitchen: (item as any).isPrintableInKitchen !== undefined ? !!(item as any).isPrintableInKitchen : true,
+        isVisibleOnWebsite: (item as any).isVisibleOnWebsite !== undefined ? !!(item as any).isVisibleOnWebsite : true,
         ingredients: [], // MenuItemIngredient[] (renderer expects this array)
       };
 
@@ -76,6 +84,8 @@ export class MenuItemModel {
         isAvailable: true,
         isActive: true,
         isCustomizable: false, // ✅ NEW: Default to false for fallback
+        isPrintableInKitchen: true,
+        isVisibleOnWebsite: true,
         ingredients: [],
       };
     }
@@ -201,6 +211,15 @@ export class MenuItemModel {
           preparationTime: itemData.preparationTime || null,
           allergens: itemData.allergens || [],
           isActive: itemData.isAvailable !== undefined ? itemData.isAvailable : true,
+          ...((itemData as any).isCustomizable !== undefined && {
+            isCustomizable: (itemData as any).isCustomizable ? 1 : 0,
+          }),
+          ...((itemData as any).isPrintableInKitchen !== undefined && {
+            isPrintableInKitchen: (itemData as any).isPrintableInKitchen ? 1 : 0,
+          }),
+          ...((itemData as any).isVisibleOnWebsite !== undefined && {
+            isVisibleOnWebsite: (itemData as any).isVisibleOnWebsite ? 1 : 0,
+          }),
         },
       });
 
@@ -265,6 +284,12 @@ export class MenuItemModel {
           }),
           ...((updateData as any).isCustomizable !== undefined && {
             isCustomizable: (updateData as any).isCustomizable ? 1 : 0,
+          }),
+          ...((updateData as any).isPrintableInKitchen !== undefined && {
+            isPrintableInKitchen: (updateData as any).isPrintableInKitchen ? 1 : 0,
+          }),
+          ...((updateData as any).isVisibleOnWebsite !== undefined && {
+            isVisibleOnWebsite: (updateData as any).isVisibleOnWebsite ? 1 : 0,
           }),
         },
       });

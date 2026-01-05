@@ -6,7 +6,7 @@
 import { Decimal } from 'decimal.js';
 import { BaseService } from './baseService';
 import { IPCResponse } from '../../shared/ipc-types';
-import { decimalToNumber } from '../utils/decimal';
+import { decimalToNumber, toDecimal } from '../utils/decimal';
 import { enhancedLogger, LogCategory } from '../utils/enhanced-logger';
 import { getCurrentLocalDateTime } from '../utils/dateTime';
 
@@ -168,7 +168,7 @@ export class ReportService extends BaseService {
       const orderList = orders.map(order => {
         const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0);
         totalItems += itemCount;
-        totalRevenue = totalRevenue.add(new Decimal(order.total || 0));
+        totalRevenue = totalRevenue.add(toDecimal(order.total || 0));
 
         return {
           id: order.id,
@@ -176,7 +176,7 @@ export class ReportService extends BaseService {
           createdAt: order.createdAt,
           type: order.type as 'DINE_IN' | 'TAKEOUT' | 'DELIVERY',
           itemCount,
-          total: decimalToNumber(new Decimal(order.total || 0)),
+          total: decimalToNumber(order.total || 0),
           tableName: order.table?.name || order.tableName,
         };
       });
@@ -255,12 +255,12 @@ export class ReportService extends BaseService {
       let outOfStockCount = 0;
 
       const currentStock = inventoryItems.map(item => {
-        const currentStockNum = decimalToNumber(new Decimal(item.currentStock || 0));
-        const minimumStockNum = decimalToNumber(new Decimal(item.minimumStock || 0));
-        const costPerUnitNum = decimalToNumber(new Decimal(item.costPerUnit || 0));
+        const currentStockNum = decimalToNumber(item.currentStock || 0);
+        const minimumStockNum = decimalToNumber(item.minimumStock || 0);
+        const costPerUnitNum = decimalToNumber(item.costPerUnit || 0);
         const totalValue = currentStockNum * costPerUnitNum;
-        
-        totalInventoryValue = totalInventoryValue.add(new Decimal(totalValue));
+
+        totalInventoryValue = totalInventoryValue.add(toDecimal(totalValue));
 
         let status: 'normal' | 'low' | 'out' = 'normal';
         if (currentStockNum <= 0) {
@@ -349,7 +349,7 @@ export class ReportService extends BaseService {
           if (isPlaceholder) return;
 
           const itemId = invItem.id;
-          const quantityUsed = decimalToNumber(new Decimal(mii.quantity || 0)) * orderItem.quantity;
+          const quantityUsed = decimalToNumber(mii.quantity || 0) * orderItem.quantity;
 
           if (!usageMap.has(itemId)) {
             usageMap.set(itemId, {
@@ -437,7 +437,6 @@ export class ReportService extends BaseService {
                       inventory: true,
                     },
                   },
-                  category: true,
                 },
               },
             },
@@ -461,7 +460,7 @@ export class ReportService extends BaseService {
       // Calculate total expenses
       let totalExpenses = new Decimal(0);
       expenses.forEach(expense => {
-        totalExpenses = totalExpenses.add(new Decimal(expense.amount || 0));
+        totalExpenses = totalExpenses.add(toDecimal(expense.amount || 0));
       });
 
       // 3. Calculate revenue and food costs for each order
@@ -469,24 +468,24 @@ export class ReportService extends BaseService {
       let totalFoodCost = new Decimal(0);
 
       const orderProfitabilityData = orders.map(order => {
-        const revenue = new Decimal(order.total || 0);
-        totalRevenue = totalRevenue.add(revenue);
+        const revenue = order.total || 0;
+        totalRevenue = totalRevenue.add(toDecimal(revenue));
 
         // Calculate food cost for this order
         let orderFoodCost = new Decimal(0);
 
         order.items.forEach(orderItem => {
           const menuItemInventories = orderItem.menuItem?.inventory || [];
-          
+
           menuItemInventories.forEach(mii => {
             const inventory = mii.inventory;
             if (!inventory) return;
 
             // Calculate cost: costPerUnit * quantity_per_item * order_quantity
-            const costPerUnit = new Decimal(inventory.costPerUnit || 0);
-            const quantityPerItem = new Decimal(mii.quantity || 0);
-            const orderQuantity = new Decimal(orderItem.quantity || 0);
-            
+            const costPerUnit = toDecimal(inventory.costPerUnit || 0);
+            const quantityPerItem = toDecimal(mii.quantity || 0);
+            const orderQuantity = toDecimal(orderItem.quantity || 0);
+
             const itemCost = costPerUnit.mul(quantityPerItem).mul(orderQuantity);
             orderFoodCost = orderFoodCost.add(itemCost);
           });
@@ -528,85 +527,7 @@ export class ReportService extends BaseService {
         };
       });
 
-      // 5. Build per-item profitability analysis
-      const itemProfitabilityMap = new Map<string, {
-        itemId: string;
-        itemName: string;
-        category: string;
-        unitsSold: number;
-        revenue: Decimal;
-        totalFoodCost: Decimal;
-      }>();
-
-      orders.forEach(order => {
-        order.items.forEach(orderItem => {
-          const menuItem = orderItem.menuItem;
-          if (!menuItem) return;
-
-          const itemId = menuItem.id;
-          const itemName = orderItem.name;
-          const category = menuItem.category?.name || 'Uncategorized';
-          const quantity = orderItem.quantity;
-          const itemRevenue = new Decimal(orderItem.totalPrice || 0);
-
-          // Calculate food cost for this item
-          let itemFoodCost = new Decimal(0);
-          const menuItemInventories = menuItem.inventory || [];
-          
-          menuItemInventories.forEach(mii => {
-            const inventory = mii.inventory;
-            if (!inventory) return;
-
-            const costPerUnit = new Decimal(inventory.costPerUnit || 0);
-            const quantityPerItem = new Decimal(mii.quantity || 0);
-            const itemCost = costPerUnit.mul(quantityPerItem).mul(quantity);
-            itemFoodCost = itemFoodCost.add(itemCost);
-          });
-
-          if (!itemProfitabilityMap.has(itemId)) {
-            itemProfitabilityMap.set(itemId, {
-              itemId,
-              itemName,
-              category,
-              unitsSold: 0,
-              revenue: new Decimal(0),
-              totalFoodCost: new Decimal(0),
-            });
-          }
-
-          const itemData = itemProfitabilityMap.get(itemId)!;
-          itemData.unitsSold += quantity;
-          itemData.revenue = itemData.revenue.add(itemRevenue);
-          itemData.totalFoodCost = itemData.totalFoodCost.add(itemFoodCost);
-        });
-      });
-
-      // Convert item profitability to final format
-      const itemProfitability = Array.from(itemProfitabilityMap.values())
-        .map(item => {
-          const revenue = decimalToNumber(item.revenue);
-          const totalFoodCost = decimalToNumber(item.totalFoodCost);
-          const foodCostPerUnit = item.unitsSold > 0 ? totalFoodCost / item.unitsSold : 0;
-          const profitPerUnit = item.unitsSold > 0 ? (revenue - totalFoodCost) / item.unitsSold : 0;
-          const totalProfit = revenue - totalFoodCost;
-          const margin = revenue > 0 ? (totalProfit / revenue) * 100 : 0;
-
-          return {
-            itemId: item.itemId,
-            itemName: item.itemName,
-            category: item.category,
-            unitsSold: item.unitsSold,
-            revenue,
-            foodCostPerUnit,
-            totalFoodCost,
-            profitPerUnit,
-            totalProfit,
-            margin,
-          };
-        })
-        .sort((a, b) => b.totalProfit - a.totalProfit); // Sort by total profit descending
-
-      // 6. Build daily trends
+      // 5. Build daily trends
       const dailyTrendsMap = new Map<string, {
         date: string;
         revenue: Decimal;
@@ -628,8 +549,8 @@ export class ReportService extends BaseService {
         }
 
         const dailyData = dailyTrendsMap.get(date)!;
-        dailyData.revenue = dailyData.revenue.add(orderData.revenue);
-        dailyData.foodCost = dailyData.foodCost.add(orderData.foodCost);
+        dailyData.revenue = dailyData.revenue.add(toDecimal(orderData.revenue));
+        dailyData.foodCost = dailyData.foodCost.add(toDecimal(orderData.foodCost));
         dailyData.orderCount += 1;
       });
 
@@ -643,7 +564,7 @@ export class ReportService extends BaseService {
         }
 
         const currentExpenses = dailyExpensesMap.get(date)!;
-        dailyExpensesMap.set(date, currentExpenses.add(expense.amount || 0));
+        dailyExpensesMap.set(date, currentExpenses.add(toDecimal(expense.amount || 0)));
       });
 
       // Combine into daily trends
@@ -694,7 +615,7 @@ export class ReportService extends BaseService {
           id: expense.id,
           description: expense.description || 'Expense',
           category: expense.category,
-          amount: decimalToNumber(new Decimal(expense.amount || 0)),
+          amount: decimalToNumber(expense.amount || 0),
           notes: expense.vendor || undefined,
         });
       });

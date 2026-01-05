@@ -6,7 +6,7 @@
 // Load environment variables from .env file FIRST
 import dotenv from 'dotenv';
 import path from 'path';
-import { app, BrowserWindow, ipcMain, dialog, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, protocol } from 'electron';
 
 // In production, the .env file should be in the unpacked asar directory
 const isProdEnv = process.env.NODE_ENV === 'production';
@@ -59,9 +59,24 @@ import { getUpdaterController } from './controllers/updaterController';
 import { logInfo, logError } from './error-handler';
 import { enhancedLogger, LogCategory } from './utils/enhanced-logger';
 import { checkAndAddIsPrintableColumn } from './utils/checkIsPrintableColumn';
+import { checkAndAddIsVisibleOnWebsiteColumn } from './utils/checkIsVisibleOnWebsiteColumn';
 import { setupGlobalShortcuts, unregisterAllShortcuts } from './shortcuts';
 
 const isProd = process.env.NODE_ENV === 'production';
+
+// CRITICAL: Register custom protocol schemes BEFORE app.whenReady()
+// Required for electron-serve to work properly
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: 'app',
+    privileges: {
+      secure: true,
+      standard: true,
+      supportFetchAPI: true,
+      corsEnabled: false
+    }
+  }
+]);
 
 // Serve static files in production
 if (isProd) {
@@ -129,6 +144,9 @@ let startupManager: StartupManagerNextron | null = null;
 
     // ✅ Check and add isPrintableInKitchen column if missing
     await checkAndAddIsPrintableColumn();
+
+    // ✅ Check and add isVisibleOnWebsite column if missing
+    await checkAndAddIsVisibleOnWebsiteColumn();
   } catch (error) {
     console.error('[Main] Database initialization failed:', error);
     dialog.showErrorBox(
@@ -256,7 +274,7 @@ let startupManager: StartupManagerNextron | null = null;
   if (isProd) {
     await mainWindow.loadURL('app://./index.html');
   } else {
-    const port = process.argv[2] || 8000;
+    const port = process.argv[2] || 8888;
     await mainWindow.loadURL(`http://localhost:${port}`);
     mainWindow.webContents.openDevTools();
   }

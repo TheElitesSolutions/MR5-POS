@@ -196,7 +196,7 @@ export default function MenuManagementPage() {
 
     setIsSyncing(true);
     try {
-      const response = await window.electronAPI.ipc.invoke('mr5pos:sync:manual-sync');
+      const response = await window.electronAPI.ipc.invoke('mr5pos:sync:manual');
       if (response.success) {
         const { categoriesSynced, itemsSynced, addOnsSynced } = response.data;
         alert(`✅ Sync successful!\n${categoriesSynced} categories, ${itemsSynced} items, ${addOnsSynced} add-ons synced to website.`);

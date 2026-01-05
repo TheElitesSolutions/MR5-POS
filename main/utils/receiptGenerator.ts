@@ -32,6 +32,7 @@ interface ReceiptData {
 
 interface ReceiptCalculations {
   subtotal: number;
+  deliveryFee: number;
   vatAmount: number;
   total: number;
   vatRate: number;
@@ -266,6 +267,18 @@ export class LebanesReceiptGenerator {
 
     doc.moveDown(0.2);
 
+    // Delivery Fee (if applicable)
+    if (calculations.deliveryFee > 0) {
+      doc
+        .text('Delivery Fee:', 120, doc.y, { width: 60, align: 'left' })
+        .text(`$${calculations.deliveryFee.toFixed(2)}`, 180, doc.y, {
+          width: 36.77,
+          align: 'right',
+        });
+
+      doc.moveDown(0.2);
+    }
+
     // VAT
     doc
       .text(`VAT (${(calculations.vatRate * 100).toFixed(0)}%):`, 120, doc.y, {
@@ -365,6 +378,7 @@ export class LebanesReceiptGenerator {
 
     return {
       subtotal,
+      deliveryFee,
       vatAmount,
       total,
       vatRate,
@@ -477,9 +491,18 @@ export class LebanesReceiptGenerator {
     receipt += '-'.repeat(LINE_WIDTH) + '\n';
 
     // Totals section
-    receipt += `Total Quantity${' '.repeat(LINE_WIDTH - 14 - totalQuantity.toString().length)}${totalQuantity}$\n`;
-    receipt += `Total Invoice${' '.repeat(LINE_WIDTH - 13 - calculations.total.toFixed(1).length)}${calculations.total.toFixed(1)}$\n`;
-    receipt += `Net to pay${' '.repeat(LINE_WIDTH - 10 - calculations.total.toFixed(1).length)}${calculations.total.toFixed(1)}$\n`;
+    receipt += `Total Quantity${' '.repeat(LINE_WIDTH - 14 - totalQuantity.toString().length)}${totalQuantity}\n`;
+    receipt += `Subtotal${' '.repeat(LINE_WIDTH - 8 - calculations.subtotal.toFixed(2).length)}$${calculations.subtotal.toFixed(2)}\n`;
+
+    // Add delivery fee if applicable
+    if (calculations.deliveryFee > 0) {
+      receipt += `Delivery Fee${' '.repeat(LINE_WIDTH - 12 - calculations.deliveryFee.toFixed(2).length)}$${calculations.deliveryFee.toFixed(2)}\n`;
+    }
+
+    receipt += `VAT (11%)${' '.repeat(LINE_WIDTH - 9 - calculations.vatAmount.toFixed(2).length)}$${calculations.vatAmount.toFixed(2)}\n`;
+    receipt += '-'.repeat(LINE_WIDTH) + '\n';
+    receipt += `TOTAL${' '.repeat(LINE_WIDTH - 5 - calculations.total.toFixed(2).length)}$${calculations.total.toFixed(2)}\n`;
+    receipt += `Net to pay${' '.repeat(LINE_WIDTH - 10 - calculations.total.toFixed(2).length)}$${calculations.total.toFixed(2)}\n`;
 
     receipt += '\n';
     receipt += '-'.repeat(LINE_WIDTH) + '\n';

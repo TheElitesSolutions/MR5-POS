@@ -104,6 +104,10 @@ const formSchema = z.object({
     if (typeof val === 'number') return val !== 0;
     return val;
   }).pipe(z.boolean()).default(true),
+  isVisibleOnWebsite: z.union([z.boolean(), z.number()]).transform(val => {
+    if (typeof val === 'number') return val !== 0;
+    return val;
+  }).pipe(z.boolean()).default(true),
   ingredients: z.array(ingredientSchema).default([]),
 });
 
@@ -151,16 +155,17 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
     defaultValues: {
       name: '',
       description: '',
-      price: undefined as any, // Will be set by user input, no invalid default
+      price: 0, // Default to 0, not undefined
       category: defaultCategory || (categories && categories.length > 0 ? categories[0].id : 'default'),
       color: undefined,
       isAvailable: true,
       isActive: true,
       isCustomizable: false, // ✅ NEW: Default value for isCustomizable
       isPrintableInKitchen: true, // Default: print in kitchen tickets
+      isVisibleOnWebsite: true, // Default: show on website
       ingredients: [],
     },
-    mode: 'onChange', // Validate fields as they change
+    mode: 'onBlur', // Validate when user leaves field, not on every keystroke
   });
 
   const { fields, append, remove } = useFieldArray({
@@ -240,6 +245,35 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
     }
   }, [categories, form, defaultCategory, editingItem]);
 
+  // Update category when editing and categories load
+  useEffect(() => {
+    if (editingItem && categories && categories.length > 0) {
+      const currentCategory = form.getValues('category');
+
+      // If current category is not a valid ID, try to resolve it
+      const isValidId = categories.some(cat => cat.id === currentCategory);
+      if (!isValidId) {
+        // Try to find category by ID first
+        let categoryValue = editingItem.categoryId || editingItem.category;
+
+        // If we only have a category name, find its ID
+        if (!editingItem.categoryId) {
+          const foundCategory = categories.find(cat => cat.name === editingItem.category);
+          if (foundCategory) {
+            categoryValue = foundCategory.id;
+            console.log('✅ Resolved category ID from name:', { name: editingItem.category, id: foundCategory.id });
+          }
+        }
+
+        // Update the form value if we found a valid ID
+        if (categoryValue && categories.some(cat => cat.id === categoryValue)) {
+          form.setValue('category', categoryValue);
+          console.log('✅ Updated category field to:', categoryValue);
+        }
+      }
+    }
+  }, [editingItem?.id, categories, form]);
+
   // Load existing item data when editing
   useEffect(() => {
     if (editingItem) {
@@ -280,43 +314,64 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
         finalColor: colorValue
       });
 
-      form.reset({
+      console.log('🔍 FORM RESET DEBUG - editingItem raw data:', {
+        id: editingItem.id,
+        name: editingItem.name,
+        rawIsVisibleOnWebsite: (editingItem as any).isVisibleOnWebsite,
+        typeOfValue: typeof (editingItem as any).isVisibleOnWebsite,
+        isDefined: (editingItem as any).isVisibleOnWebsite !== undefined,
+        booleanConversion: !!(editingItem as any).isVisibleOnWebsite,
+        ternaryResult: (editingItem as any).isVisibleOnWebsite !== undefined ? (editingItem as any).isVisibleOnWebsite : true,
+        fullEditingItem: editingItem,
+      });
+
+      const resetData = {
         name: editingItem.name,
         description: editingItem.description || '',
-        price: editingItem.price,
+        price: editingItem.price || 0, // Always number, never undefined
         category: categoryValue, // Use the resolved category ID
         color: colorValue,
         isAvailable: editingItem.isAvailable,
         isActive: true, // Default value as it's not in the MenuItem type
         isCustomizable: (editingItem as any).isCustomizable || false, // ✅ NEW: Load isCustomizable value
         isPrintableInKitchen: (editingItem as any).isPrintableInKitchen !== undefined ? (editingItem as any).isPrintableInKitchen : true, // Default to true if not set
+        isVisibleOnWebsite: (editingItem as any).isVisibleOnWebsite !== undefined ? (editingItem as any).isVisibleOnWebsite : true, // Load current website visibility setting
         ingredients: ingredients,
+      };
+
+      console.log('🔍 FORM RESET DEBUG - resetData:', {
+        isVisibleOnWebsite: resetData.isVisibleOnWebsite,
+        isPrintableInKitchen: resetData.isPrintableInKitchen,
       });
 
-      console.log('✅ Form reset with data:', {
-        name: editingItem.name,
-        category: categoryValue,
-        price: editingItem.price,
-        color: colorValue,
-        ingredientsCount: ingredients.length,
-      });
+      form.reset(resetData);
+
+      // Verify form state after reset
+      setTimeout(() => {
+        const currentValues = form.getValues();
+        console.log('🔍 FORM VALUES AFTER RESET:', {
+          isVisibleOnWebsite: currentValues.isVisibleOnWebsite,
+          isPrintableInKitchen: currentValues.isPrintableInKitchen,
+        });
+      }, 50);
     } else {
       // Reset to default values when not editing
       console.log('🔄 Resetting form to default values (new item mode)');
       form.reset({
         name: '',
         description: '',
-        price: undefined as any,
+        price: 0, // Default to 0, not undefined
         category: defaultCategory || (categories && categories.length > 0 ? categories[0].id : 'default'),
         color: undefined,
         isAvailable: true,
         isActive: true,
         isCustomizable: false,
         isPrintableInKitchen: true,
+        isVisibleOnWebsite: true, // ✅ FIX: Add default value for new items
         ingredients: [],
       });
     }
-  }, [editingItem, form, categories, defaultCategory]); // Removed stockItems, added categories and defaultCategory
+  }, [editingItem?.id]); // Only depend on ID for change detection
 
   // Calculate ingredient costs and profit margin
   const calculateCosts = () => {
@@ -376,6 +431,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
         isActive: !!data.isActive,
         isCustomizable: !!data.isCustomizable, // ✅ NEW: Include isCustomizable in formatted data
         isPrintableInKitchen: data.isPrintableInKitchen !== undefined ? !!data.isPrintableInKitchen : true, // Default to true
+        isVisibleOnWebsite: data.isVisibleOnWebsite !== undefined ? !!data.isVisibleOnWebsite : true, // Default to true
         ingredients: data.ingredients || [],
       };
 
@@ -460,6 +516,7 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
         isAvailable: data.isAvailable,
         isCustomizable: data.isCustomizable,
         isPrintableInKitchen: data.isPrintableInKitchen !== undefined ? data.isPrintableInKitchen : true, // Default to true
+        isVisibleOnWebsite: data.isVisibleOnWebsite !== undefined ? data.isVisibleOnWebsite : true, // Default to true
         ingredients: ingredientsList,
       };
 
@@ -471,12 +528,16 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
           category: data.category,
           isAvailable: data.isAvailable,
           isCustomizable: data.isCustomizable,
+          isPrintableInKitchen: data.isPrintableInKitchen,
+          isVisibleOnWebsite: data.isVisibleOnWebsite,
         },
         apiMenuItem: {
           ...apiMenuItem,
           categoryId: apiMenuItem.categoryId,
           category: apiMenuItem.category,
           price: apiMenuItem.price,
+          isPrintableInKitchen: apiMenuItem.isPrintableInKitchen,
+          isVisibleOnWebsite: apiMenuItem.isVisibleOnWebsite,
         },
         priceType: typeof data.price,
         categoryType: typeof data.category,
@@ -611,9 +672,6 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
                     <Input
                       placeholder='e.g., Grilled Ribeye Steak'
                       {...field}
-                      onChange={e => {
-                        field.onChange(e); // Call the original onChange
-                      }}
                       onBlur={async e => {
                         field.onBlur(); // Call the original onBlur
 
@@ -673,9 +731,6 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
                       placeholder='Describe the dish and its preparation...'
                       className='min-h-[100px]'
                       {...field}
-                      onChange={e => {
-                        field.onChange(e); // Call the original onChange
-                      }}
                     />
                   </FormControl>
                   <FormDescription>
@@ -698,32 +753,22 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
                       <Input
                         type='text'
                         placeholder='0.00'
-                        value={
-                          typeof field.value === 'number'
-                            ? field.value.toString()
-                            : ''
-                        }
+                        {...field}
+                        value={field.value?.toString() || ''}
                         onChange={e => {
-                          // Only allow numbers and a single decimal point
+                          // Let user type freely - don't sanitize yet
+                          field.onChange(e.target.value);
+                        }}
+                        onBlur={e => {
+                          // Sanitize and parse only when user leaves field
                           const value = e.target.value.replace(/[^0-9.]/g, '');
-                          // Ensure only one decimal point
                           const parts = value.split('.');
-                          const sanitizedValue =
-                            parts.length > 2
-                              ? `${parts[0]}.${parts.slice(1).join('')}`
-                              : value;
-
-                          if (sanitizedValue === '' || sanitizedValue === '.') {
-                            // Don't set value for empty or invalid input - let validation handle it
-                            field.onChange(undefined);
-                            console.log('Price cleared - undefined');
-                          } else {
-                            const numValue = parseFloat(sanitizedValue);
-                            if (!isNaN(numValue)) {
-                              field.onChange(numValue);
-                              console.log('✅ Price set to:', numValue);
-                            }
-                          }
+                          const sanitizedValue = parts.length > 2
+                            ? `${parts[0]}.${parts.slice(1).join('')}`
+                            : value;
+                          const numValue = parseFloat(sanitizedValue) || 0;
+                          field.onChange(numValue);
+                          console.log('✅ Price set to:', numValue);
                         }}
                       />
                     </FormControl>
@@ -963,12 +1008,16 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
                                 placeholder='0'
                                 className='w-24'
                                 {...field}
+                                value={field.value?.toString() || ''}
                                 onChange={e => {
-                                  const value = e.target.value.replace(
-                                    /[^0-9.]/g,
-                                    ''
-                                  );
-                                  field.onChange(parseFloat(value) || 0);
+                                  // Let user type freely
+                                  field.onChange(e.target.value);
+                                }}
+                                onBlur={e => {
+                                  // Sanitize and parse when user leaves field
+                                  const value = e.target.value.replace(/[^0-9.]/g, '');
+                                  const numValue = parseFloat(value) || 0;
+                                  field.onChange(numValue);
                                 }}
                               />
                             </FormControl>
@@ -1150,6 +1199,30 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
                     <FormDescription>
                       When enabled, this item will appear on kitchen tickets when ordered.
                       Disable for items that don't require kitchen preparation.
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
+            {/* Website Visibility Toggle */}
+            <FormField
+              control={form.control}
+              name='isVisibleOnWebsite'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
+                  <div className='space-y-0.5'>
+                    <FormLabel className='text-base'>
+                      Show on Website
+                    </FormLabel>
+                    <FormDescription>
+                      Display this item on the public menu website. Disable to keep this item local-only.
                     </FormDescription>
                   </div>
                   <FormControl>

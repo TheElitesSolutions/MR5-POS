@@ -10,19 +10,20 @@ import {
   Download,
   Printer,
   Package,
+  AlertCircle,
 } from 'lucide-react';
 import { useReportsStore } from '@/stores/reportsStore';
 import { useToast } from '@/hooks/use-toast';
 
 const SalesReports = () => {
-  const { salesReport, fetchSalesReport, exportSalesReport, dateRange, isLoading } =
+  const { salesReport, fetchSalesReport, exportSalesReport, dateRange, isLoading, error } =
     useReportsStore();
   const [isExporting, setIsExporting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
     fetchSalesReport(dateRange);
-  }, [dateRange]);
+  }, [dateRange, fetchSalesReport]);
 
   const handleExport = async () => {
     setIsExporting(true);
@@ -51,6 +52,21 @@ const SalesReports = () => {
     return (
       <div className='flex h-96 items-center justify-center'>
         <div className='h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600'></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className='flex h-96 items-center justify-center'>
+        <div className='text-center'>
+          <AlertCircle className='h-12 w-12 text-red-500 mx-auto mb-4' />
+          <p className='text-red-600 dark:text-red-400 mb-2'>Failed to load sales report</p>
+          <p className='text-sm text-gray-600 dark:text-gray-400 mb-4'>{error}</p>
+          <Button onClick={() => fetchSalesReport(dateRange)} variant='outline'>
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }
@@ -119,7 +135,7 @@ const SalesReports = () => {
       </div>
 
       {/* Sales Summary Cards */}
-      <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+      <div className='grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4'>
         <Card>
           <CardContent className='p-4'>
             <div className='flex items-center space-x-3'>
@@ -127,7 +143,7 @@ const SalesReports = () => {
                 <DollarSign className='h-5 w-5 text-green-600 dark:text-green-400' />
               </div>
               <div>
-                <div className='text-2xl font-bold text-gray-900 dark:text-white'>
+                <div className='text-xl lg:text-2xl font-bold text-gray-900 dark:text-white'>
                   {formatCurrency(salesReport.totalRevenue)}
                 </div>
                 <div className='text-sm text-gray-600 dark:text-gray-400'>
@@ -145,7 +161,7 @@ const SalesReports = () => {
                 <ShoppingCart className='h-5 w-5 text-blue-600 dark:text-blue-400' />
               </div>
               <div>
-                <div className='text-2xl font-bold text-gray-900 dark:text-white'>
+                <div className='text-xl lg:text-2xl font-bold text-gray-900 dark:text-white'>
                   {salesReport.totalOrders}
                 </div>
                 <div className='text-sm text-gray-600 dark:text-gray-400'>
@@ -163,7 +179,7 @@ const SalesReports = () => {
                 <TrendingUp className='h-5 w-5 text-purple-600 dark:text-purple-400' />
               </div>
               <div>
-                <div className='text-2xl font-bold text-gray-900 dark:text-white'>
+                <div className='text-xl lg:text-2xl font-bold text-gray-900 dark:text-white'>
                   {formatCurrency(salesReport.averageOrderValue)}
                 </div>
                 <div className='text-sm text-gray-600 dark:text-gray-400'>
@@ -181,7 +197,7 @@ const SalesReports = () => {
                 <Package className='h-5 w-5 text-orange-600 dark:text-orange-400' />
               </div>
               <div>
-                <div className='text-2xl font-bold text-gray-900 dark:text-white'>
+                <div className='text-xl lg:text-2xl font-bold text-gray-900 dark:text-white'>
                   {salesReport.averageItemsPerOrder.toFixed(1)}
                 </div>
                 <div className='text-sm text-gray-600 dark:text-gray-400'>
@@ -213,8 +229,8 @@ const SalesReports = () => {
                 <tr className='border-b bg-gray-50 dark:bg-gray-800'>
                   <th className='p-3 text-left text-sm font-medium'>Order #</th>
                   <th className='p-3 text-left text-sm font-medium'>Time</th>
-                  <th className='p-3 text-left text-sm font-medium'>Type</th>
-                  <th className='p-3 text-left text-sm font-medium'>Table</th>
+                  <th className='p-3 text-left text-sm font-medium hidden lg:table-cell'>Type</th>
+                  <th className='p-3 text-left text-sm font-medium hidden xl:table-cell'>Table</th>
                   <th className='p-3 text-right text-sm font-medium'>Items</th>
                   <th className='p-3 text-right text-sm font-medium'>Total</th>
                 </tr>
@@ -241,7 +257,7 @@ const SalesReports = () => {
                           {formatDate(order.createdAt)}
                         </div>
                       </td>
-                      <td className='p-3'>
+                      <td className='p-3 hidden lg:table-cell'>
                         <span
                           className={`inline-flex rounded-full px-2 py-1 text-xs font-medium ${
                             order.type === 'DINE_IN'
@@ -254,7 +270,7 @@ const SalesReports = () => {
                           {formatOrderType(order.type)}
                         </span>
                       </td>
-                      <td className='p-3 text-gray-600 dark:text-gray-400'>
+                      <td className='p-3 text-gray-600 dark:text-gray-400 hidden xl:table-cell'>
                         {(order as any).table?.name || order.tableName || '-'}
                       </td>
                       <td className='p-3 text-right font-medium'>

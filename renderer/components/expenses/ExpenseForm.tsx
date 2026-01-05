@@ -205,6 +205,7 @@ const ExpenseForm = memo(
         date: new Date(),
         notes: '',
       },
+      mode: 'onBlur', // Validate when user leaves field, not on every keystroke
     });
 
     const stockForm = useForm<StockPurchaseData>({
@@ -214,6 +215,7 @@ const ExpenseForm = memo(
         totalAmount: totalAmount,
         date: new Date(),
       },
+      mode: 'onBlur', // Validate when user leaves field, not on every keystroke
     });
 
     // Debug form initialization (reduced verbosity)
@@ -1452,15 +1454,17 @@ const ExpenseForm = memo(
                                     {...field}
                                     type='text'
                                     placeholder='0'
-                                    value={field.value || ''}
+                                    value={field.value?.toString() || ''}
                                     onChange={e => {
-                                      const value = e.target.value.replace(
-                                        /[^0-9.]/g,
-                                        ''
-                                      );
+                                      // Let user type freely
+                                      field.onChange(e.target.value);
+                                    }}
+                                    onBlur={e => {
+                                      // Sanitize and parse when user leaves field
+                                      const value = e.target.value.replace(/[^0-9.]/g, '');
                                       const numValue = parseFloat(value) || 0;
                                       appLogger.debug(
-                                        `DEBUG: Quantity onChange - new value:`,
+                                        `DEBUG: Quantity onBlur - new value:`,
                                         numValue
                                       );
                                       field.onChange(numValue);

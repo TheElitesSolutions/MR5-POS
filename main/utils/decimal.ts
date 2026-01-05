@@ -6,10 +6,9 @@
  */
 
 import { Decimal as DecimalJS } from 'decimal.js';
-import { Prisma } from '@prisma/client';
 import { logError } from '../error-handler';
 
-export type Decimal = Prisma.Decimal | DecimalJS;
+export type Decimal = DecimalJS;
 
 /**
  * Compare two Decimal values

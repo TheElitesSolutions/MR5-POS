@@ -34,7 +34,7 @@ export function MenuSyncSettings() {
     }
 
     try {
-      const response = await window.electronAPI.ipc.invoke('mr5pos:sync:get-status');
+      const response = await window.electronAPI.ipc.invoke('mr5pos:sync:status');
       if (response.success && response.data) {
         const { syncStatus, schedulerStatus, isConfigured } = response.data;
         setIsConfigured(isConfigured);
@@ -63,7 +63,7 @@ export function MenuSyncSettings() {
     setMessage({ type: 'info', text: 'Syncing menu to website...' });
 
     try {
-      const response = await window.electronAPI.ipc.invoke('mr5pos:sync:manual-sync');
+      const response = await window.electronAPI.ipc.invoke('mr5pos:sync:manual');
       if (response.success) {
         const { categoriesSynced, itemsSynced, addOnsSynced } = response.data;
         setMessage({
@@ -102,7 +102,7 @@ export function MenuSyncSettings() {
 
     try {
       const newState = !autoSyncEnabled;
-      const response = await window.electronAPI.ipc.invoke('mr5pos:sync:set-auto-sync', newState);
+      const response = await window.electronAPI.ipc.invoke('mr5pos:sync:set-auto', newState);
       if (response.success) {
         setAutoSyncEnabled(newState);
         setMessage({
