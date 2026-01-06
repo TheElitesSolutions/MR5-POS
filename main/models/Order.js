@@ -467,29 +467,25 @@ export class OrderModel {
     mapPrismaOrder(order, table) {
         try {
             // Debug logging for order items
-            console.log(`📋 OrderModel.mapPrismaOrder - Processing order ${order.id}:`, {
-                orderId: order.id,
-                orderNumber: order.orderNumber,
-                hasItems: !!order.items,
-                itemsCount: order.items?.length || 0,
-                items: order.items?.slice(0, 2).map((item) => ({
-                    id: item.id,
-                    menuItemId: item.menuItemId,
-                    name: item.name || item.menuItem?.name,
-                    quantity: item.quantity,
-                    unitPrice: item.unitPrice,
-                    totalPrice: item.totalPrice,
-                    hasAddons: !!item.addons,
-                    addonsCount: item.addons?.length || 0
-                }))
-            });
+            logger.info(`📋 OrderModel.mapPrismaOrder - Processing order ${order.id}: ` +
+                `orderId=${order.id}, orderNumber=${order.orderNumber}, ` +
+                `hasItems=${!!order.items}, itemsCount=${order.items?.length || 0}`);
             // Map status from Prisma enum to application enum
             const mappedStatus = this.mapPrismaOrderStatusToAppStatus(order.status);
+            // Log the raw values from database
+            logger.info(`🔍 [DEBUG-MAP] mapPrismaOrder - Order ${order.id} RAW values from DB: ` +
+                `order.subtotal=${order.subtotal} (type=${typeof order.subtotal}), ` +
+                `order.tax=${order.tax} (type=${typeof order.tax}), ` +
+                `order.total=${order.total} (type=${typeof order.total})`);
             // Extract properties safely with fallbacks
             const total = order.total ? decimalToNumber(order.total) : 0;
             const tax = order.tax ? decimalToNumber(order.tax) : 0;
             const subtotal = order.subtotal ? decimalToNumber(order.subtotal) : 0;
             const tip = order.tip ? decimalToNumber(order.tip) : null;
+            logger.info(`🔍 [DEBUG-MAP] mapPrismaOrder - Order ${order.id} AFTER decimalToNumber conversion: ` +
+                `subtotal=${subtotal} (type=${typeof subtotal}), ` +
+                `tax=${tax} (type=${typeof tax}), ` +
+                `total=${total} (type=${typeof total})`);
             // Handle paymentMethod safely
             let paymentMethod = null;
             if (order.paymentMethod) {
@@ -1037,6 +1033,20 @@ export class OrderModel {
     }
     async complete(id) {
         try {
+            logger.info(`🔍 [DEBUG-COMPLETE] Starting order completion for ${id}`);
+            // ✅ FIX: Recalculate order totals before completing to ensure accuracy
+            logger.info(`🔍 [DEBUG-COMPLETE] Calling recalculateOrderTotals for ${id}`);
+            await this.recalculateOrderTotals(id);
+            logger.info(`🔍 [DEBUG-COMPLETE] recalculateOrderTotals completed for ${id}`);
+            // Fetch the order to check totals after recalculation
+            const orderBeforeComplete = await this.prisma.order.findUnique({
+                where: { id },
+                select: { subtotal: true, tax: true, total: true },
+            });
+            logger.info(`🔍 [DEBUG-COMPLETE] Order totals in DB AFTER recalculation: ` +
+                `subtotal=${orderBeforeComplete?.subtotal} (type=${typeof orderBeforeComplete?.subtotal}), ` +
+                `tax=${orderBeforeComplete?.tax} (type=${typeof orderBeforeComplete?.tax}), ` +
+                `total=${orderBeforeComplete?.total} (type=${typeof orderBeforeComplete?.total})`);
             const order = await this.prisma.order.update({
                 where: { id },
                 data: {
@@ -1050,9 +1060,18 @@ export class OrderModel {
                     payments: true,
                 },
             });
+            logger.info(`🔍 [DEBUG-COMPLETE] Order from DB after status update: ` +
+                `subtotal=${order.subtotal} (type=${typeof order.subtotal}), ` +
+                `tax=${order.tax} (type=${typeof order.tax}), ` +
+                `total=${order.total} (type=${typeof order.total})`);
+            const mappedOrder = this.mapPrismaOrder(order);
+            logger.info(`🔍 [DEBUG-COMPLETE] Mapped order BEFORE return: ` +
+                `subtotal=${mappedOrder.subtotal} (type=${typeof mappedOrder.subtotal}), ` +
+                `tax=${mappedOrder.tax} (type=${typeof mappedOrder.tax}), ` +
+                `total=${mappedOrder.total} (type=${typeof mappedOrder.total})`);
             return {
                 success: true,
-                data: this.mapPrismaOrder(order),
+                data: mappedOrder,
                 timestamp: getCurrentLocalDateTime(),
             };
         }
@@ -1953,11 +1972,26 @@ export class OrderModel {
                 addons: true, // Include for debugging/verification
             },
         });
+        logger.info(`🔍 [DEBUG] recalculateOrderTotals - Order ${orderId} has ${orderItems.length} items`);
+        // Log each item's details for debugging
+        orderItems.forEach((item, index) => {
+            logger.info(`🔍 [DEBUG] Item ${index + 1}: id=${item.id}, ` +
+                `totalPrice=${item.totalPrice}, ` +
+                `type=${typeof item.totalPrice}, ` +
+                `quantity=${item.quantity}, ` +
+                `unitPrice=${item.unitPrice}, ` +
+                `addons=${item.addons?.length || 0}`);
+        });
         // Calculate subtotal using Decimal arithmetic
         // ✅ item.totalPrice now includes addon prices, so this calculation is correct
         let subtotal = new DecimalJS(0);
         for (const item of orderItems) {
+            logger.info(`🔍 [DEBUG] Adding item.totalPrice to subtotal: ` +
+                `current subtotal=${subtotal}, ` +
+                `item.totalPrice=${item.totalPrice}, ` +
+                `type=${typeof item.totalPrice}`);
             subtotal = addDecimals(subtotal, item.totalPrice);
+            logger.info(`🔍 [DEBUG] After addition: subtotal=${subtotal}`);
         }
         // No tax calculation
         const tax = new DecimalJS(0);
@@ -1966,10 +2000,23 @@ export class OrderModel {
         const total = subtotal.add(deliveryFee);
         logger.info(`📊 ORDER TOTAL RECALCULATION: Order ${orderId} - Subtotal: ${subtotal} ` +
             `(from ${orderItems.length} items), DeliveryFee: ${deliveryFee}, Total: ${total}`);
+        // Log the values being converted
+        const subtotalNumber = subtotal.toNumber();
+        const taxNumber = tax.toNumber();
+        const totalNumber = total.toNumber();
+        logger.info(`🔍 [DEBUG] Converting to numbers BEFORE database save: ` +
+            `subtotal.toNumber()=${subtotalNumber} (type=${typeof subtotalNumber}), ` +
+            `tax.toNumber()=${taxNumber} (type=${typeof taxNumber}), ` +
+            `total.toNumber()=${totalNumber} (type=${typeof totalNumber})`);
         await this.prisma.order.update({
             where: { id: orderId },
-            data: { subtotal, tax, total },
+            data: {
+                subtotal: subtotalNumber,
+                tax: taxNumber,
+                total: totalNumber
+            },
         });
+        logger.info(`✅ [DEBUG] Database update completed for order ${orderId}`);
     }
     /**
      * Calculate and update order totals within an existing transaction.
@@ -1995,10 +2042,25 @@ export class OrderModel {
             where: { orderId },
             include: { addons: true }, // Include for debugging/verification
         });
+        logger.info(`🔍 [DEBUG-TX] calculateAndUpdateTotalsInTransaction - Order ${orderId} has ${orderItems.length} items`);
+        // Log each item's details for debugging
+        orderItems.forEach((item, index) => {
+            logger.info(`🔍 [DEBUG-TX] Item ${index + 1}: id=${item.id}, ` +
+                `totalPrice=${item.totalPrice}, ` +
+                `type=${typeof item.totalPrice}, ` +
+                `quantity=${item.quantity}, ` +
+                `unitPrice=${item.unitPrice}, ` +
+                `addons=${item.addons?.length || 0}`);
+        });
         // Calculate subtotal using Decimal arithmetic
         let subtotal = new DecimalJS(0);
         for (const item of orderItems) {
+            logger.info(`🔍 [DEBUG-TX] Adding item.totalPrice to subtotal: ` +
+                `current subtotal=${subtotal}, ` +
+                `item.totalPrice=${item.totalPrice}, ` +
+                `type=${typeof item.totalPrice}`);
             subtotal = addDecimals(subtotal, item.totalPrice);
+            logger.info(`🔍 [DEBUG-TX] After addition: subtotal=${subtotal}`);
         }
         // No tax calculation
         const tax = new DecimalJS(0);
@@ -2007,11 +2069,24 @@ export class OrderModel {
         const total = subtotal.add(deliveryFee);
         logger.info(`📊 [TRANSACTION] Order ${orderId}: ${orderItems.length} items, ` +
             `Subtotal: ${subtotal}, DeliveryFee: ${deliveryFee}, Total: ${total}`);
+        // Log the values being converted
+        const subtotalNumber = subtotal.toNumber();
+        const taxNumber = tax.toNumber();
+        const totalNumber = total.toNumber();
+        logger.info(`🔍 [DEBUG-TX] Converting to numbers BEFORE database save: ` +
+            `subtotal.toNumber()=${subtotalNumber} (type=${typeof subtotalNumber}), ` +
+            `tax.toNumber()=${taxNumber} (type=${typeof taxNumber}), ` +
+            `total.toNumber()=${totalNumber} (type=${typeof totalNumber})`);
         // Update order totals WITHIN the transaction
         await tx.order.update({
             where: { id: orderId },
-            data: { subtotal, tax, total },
+            data: {
+                subtotal: subtotalNumber,
+                tax: taxNumber,
+                total: totalNumber
+            },
         });
+        logger.info(`✅ [DEBUG-TX] Transaction database update completed for order ${orderId}`);
         return total;
     }
     async getTodaysOrders() {

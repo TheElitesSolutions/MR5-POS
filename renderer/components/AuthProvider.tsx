@@ -148,11 +148,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // This would clear auth on every route change, breaking authentication
   // For security in Electron desktop app, tokens are cleared on app close by the OS
   useEffect(() => {
-    // Skip for Electron environment
+    // ✅ FIX: Always setup cleanup to avoid React hooks error
+    // Move condition inside effect instead of early return
     const isElectron = typeof window !== 'undefined' && window.electronAPI;
     if (isElectron) {
       console.log('AuthProvider: Skipping beforeunload handler for Electron app');
-      return;
+      return () => {}; // Return empty cleanup function
     }
 
     const handleBeforeUnload = () => {
@@ -175,7 +176,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
 
   // Simplified token monitoring
   useEffect(() => {
-    if (!accessToken || !hasInitialized) return;
+    // ✅ FIX: Always setup cleanup to avoid React hooks error
+    // Move condition inside effect instead of early return
+    if (!accessToken || !hasInitialized) {
+      return () => {}; // Return empty cleanup function
+    }
 
     // Set up simple refresh interval
     // Temporarily disabled for desktop version
@@ -196,11 +201,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     // ); // 15 minutes
 
     // return () => clearInterval(refreshInterval);
+    return () => {}; // Return empty cleanup since interval is disabled
   }, [accessToken, refreshToken, refreshAccessToken, hasInitialized]);
 
   // Session timeout for security (30 minutes of inactivity)
   useEffect(() => {
-    if (!isAuthenticated || !hasInitialized) return;
+    // ✅ FIX: Always setup cleanup to avoid React hooks error
+    // Move condition inside effect instead of early return
+    if (!isAuthenticated || !hasInitialized) {
+      // Not authenticated - no timeout needed, but return empty cleanup
+      return () => {};
+    }
 
     let timeoutId: NodeJS.Timeout;
     const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes

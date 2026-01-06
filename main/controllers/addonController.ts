@@ -10,6 +10,7 @@ import { BaseController } from './baseController';
 import { IPCResponse } from '../types';
 import { AddonService } from '../services/AddonService';
 import { AddonCacheService } from '../services/AddonCacheService';
+import { OrderModel } from '../models/Order';
 import {
   AddonError,
   AddonErrorHandler,
@@ -71,10 +72,12 @@ export interface RemoveAddonFromOrderItemRequest {
 export class AddonController extends BaseController {
   private addonService: AddonService;
   private cacheService: AddonCacheService;
+  private orderModel: OrderModel;
 
   constructor() {
     super();
     this.addonService = new AddonService(prisma);
+    this.orderModel = new OrderModel(prisma as any);
 
     // Initialize cache service with configuration
     this.cacheService = new AddonCacheService(this.addonService, {
@@ -629,7 +632,14 @@ export class AddonController extends BaseController {
         return this.createErrorResponse(errorMessage);
       }
 
-      console.log(`✅ [AddonController] Successfully added ${result.data?.length || 0} addons`);
+      console.log(`✅ [AddonController] Successfully added ${result.data?.assignments?.length || 0} addons`);
+
+      // CRITICAL FIX: Recalculate order totals after adding addons
+      const orderId = result.data?.orderId;
+      if (orderId) {
+        await this.orderModel.recalculateOrderTotals(orderId);
+        console.log(`✅ [AddonController] Order totals recalculated for order ${orderId}`);
+      }
 
       return this.createSuccessResponse(
         result.data,
@@ -676,6 +686,13 @@ export class AddonController extends BaseController {
 
       if (!result.success) {
         return this.createErrorResponse((result as any).error.message);
+      }
+
+      // CRITICAL FIX: Recalculate order totals after removing addon
+      const orderId = result.data?.orderId;
+      if (orderId) {
+        await this.orderModel.recalculateOrderTotals(orderId);
+        console.log(`✅ [AddonController] Order totals recalculated after addon removal for order ${orderId}`);
       }
 
       return this.createSuccessResponse(
@@ -746,6 +763,19 @@ export class AddonController extends BaseController {
 
       if (!result.success) {
         return this.createErrorResponse((result as any).error.message);
+      }
+
+      // ✅ CRITICAL FIX: Recalculate order totals after scaling addon quantities
+      // Since we removed the buggy increment operation from the service,
+      // we need to recalculate the entire order total here
+      const orderItem = await prisma.orderItem.findUnique({
+        where: { id: orderItemId },
+        select: { orderId: true },
+      });
+
+      if (orderItem?.orderId) {
+        await this.orderModel.recalculateOrderTotals(orderItem.orderId);
+        console.log(`✅ [AddonController] Order totals recalculated for order ${orderItem.orderId} after scaling addon quantities`);
       }
 
       return this.createSuccessResponse(

@@ -1116,19 +1116,12 @@ export class AddonService {
                         updatedAt: getCurrentLocalDateTime(),
                     },
                 });
-                // Update order total (use the orderId we fetched earlier)
-                await tx.order.update({
-                    where: { id: orderItem.orderId },
-                    data: {
-                        total: {
-                            increment: totalPriceChange,
-                        },
-                        subtotal: {
-                            increment: totalPriceChange,
-                        },
-                        updatedAt: getCurrentLocalDateTime(),
-                    },
-                });
+
+                // ✅ CRITICAL FIX: Removed order.update with increment operation
+                // SQLite doesn't support Prisma's increment properly - it writes literal
+                // objects like {increment: 2} to the database, corrupting the totals
+                // Instead, order totals will be recalculated by the controller after this transaction
+
                 return true;
             });
             return {

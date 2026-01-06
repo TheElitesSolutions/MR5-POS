@@ -19,7 +19,7 @@ import {
   Decimal,
 } from '../utils/decimal';
 import { Decimal as DecimalJS } from 'decimal.js';
-import { logger } from '../utils/logger';
+import { enhancedLogger } from '../utils/enhanced-logger';
 import { TableModel } from './Table';
 import { getCurrentLocalDateTime, dateToLocalDateTime } from '../utils/dateTime';
 
@@ -86,7 +86,7 @@ function mapPrismaOrderStatusToAppOrderStatus(
     case 'CANCELLED':
       return OrderStatus.CANCELLED;
     default:
-      logger.warn(
+      enhancedLogger.warn(
         `Invalid order status: ${status}, defaulting to PENDING`,
         'OrderModel'
       );
@@ -136,7 +136,7 @@ function mapPrismaOrderItemStatusToAppOrderItemStatus(
     case 'CANCELLED':
       return OrderItemStatus.CANCELLED;
     default:
-      logger.warn(
+      enhancedLogger.warn(
         `Invalid order item status: ${status}, defaulting to PENDING`,
         'OrderModel'
       );
@@ -311,7 +311,7 @@ export class OrderModel {
                   addonName: addonDetails?.name || addon.addonName || 'Unknown Addon',
                 };
               } catch (addonError) {
-                logger.error(
+                enhancedLogger.error(
                   `Failed to fetch addon details for addon ${addon.id} on item ${item.id}: ${addonError}`,
                   'OrderModel'
                 );
@@ -325,7 +325,7 @@ export class OrderModel {
             })
           );
         } catch (error) {
-          logger.error(
+          enhancedLogger.error(
             `Failed to fetch addons for order item ${item.id}: ${error}`,
             'OrderModel'
           );
@@ -366,7 +366,7 @@ export class OrderModel {
       case 'CANCELLED':
         return OrderStatus.CANCELLED;
       default:
-        logger.warn(
+        enhancedLogger.warn(
           `Invalid order status: ${status}, defaulting to PENDING`,
           'OrderModel'
         );
@@ -392,7 +392,7 @@ export class OrderModel {
       case 'CANCELLED':
         return OrderItemStatus.CANCELLED;
       default:
-        logger.warn(
+        enhancedLogger.warn(
           `Invalid order item status: ${status}, defaulting to PENDING`,
           'OrderModel'
         );
@@ -412,7 +412,7 @@ export class OrderModel {
       case OrderType.DELIVERY:
         return OrderType.DELIVERY;
       default:
-        logger.warn(
+        enhancedLogger.warn(
           `Invalid order type: ${type}, defaulting to DINE_IN`,
           'OrderModel'
         );
@@ -507,7 +507,7 @@ export class OrderModel {
       const basePrice = (item.unitPrice || item.price || 0) * item.quantity;
       const expectedAddonPrice = (item.totalPrice || 0) - basePrice;
       if (mapped.addons.length === 0 && expectedAddonPrice > 0.01) {
-        logger.warn(
+        enhancedLogger.warn(
           `Item ${item.id} has empty addons array but totalPrice suggests addons exist - potential data loss`,
           'OrderModel',
           {
@@ -533,7 +533,7 @@ export class OrderModel {
 
       return serialized;
     } catch (error) {
-      logger.error(
+      enhancedLogger.error(
         `Failed to map order item ${item?.id || 'unknown'}: ${error}`,
         'OrderModel'
       );
@@ -559,31 +559,35 @@ export class OrderModel {
   private mapPrismaOrder(order: any, table?: Table | null): Order {
     try {
       // Debug logging for order items
-      console.log(`📋 OrderModel.mapPrismaOrder - Processing order ${order.id}:`, {
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        hasItems: !!order.items,
-        itemsCount: order.items?.length || 0,
-        items: order.items?.slice(0, 2).map((item: any) => ({
-          id: item.id,
-          menuItemId: item.menuItemId,
-          name: item.name || item.menuItem?.name,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          totalPrice: item.totalPrice,
-          hasAddons: !!item.addons,
-          addonsCount: item.addons?.length || 0
-        }))
-      });
+      enhancedLogger.info(
+        `📋 OrderModel.mapPrismaOrder - Processing order ${order.id}: ` +
+        `orderId=${order.id}, orderNumber=${order.orderNumber}, ` +
+        `hasItems=${!!order.items}, itemsCount=${order.items?.length || 0}`
+      );
 
       // Map status from Prisma enum to application enum
       const mappedStatus = this.mapPrismaOrderStatusToAppStatus(order.status);
+
+      // Log the raw values from database
+      enhancedLogger.info(
+        `🔍 [DEBUG-MAP] mapPrismaOrder - Order ${order.id} RAW values from DB: ` +
+        `order.subtotal=${order.subtotal} (type=${typeof order.subtotal}), ` +
+        `order.tax=${order.tax} (type=${typeof order.tax}), ` +
+        `order.total=${order.total} (type=${typeof order.total})`
+      );
 
       // Extract properties safely with fallbacks
       const total = order.total ? decimalToNumber(order.total) : 0;
       const tax = order.tax ? decimalToNumber(order.tax) : 0;
       const subtotal = order.subtotal ? decimalToNumber(order.subtotal) : 0;
       const tip = order.tip ? decimalToNumber(order.tip) : null;
+
+      enhancedLogger.info(
+        `🔍 [DEBUG-MAP] mapPrismaOrder - Order ${order.id} AFTER decimalToNumber conversion: ` +
+        `subtotal=${subtotal} (type=${typeof subtotal}), ` +
+        `tax=${tax} (type=${typeof tax}), ` +
+        `total=${total} (type=${typeof total})`
+      );
 
       // Handle paymentMethod safely
       let paymentMethod: PaymentMethod | null = null;
@@ -636,7 +640,7 @@ export class OrderModel {
       // Bulletproof serialization: strip any remaining non-serializable properties
       return JSON.parse(JSON.stringify(mapped));
     } catch (error) {
-      logger.error(
+      enhancedLogger.error(
         `Failed to map order ${order?.id || 'unknown'}: ${error}`,
         'OrderModel'
       );
@@ -757,28 +761,24 @@ export class OrderModel {
         items: itemsWithRelations,
       };
 
-      // Debug logging
-      console.log(`🔍 OrderModel.findById: Fetched order ${id}:`, {
-        hasOrder: !!order,
-        hasItems: !!itemsWithRelations,
-        hasTable: !!table,
-        tableName: table?.name || 'N/A',
-        itemsCount: itemsWithRelations.length,
-        items: itemsWithRelations.map((i: any) => ({
-          id: i.id,
-          menuItemId: i.menuItemId,
-          quantity: i.quantity,
-          name: i.name || i.menuItem?.name,
-        })),
-      });
+      // Debug logging BEFORE mapPrismaOrder
+      enhancedLogger.info(
+        `🔍 [DEBUG-FINDBYID] About to call mapPrismaOrder for order ${id}: ` +
+        `hasOrder=${!!order}, hasItems=${!!itemsWithRelations}, ` +
+        `itemsCount=${itemsWithRelations.length}, hasTable=${!!table}`
+      );
+
+      const mappedOrder = orderWithItems ? this.mapPrismaOrder(orderWithItems, table) : null;
+
+      enhancedLogger.info(`🔍 [DEBUG-FINDBYID] mapPrismaOrder completed for order ${id}, returning data`);
 
       return {
         success: true,
-        data: orderWithItems ? this.mapPrismaOrder(orderWithItems, table) : null,
+        data: mappedOrder,
         timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
-      logger.error(
+      enhancedLogger.error(
         `Failed to get order by ID ${id}: ${
           error instanceof Error ? error.message : error
         }`,
@@ -880,7 +880,7 @@ export class OrderModel {
 
           if (fallbackUser) {
             validUserId = fallbackUser.id;
-            logger.warn(
+            enhancedLogger.warn(
               `Invalid userId provided (${orderData.userId}), using fallback user: ${fallbackUser.username}`
             );
           } else {
@@ -948,7 +948,7 @@ export class OrderModel {
         timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
-      logger.error(
+      enhancedLogger.error(
         `Failed to create order: ${
           error instanceof Error ? error.message : error
         }`,
@@ -967,7 +967,7 @@ export class OrderModel {
     try {
       // CRITICAL FIX: If deliveryFee is being updated, recalculate total
       if (updateData.deliveryFee !== undefined) {
-        logger.info(
+        enhancedLogger.info(
           `🚨 [DELIVERY FEE UPDATE] Updating deliveryFee for order ${id}, will recalculate total`
         );
 
@@ -999,7 +999,7 @@ export class OrderModel {
         updateData.subtotal = subtotal.toNumber();
         updateData.total = total.toNumber();
 
-        logger.info(
+        enhancedLogger.info(
           `✅ [DELIVERY FEE UPDATE] Recalculated total for order ${id}: ` +
           `subtotal=${subtotal}, deliveryFee=${deliveryFee}, total=${total}`
         );
@@ -1036,7 +1036,7 @@ export class OrderModel {
         timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
-      logger.error(
+      enhancedLogger.error(
         `Failed to update order ${id}: ${
           error instanceof Error ? error.message : error
         }`,
@@ -1192,7 +1192,7 @@ export class OrderModel {
           },
         });
 
-        logger.info(
+        enhancedLogger.info(
           `Order cancelled successfully with stock restoration`,
           `orderId: ${id}, itemsRestored: ${existingOrder.items.length}`
         );
@@ -1209,7 +1209,7 @@ export class OrderModel {
       if (error instanceof AppError) {
         throw error;
       }
-      logger.error(
+      enhancedLogger.error(
         `Failed to cancel order ${id}: ${
           error instanceof Error ? error.message : error
         }`,
@@ -1226,6 +1226,25 @@ export class OrderModel {
 
   async complete(id: string): Promise<IPCResponse<Order>> {
     try {
+      enhancedLogger.info(`🔍 [DEBUG-COMPLETE] Starting order completion for ${id}`);
+
+      // ✅ FIX: Recalculate order totals before completing to ensure accuracy
+      enhancedLogger.info(`🔍 [DEBUG-COMPLETE] Calling recalculateOrderTotals for ${id}`);
+      await this.recalculateOrderTotals(id);
+      enhancedLogger.info(`🔍 [DEBUG-COMPLETE] recalculateOrderTotals completed for ${id}`);
+
+      // Fetch the order to check totals after recalculation
+      const orderBeforeComplete = await this.prisma.order.findUnique({
+        where: { id },
+        select: { subtotal: true, tax: true, total: true },
+      });
+      enhancedLogger.info(
+        `🔍 [DEBUG-COMPLETE] Order totals in DB AFTER recalculation: ` +
+        `subtotal=${orderBeforeComplete?.subtotal} (type=${typeof orderBeforeComplete?.subtotal}), ` +
+        `tax=${orderBeforeComplete?.tax} (type=${typeof orderBeforeComplete?.tax}), ` +
+        `total=${orderBeforeComplete?.total} (type=${typeof orderBeforeComplete?.total})`
+      );
+
       const order = await this.prisma.order.update({
         where: { id },
         data: {
@@ -1240,13 +1259,29 @@ export class OrderModel {
         },
       });
 
+      enhancedLogger.info(
+        `🔍 [DEBUG-COMPLETE] Order from DB after status update: ` +
+        `subtotal=${order.subtotal} (type=${typeof order.subtotal}), ` +
+        `tax=${order.tax} (type=${typeof order.tax}), ` +
+        `total=${order.total} (type=${typeof order.total})`
+      );
+
+      const mappedOrder = this.mapPrismaOrder(order);
+
+      enhancedLogger.info(
+        `🔍 [DEBUG-COMPLETE] Mapped order BEFORE return: ` +
+        `subtotal=${mappedOrder.subtotal} (type=${typeof mappedOrder.subtotal}), ` +
+        `tax=${mappedOrder.tax} (type=${typeof mappedOrder.tax}), ` +
+        `total=${mappedOrder.total} (type=${typeof mappedOrder.total})`
+      );
+
       return {
         success: true,
-        data: this.mapPrismaOrder(order),
+        data: mappedOrder,
         timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
-      logger.error(
+      enhancedLogger.error(
         `Failed to complete order ${id}: ${
           error instanceof Error ? error.message : error
         }`,
@@ -1282,7 +1317,7 @@ export class OrderModel {
         timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
-      logger.error(
+      enhancedLogger.error(
         `Failed to get orders by table ${tableId}: ${
           error instanceof Error ? error.message : error
         }`,
@@ -1320,7 +1355,7 @@ export class OrderModel {
         timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
-      logger.error(
+      enhancedLogger.error(
         `Failed to get orders by type ${type}: ${
           error instanceof Error ? error.message : error
         }`,
@@ -1361,7 +1396,7 @@ export class OrderModel {
         timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
-      logger.error(
+      enhancedLogger.error(
         `Failed to get orders by status ${status}: ${
           error instanceof Error ? error.message : error
         }`,
@@ -1385,6 +1420,12 @@ export class OrderModel {
     try {
       // Convert application status to Prisma status
       const prismaStatus = mapAppOrderStatusToPrismaOrderStatus(status);
+
+      // ✅ FIX: Recalculate order totals when completing order
+      // This ensures dine-in/takeout orders have correct totals including addons
+      if (prismaStatus === 'COMPLETED') {
+        await this.recalculateOrderTotals(id);
+      }
 
       const order = await this.prisma.order.update({
         where: { id },
@@ -1413,7 +1454,7 @@ export class OrderModel {
         timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
-      logger.error(
+      enhancedLogger.error(
         `Failed to update order status for ${id} to ${status}: ${
           error instanceof Error ? error.message : error
         }`,
@@ -1545,7 +1586,7 @@ export class OrderModel {
     // ✅ FIX: If same request is already in progress, return the existing promise
     const existingRequest = this.pendingAddItemRequests.get(requestKey);
     if (existingRequest) {
-      logger.info(`🔒 [RACE CONDITION PREVENTED] Duplicate addItem request detected for key: ${requestKey}`);
+      enhancedLogger.info(`🔒 [RACE CONDITION PREVENTED] Duplicate addItem request detected for key: ${requestKey}`);
       return existingRequest;
     }
 
@@ -1621,7 +1662,7 @@ export class OrderModel {
 
         // CRITICAL FIX: Deduct stock BEFORE modifying order items
         if (inventoryItems && inventoryItems.length > 0) {
-          logger.info(
+          enhancedLogger.info(
             `🔍 STOCK DEDUCTION: Processing for ${menuItem.name} (quantity: ${item.quantity})`
           );
 
@@ -1689,7 +1730,7 @@ export class OrderModel {
               },
             });
 
-            logger.info(
+            enhancedLogger.info(
               `✅ STOCK DEDUCTED: ${inventoryItem.itemName} (${currentStock} → ${newStock} ${inventoryItem.unit})`
             );
           }
@@ -1773,7 +1814,7 @@ export class OrderModel {
         // This ensures atomicity - items and totals updated together
         await this.calculateAndUpdateTotalsInTransaction(tx, orderId);
 
-        logger.info(
+        enhancedLogger.info(
           `✅ [TRANSACTION] Item added and totals updated atomically for order ${orderId}`
         );
 
@@ -1795,7 +1836,7 @@ export class OrderModel {
           const totalIsZero = new DecimalJS(validationOrder.total).equals(0);
 
           if (hasItems && totalIsZero) {
-            logger.error(
+            enhancedLogger.error(
               `🚨 CRITICAL: Order ${orderId} has ${validationOrder.items.length} items ` +
               `but total is $0! Attempting recovery...`
             );
@@ -1803,14 +1844,14 @@ export class OrderModel {
             // Attempt recovery using the external recalculation method
             await this.recalculateOrderTotals(orderId);
           } else {
-            logger.info(
+            enhancedLogger.info(
               `✅ [VALIDATION] Order ${orderId}: ${validationOrder.items.length} items, ` +
               `Total: $${validationOrder.total} - OK`
             );
           }
         }
       } catch (validationError) {
-        logger.error(`⚠️ Validation failed for order ${orderId}: ${validationError}`);
+        enhancedLogger.error(`⚠️ Validation failed for order ${orderId}: ${validationError}`);
         // Don't throw - validation failure shouldn't block the operation
       }
 
@@ -1820,7 +1861,7 @@ export class OrderModel {
         timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
-      logger.error(
+      enhancedLogger.error(
         `Failed to add item to order: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
       return {
@@ -1868,7 +1909,7 @@ export class OrderModel {
 
         // CRITICAL FIX: Restore stock BEFORE removing the order item
         if (inventoryItems && inventoryItems.length > 0) {
-          logger.info(
+          enhancedLogger.info(
             `🔄 STOCK RESTORATION: Processing for ${orderItem.menuItem.name} (quantity: ${orderItem.quantity})`
           );
 
@@ -1894,7 +1935,7 @@ export class OrderModel {
             });
 
             if (!inventoryItem) {
-              logger.warn(
+              enhancedLogger.warn(
                 `Inventory item ${inventoryId} not found during restoration`
               );
               continue;
@@ -1930,7 +1971,7 @@ export class OrderModel {
               },
             });
 
-            logger.info(
+            enhancedLogger.info(
               `✅ STOCK RESTORED: ${inventoryItem.itemName} (${currentStock} → ${newStock} ${inventoryItem.unit})`
             );
           }
@@ -1945,7 +1986,7 @@ export class OrderModel {
         // This ensures atomicity - item removal and total update happen together
         await this.calculateAndUpdateTotalsInTransaction(tx, orderItem.orderId);
 
-        logger.info(
+        enhancedLogger.info(
           `✅ [TRANSACTION] Item removed and totals updated atomically for order ${orderItem.orderId}`
         );
 
@@ -1964,7 +2005,7 @@ export class OrderModel {
           const totalIsZero = new DecimalJS(validationOrder.total).equals(0);
 
           if (hasItems && totalIsZero) {
-            logger.error(
+            enhancedLogger.error(
               `🚨 CRITICAL: Order ${result} has ${validationOrder.items.length} items ` +
               `but total is $0! Attempting recovery...`
             );
@@ -1972,14 +2013,14 @@ export class OrderModel {
             // Attempt recovery using the external recalculation method
             await this.recalculateOrderTotals(result);
           } else {
-            logger.info(
+            enhancedLogger.info(
               `✅ [VALIDATION] Order ${result}: ${validationOrder.items.length} items, ` +
               `Total: $${validationOrder.total} - OK`
             );
           }
         }
       } catch (validationError) {
-        logger.error(`⚠️ Validation failed for order ${result}: ${validationError}`);
+        enhancedLogger.error(`⚠️ Validation failed for order ${result}: ${validationError}`);
         // Don't throw - validation failure shouldn't block the operation
       }
 
@@ -1989,7 +2030,7 @@ export class OrderModel {
         timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
-      logger.error(
+      enhancedLogger.error(
         `Failed to remove item from order: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
       return {
@@ -2052,7 +2093,7 @@ export class OrderModel {
           inventoryItems &&
           inventoryItems.length > 0
         ) {
-          logger.info(
+          enhancedLogger.info(
             `🔄 STOCK ADJUSTMENT: Processing for ${orderItem.menuItem.name} (${currentQuantity} → ${newQuantity})`
           );
 
@@ -2079,7 +2120,7 @@ export class OrderModel {
             });
 
             if (!inventoryItem) {
-              logger.warn(
+              enhancedLogger.warn(
                 `Inventory item ${inventoryId} not found during quantity update`
               );
               continue;
@@ -2142,7 +2183,7 @@ export class OrderModel {
             });
 
             const actionEmoji = quantityDifference > 0 ? '📉' : '📈';
-            logger.info(
+            enhancedLogger.info(
               `${actionEmoji} STOCK ADJUSTED: ${inventoryItem.itemName} (${currentStock} → ${newStock} ${inventoryItem.unit})`
             );
           }
@@ -2167,7 +2208,7 @@ export class OrderModel {
           });
 
           if (orderItemAddons && orderItemAddons.length > 0) {
-            logger.info(
+            enhancedLogger.info(
               `🔄 ADDON STOCK ADJUSTMENT: Processing ${orderItemAddons.length} addons for order item quantity change (${currentQuantity} → ${newQuantity})`
             );
 
@@ -2238,7 +2279,7 @@ export class OrderModel {
                     });
 
                     const actionEmoji = quantityDifference > 0 ? '📉' : '📈';
-                    logger.info(
+                    enhancedLogger.info(
                       `${actionEmoji} ADDON STOCK ADJUSTED: ${addon.name} → ${addonInvItem.inventory.itemName} (${currentStock} → ${newStock})`
                     );
                   }
@@ -2280,11 +2321,11 @@ export class OrderModel {
         // ✅ CRITICAL: Do NOT modify addon quantities in database - they represent per-item quantities
         // Frontend will multiply addon.quantity × item.quantity for display
 
-        logger.debug(
+        enhancedLogger.debug(
           `📦 ADDON CALCULATION: Per-item cost: ${addonTotalPerItem}, Item qty: ${newQuantity}, Total: ${addonTotalScaled}`
         );
 
-        logger.info(
+        enhancedLogger.info(
           `💰 PRICE CALCULATION: Item ${orderItem.menuItem?.name || 'Unknown'} - Base: ${unitPrice} × ${newQuantity} = ${new DecimalJS(newQuantity).mul(unitPrice || 0)}, Addons: ${addonTotalPerItem} × ${newQuantity} = ${addonTotalScaled}, Total: ${new DecimalJS(newQuantity).mul(unitPrice || 0).add(addonTotalScaled)}`
         );
 
@@ -2344,7 +2385,7 @@ export class OrderModel {
         timestamp: getCurrentLocalDateTime(),
       };
     } catch (error) {
-      logger.error(
+      enhancedLogger.error(
         `Failed to update order item quantity: ${error instanceof Error ? error.message : 'Unknown error'}`
       );
       return {
@@ -2392,11 +2433,32 @@ export class OrderModel {
       },
     });
 
+    enhancedLogger.info(`🔍 [DEBUG] recalculateOrderTotals - Order ${orderId} has ${orderItems.length} items`);
+
+    // Log each item's details for debugging
+    orderItems.forEach((item, index) => {
+      enhancedLogger.info(
+        `🔍 [DEBUG] Item ${index + 1}: id=${item.id}, ` +
+        `totalPrice=${item.totalPrice}, ` +
+        `type=${typeof item.totalPrice}, ` +
+        `quantity=${item.quantity}, ` +
+        `unitPrice=${item.unitPrice}, ` +
+        `addons=${item.addons?.length || 0}`
+      );
+    });
+
     // Calculate subtotal using Decimal arithmetic
     // ✅ item.totalPrice now includes addon prices, so this calculation is correct
     let subtotal = new DecimalJS(0);
     for (const item of orderItems) {
+      enhancedLogger.info(
+        `🔍 [DEBUG] Adding item.totalPrice to subtotal: ` +
+        `current subtotal=${subtotal}, ` +
+        `item.totalPrice=${item.totalPrice}, ` +
+        `type=${typeof item.totalPrice}`
+      );
       subtotal = addDecimals(subtotal, item.totalPrice);
+      enhancedLogger.info(`🔍 [DEBUG] After addition: subtotal=${subtotal}`);
     }
 
     // No tax calculation
@@ -2406,15 +2468,33 @@ export class OrderModel {
     const deliveryFee = new DecimalJS(order.deliveryFee || 0);
     const total = subtotal.add(deliveryFee);
 
-    logger.info(
+    enhancedLogger.info(
       `📊 ORDER TOTAL RECALCULATION: Order ${orderId} - Subtotal: ${subtotal} ` +
       `(from ${orderItems.length} items), DeliveryFee: ${deliveryFee}, Total: ${total}`
     );
 
+    // Log the values being converted
+    const subtotalNumber = subtotal.toNumber();
+    const taxNumber = tax.toNumber();
+    const totalNumber = total.toNumber();
+
+    enhancedLogger.info(
+      `🔍 [DEBUG] Converting to numbers BEFORE database save: ` +
+      `subtotal.toNumber()=${subtotalNumber} (type=${typeof subtotalNumber}), ` +
+      `tax.toNumber()=${taxNumber} (type=${typeof taxNumber}), ` +
+      `total.toNumber()=${totalNumber} (type=${typeof totalNumber})`
+    );
+
     await this.prisma.order.update({
       where: { id: orderId },
-      data: { subtotal, tax, total },
+      data: {
+        subtotal: subtotalNumber,
+        tax: taxNumber,
+        total: totalNumber
+      },
     });
+
+    enhancedLogger.info(`✅ [DEBUG] Database update completed for order ${orderId}`);
   }
 
   /**
@@ -2447,10 +2527,31 @@ export class OrderModel {
       include: { addons: true }, // Include for debugging/verification
     });
 
+    enhancedLogger.info(`🔍 [DEBUG-TX] calculateAndUpdateTotalsInTransaction - Order ${orderId} has ${orderItems.length} items`);
+
+    // Log each item's details for debugging
+    orderItems.forEach((item, index) => {
+      enhancedLogger.info(
+        `🔍 [DEBUG-TX] Item ${index + 1}: id=${item.id}, ` +
+        `totalPrice=${item.totalPrice}, ` +
+        `type=${typeof item.totalPrice}, ` +
+        `quantity=${item.quantity}, ` +
+        `unitPrice=${item.unitPrice}, ` +
+        `addons=${item.addons?.length || 0}`
+      );
+    });
+
     // Calculate subtotal using Decimal arithmetic
     let subtotal = new DecimalJS(0);
     for (const item of orderItems) {
+      enhancedLogger.info(
+        `🔍 [DEBUG-TX] Adding item.totalPrice to subtotal: ` +
+        `current subtotal=${subtotal}, ` +
+        `item.totalPrice=${item.totalPrice}, ` +
+        `type=${typeof item.totalPrice}`
+      );
       subtotal = addDecimals(subtotal, item.totalPrice);
+      enhancedLogger.info(`🔍 [DEBUG-TX] After addition: subtotal=${subtotal}`);
     }
 
     // No tax calculation
@@ -2460,16 +2561,34 @@ export class OrderModel {
     const deliveryFee = new DecimalJS(order.deliveryFee || 0);
     const total = subtotal.add(deliveryFee);
 
-    logger.info(
+    enhancedLogger.info(
       `📊 [TRANSACTION] Order ${orderId}: ${orderItems.length} items, ` +
       `Subtotal: ${subtotal}, DeliveryFee: ${deliveryFee}, Total: ${total}`
+    );
+
+    // Log the values being converted
+    const subtotalNumber = subtotal.toNumber();
+    const taxNumber = tax.toNumber();
+    const totalNumber = total.toNumber();
+
+    enhancedLogger.info(
+      `🔍 [DEBUG-TX] Converting to numbers BEFORE database save: ` +
+      `subtotal.toNumber()=${subtotalNumber} (type=${typeof subtotalNumber}), ` +
+      `tax.toNumber()=${taxNumber} (type=${typeof taxNumber}), ` +
+      `total.toNumber()=${totalNumber} (type=${typeof totalNumber})`
     );
 
     // Update order totals WITHIN the transaction
     await tx.order.update({
       where: { id: orderId },
-      data: { subtotal, tax, total },
+      data: {
+        subtotal: subtotalNumber,
+        tax: taxNumber,
+        total: totalNumber
+      },
     });
+
+    enhancedLogger.info(`✅ [DEBUG-TX] Transaction database update completed for order ${orderId}`);
 
     return total;
   }
