@@ -460,6 +460,17 @@ class BaseModel {
     async update(args) {
         const { where, data, include } = args;
         const { sql: whereClause, params: whereParams } = buildWhereClause(where);
+
+        // CRITICAL SAFETY CHECK: Prevent UPDATE without WHERE clause
+        // This prevents catastrophic bugs where ALL rows get updated
+        if (!whereClause || whereClause.trim() === '') {
+            throw new Error(
+                `SAFETY ERROR: UPDATE operation on ${this.tableName} requires a WHERE clause. ` +
+                `Attempted to update without conditions, which would affect ALL rows. ` +
+                `Where parameter received: ${JSON.stringify(where)}`
+            );
+        }
+
         // Build SET clause
         const setClauses = [];
         const setParams = [];
@@ -503,6 +514,17 @@ class BaseModel {
         // First get the record to return it
         const record = await this.findUnique({ where });
         const { sql: whereClause, params } = buildWhereClause(where);
+
+        // CRITICAL SAFETY CHECK: Prevent DELETE without WHERE clause
+        // This prevents catastrophic bugs where ALL rows get deleted
+        if (!whereClause || whereClause.trim() === '') {
+            throw new Error(
+                `SAFETY ERROR: DELETE operation on ${this.tableName} requires a WHERE clause. ` +
+                `Attempted to delete without conditions, which would affect ALL rows. ` +
+                `Where parameter received: ${JSON.stringify(where)}`
+            );
+        }
+
         const query = `DELETE FROM ${this.tableName} ${whereClause}`;
         const stmt = this.db.prepare(query);
         stmt.run(...params);
@@ -713,6 +735,9 @@ let prismaClient = null;
 export function getPrismaClient() {
     if (!prismaClient) {
         prismaClient = new PrismaClient();
+        // CRITICAL: Ensure initialization happens before first use
+        // This initializes the database connection and all model properties
+        prismaClient.ensureInitialized();
     }
     return prismaClient;
 }
@@ -721,6 +746,11 @@ export function getPrismaClient() {
 const prismaProxy = new Proxy({}, {
     get(target, prop) {
         const client = getPrismaClient();
+        // CRITICAL: Defensively ensure initialization on EVERY property access
+        // This handles hot-reload scenarios where singleton might persist with old state
+        if (!client.isInitialized()) {
+            client.ensureInitialized();
+        }
         return client[prop];
     }
 });

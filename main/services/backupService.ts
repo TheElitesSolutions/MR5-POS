@@ -142,12 +142,23 @@ export class BackupService {
         'BackupService'
       );
 
+      // Ensure backup directory exists (double-check in case of initialization issues)
+      if (!fs.existsSync(this.backupPath)) {
+        logInfo(`Creating backup directory: ${this.backupPath}`, 'BackupService');
+        fs.mkdirSync(this.backupPath, { recursive: true });
+      }
+
       // Get the database connection
       const database = getDatabase();
 
       // Perform backup using better-sqlite3's built-in backup method
       // This creates a hot backup of the database without locking
       database.backup(backupFilePath);
+
+      // Verify backup file was created
+      if (!fs.existsSync(backupFilePath)) {
+        throw new Error(`Backup file was not created: ${backupFilePath}`);
+      }
 
       // Get file size
       const stats = fs.statSync(backupFilePath);

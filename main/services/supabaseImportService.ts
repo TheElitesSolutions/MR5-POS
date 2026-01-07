@@ -139,13 +139,12 @@ export class SupabaseImportService {
     try {
       logInfo('📥 Starting non-destructive import from Supabase...');
 
-      // Fetch existing local data for comparison using direct SQL (bypasses wrapper)
-      logInfo('Fetching existing local data...');
+      // Fetch existing local data for validation logging only
+      logInfo('Fetching existing local data for validation...');
       const db = getDatabase();
       const existingCategories = db.prepare('SELECT * FROM categories').all() as Array<any>;
       const existingItems = db.prepare('SELECT * FROM menu_items').all() as Array<any>;
       const existingAddons = db.prepare('SELECT * FROM addons').all() as Array<any>;
-      const existingAddonGroups = db.prepare('SELECT * FROM addon_groups').all() as Array<any>;
 
       // Use transaction for atomic all-or-nothing operation
       return await this.prisma.$transaction(async (tx) => {
@@ -159,24 +158,7 @@ export class SupabaseImportService {
         let addonsUpdated = 0;
         let assignmentsAdded = 0;
 
-        // Create lookup maps for matching (case-insensitive name matching)
-        const categoryMap = new Map(
-          existingCategories
-            .filter(c => c.name) // Filter out null/undefined names
-            .map(c => [c.name.toLowerCase(), c])
-        );
-        const itemMap = new Map(
-          existingItems
-            .filter(i => i.name) // Filter out null/undefined names
-            .map(i => [i.name.toLowerCase(), i])
-        );
-        const addonMap = new Map(
-          existingAddons
-            .filter(a => a.description) // Filter out null/undefined descriptions
-            .map(a => [a.description.toLowerCase(), a])
-        );
-
-        // Log filtered records
+        // Log invalid records (missing required fields)
         const invalidCats = existingCategories.filter(c => !c.name);
         const invalidItems = existingItems.filter(i => !i.name);
         const invalidAddons = existingAddons.filter(a => !a.description);
@@ -202,30 +184,59 @@ export class SupabaseImportService {
             continue;
           }
 
-          const existingCategory = categoryMap.get(supaCat.name.toLowerCase());
+          try {
+            // Try to find existing category by name (case-insensitive)
+            const existingCategory = await tx.category.findFirst({
+              where: {
+                name: {
+                  equals: supaCat.name,
+                  mode: 'insensitive',
+                },
+              },
+            });
 
-          if (existingCategory) {
-            // UPDATE existing category
-            await tx.category.update({
-              where: { id: existingCategory.id },
-              data: {
-                isActive: true,
-                sortOrder: supaCat.id,
-              },
-            });
-            localCategoryMap.set(supaCat.id, existingCategory.id);
-            categoriesUpdated++;
-          } else {
-            // CREATE new category
-            const localCategory = await tx.category.create({
-              data: {
-                name: supaCat.name,
-                isActive: true,
-                sortOrder: supaCat.id,
-              },
-            });
-            localCategoryMap.set(supaCat.id, localCategory.id);
-            categoriesAdded++;
+            if (existingCategory) {
+              // UPDATE existing category
+              await tx.category.update({
+                where: { id: existingCategory.id },
+                data: {
+                  isActive: true,
+                  sortOrder: supaCat.id,
+                },
+              });
+              localCategoryMap.set(supaCat.id, existingCategory.id);
+              categoriesUpdated++;
+            } else {
+              // CREATE new category
+              const localCategory = await tx.category.create({
+                data: {
+                  name: supaCat.name,
+                  isActive: true,
+                  sortOrder: supaCat.id,
+                },
+              });
+              localCategoryMap.set(supaCat.id, localCategory.id);
+              categoriesAdded++;
+            }
+          } catch (error: any) {
+            // Handle UNIQUE constraint errors gracefully
+            if (error.code === 'P2002' || error.message?.includes('UNIQUE constraint')) {
+              logInfo(`⚠️ Category "${supaCat.name}" already exists, skipping creation`);
+              // Try to find it and add to map
+              const existingCategory = await tx.category.findFirst({
+                where: {
+                  name: {
+                    equals: supaCat.name,
+                    mode: 'insensitive',
+                  },
+                },
+              });
+              if (existingCategory) {
+                localCategoryMap.set(supaCat.id, existingCategory.id);
+              }
+            } else {
+              throw error; // Re-throw if it's not a constraint error
+            }
           }
         }
 
@@ -250,40 +261,58 @@ export class SupabaseImportService {
             continue;
           }
 
-          const existingItem = itemMap.get(supaItem.name.toLowerCase());
+          try {
+            // Try to find existing item by name (case-insensitive)
+            const existingItem = await tx.menuItem.findFirst({
+              where: {
+                name: {
+                  equals: supaItem.name,
+                  mode: 'insensitive',
+                },
+              },
+            });
 
-          if (existingItem) {
-            // UPDATE existing item - only update fields from Supabase
-            await tx.menuItem.update({
-              where: { id: existingItem.id },
-              data: {
-                price: new Decimal(supaItem.price),
-                categoryId: localCategoryId,
-                sortOrder: supaItem.id,
-                // PRESERVE local-only fields: description, imageUrl, isActive,
-                // isPrintableInKitchen, isCustomizable (don't overwrite from Supabase)
-                // Note: is_special from Supabase is not used locally
-              },
-            });
-            itemsUpdated++;
-          } else {
-            // CREATE new item - provide defaults for all local-only fields
-            await tx.menuItem.create({
-              data: {
-                name: supaItem.name,
-                description: '', // Local-only field - default to empty
-                price: new Decimal(supaItem.price),
-                categoryId: localCategoryId,
-                imageUrl: null, // Local-only field - no image from website
-                isActive: true, // Local-only field - new items active by default
-                isCustomizable: false, // Local-only field - default not customizable
-                isPrintableInKitchen: true, // Local-only field - default printable
-                sortOrder: supaItem.id,
-                // Note: is_special from Supabase is not stored locally
-                // Note: isVisibleOnWebsite column not yet added to schema
-              },
-            });
-            itemsAdded++;
+            if (existingItem) {
+              // UPDATE existing item - only update fields from Supabase
+              await tx.menuItem.update({
+                where: { id: existingItem.id },
+                data: {
+                  price: new Decimal(supaItem.price),
+                  categoryId: localCategoryId,
+                  sortOrder: supaItem.id,
+                  // PRESERVE local-only fields: description, imageUrl, isActive,
+                  // isPrintableInKitchen, isCustomizable (don't overwrite from Supabase)
+                  // Note: is_special from Supabase is not used locally
+                },
+              });
+              itemsUpdated++;
+            } else {
+              // CREATE new item - provide defaults for all local-only fields
+              await tx.menuItem.create({
+                data: {
+                  name: supaItem.name,
+                  description: '', // Local-only field - default to empty
+                  price: new Decimal(supaItem.price),
+                  categoryId: localCategoryId,
+                  imageUrl: null, // Local-only field - no image from website
+                  isActive: true, // Local-only field - new items active by default
+                  isCustomizable: false, // Local-only field - default not customizable
+                  isPrintableInKitchen: true, // Local-only field - default printable
+                  sortOrder: supaItem.id,
+                  // Note: is_special from Supabase is not stored locally
+                  // Note: isVisibleOnWebsite column not yet added to schema
+                },
+              });
+              itemsAdded++;
+            }
+          } catch (error: any) {
+            // Handle UNIQUE constraint errors gracefully
+            if (error.code === 'P2002' || error.message?.includes('UNIQUE constraint')) {
+              logInfo(`⚠️ Menu item "${supaItem.name}" already exists, skipping creation`);
+              itemsSkipped++;
+            } else {
+              throw error; // Re-throw if it's not a constraint error
+            }
           }
         }
 
@@ -389,33 +418,50 @@ export class SupabaseImportService {
 
               if (!originalRecord) continue;
 
-              const existingAddon = addonMap.get(addonName);
+              try {
+                // Try to find existing addon by description (case-insensitive)
+                const existingAddon = await tx.addon.findFirst({
+                  where: {
+                    description: {
+                      equals: originalRecord.description,
+                      mode: 'insensitive',
+                    },
+                  },
+                });
 
-              if (existingAddon) {
-                // UPDATE existing addon
-                await tx.addon.update({
-                  where: { id: existingAddon.id },
-                  data: {
-                    price: new Decimal(originalRecord.price),
-                    addonGroupId: addonGroup.id,
-                    isActive: true,
-                    sortOrder: addonIndex++,
-                  },
-                });
-                addonsUpdated++;
-              } else {
-                // CREATE new addon
-                await tx.addon.create({
-                  data: {
-                    addonGroupId: addonGroup.id,
-                    name: originalRecord.description,
-                    description: originalRecord.description,
-                    price: new Decimal(originalRecord.price),
-                    isActive: true,
-                    sortOrder: addonIndex++,
-                  },
-                });
-                addonsAdded++;
+                if (existingAddon) {
+                  // UPDATE existing addon
+                  await tx.addon.update({
+                    where: { id: existingAddon.id },
+                    data: {
+                      price: new Decimal(originalRecord.price),
+                      addonGroupId: addonGroup.id,
+                      isActive: true,
+                      sortOrder: addonIndex++,
+                    },
+                  });
+                  addonsUpdated++;
+                } else {
+                  // CREATE new addon
+                  await tx.addon.create({
+                    data: {
+                      addonGroupId: addonGroup.id,
+                      name: originalRecord.description,
+                      description: originalRecord.description,
+                      price: new Decimal(originalRecord.price),
+                      isActive: true,
+                      sortOrder: addonIndex++,
+                    },
+                  });
+                  addonsAdded++;
+                }
+              } catch (error: any) {
+                // Handle UNIQUE constraint errors gracefully
+                if (error.code === 'P2002' || error.message?.includes('UNIQUE constraint')) {
+                  logInfo(`⚠️ Addon "${originalRecord.description}" already exists, skipping creation`);
+                } else {
+                  throw error; // Re-throw if it's not a constraint error
+                }
               }
             }
 

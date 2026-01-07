@@ -850,11 +850,26 @@ export class MenuItemService extends BaseService {
         'Menu item not found'
       );
 
-      // Soft delete by setting isActive to false
-      await this.prisma.menuItem.update({
-        where: { id },
-        data: { isActive: false },
+      // SMART DELETE: Check if item has been used in any orders
+      // If yes -> soft delete (preserve order history)
+      // If no -> hard delete (complete removal from database)
+      const orderItemCount = await this.prisma.orderItem.count({
+        where: { menuItemId: id },
       });
+
+      if (orderItemCount > 0) {
+        // Item has been ordered - SOFT DELETE to preserve order history
+        // This prevents foreign key constraint violation (ON DELETE RESTRICT)
+        await this.prisma.menuItem.update({
+          where: { id },
+          data: { isActive: false },
+        });
+      } else {
+        // Item has never been ordered - HARD DELETE (complete removal)
+        await this.prisma.menuItem.delete({
+          where: { id },
+        });
+      }
 
       return true;
     })();

@@ -1071,7 +1071,7 @@ const OrderPanel = ({ pendingCustomization, onCustomizationProcessed }: OrderPan
   return (
     <div className='flex h-full flex-col'>
       {/* Header */}
-      <div className='border-b border-gray-200 p-6 dark:border-gray-700'>
+      <div className='border-b border-gray-200 p-4 lg:p-5 xl:p-6 dark:border-gray-700'>
         <div className='mb-2 flex items-center justify-between'>
           <h2 className='text-xl font-semibold text-gray-900 dark:text-white'>
             {selectedTable.name}
@@ -1100,7 +1100,7 @@ const OrderPanel = ({ pendingCustomization, onCustomizationProcessed }: OrderPan
       </div>
 
       {/* Order Items */}
-      <div className='flex-1 overflow-y-auto p-6'>
+      <div className='flex-1 overflow-y-auto p-3 lg:p-4 xl:p-6'>
         {currentOrder.items && currentOrder.items.length > 0 ? (
           <div className='space-y-3'>
             {currentOrder.items.map(item => {
@@ -1279,9 +1279,9 @@ const OrderPanel = ({ pendingCustomization, onCustomizationProcessed }: OrderPan
       </div>
 
       {/* Footer */}
-      <div className='border-t border-gray-200 p-6 dark:border-gray-700'>
+      <div className='border-t border-gray-200 p-4 lg:p-5 xl:p-6 dark:border-gray-700'>
         {/* Total */}
-        <div className='mb-4 flex items-center justify-between text-lg font-semibold'>
+        <div className='mb-3 lg:mb-4 flex items-center justify-between text-lg font-semibold'>
           <span>Total:</span>
           <span>
             $
@@ -1297,7 +1297,7 @@ const OrderPanel = ({ pendingCustomization, onCustomizationProcessed }: OrderPan
         </div>
 
         {/* Action Buttons - Progressive Disclosure Layout for Space Efficiency */}
-        <div className='space-y-3'>
+        <div className='space-y-2 lg:space-y-3'>
           {/* PRIMARY ACTION - Context-Aware (Full Width) */}
           {viewMode === 'tables' && hasChanges && (
             <Button

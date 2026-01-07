@@ -356,7 +356,7 @@ export class SupabaseSyncService {
     // Phase 1: Get Supabase snapshot (non-deleted UUIDs)
     const { data: existingCategories, error: selectError } = await this.supabase
       .from('category')
-      .select('uuid, id');
+      .select('uuid, id, deleted_at, name');
 
     if (selectError) throw selectError;
 
@@ -372,14 +372,24 @@ export class SupabaseSyncService {
       SELECT id as uuid, name
       FROM categories
       WHERE isActive = 1
+        AND name IS NOT NULL
       ORDER BY sortOrder
     `).all() as Array<{ uuid: string; name: string }>;
 
     // Format local hex IDs to UUID format for PostgreSQL
-    const formattedLocalCategories = localCategories.map(cat => ({
-      ...cat,
-      uuid: formatHexAsUuid(cat.uuid)
-    }));
+    const formattedLocalCategories = localCategories
+      .map(cat => ({
+        ...cat,
+        uuid: formatHexAsUuid(cat.uuid)
+      }))
+      .filter(cat => {
+        // Double-check: filter out any categories with NULL or empty names
+        if (!cat.name || cat.name.trim() === '') {
+          logInfo(`⚠️ Skipping category with invalid name: UUID=${cat.uuid}`);
+          return false;
+        }
+        return true;
+      });
 
     const localUUIDs = new Set(formattedLocalCategories.map(c => c.uuid));
 
@@ -391,10 +401,12 @@ export class SupabaseSyncService {
       deleted_at: null  // Ensure not marked deleted
     }));
 
-    const toMarkDeleted = Array.from(supabaseUUIDs)
-      .filter(uuid => !localUUIDs.has(uuid))
-      .map(uuid => ({
-        uuid: uuid,
+    // Get existing Supabase records to soft delete (with their names to avoid NULL constraint)
+    const toMarkDeleted = (existingCategories || [])
+      .filter((c: any) => !c.deleted_at && !localUUIDs.has(c.uuid))
+      .map((c: any) => ({
+        uuid: c.uuid,
+        name: c.name || 'Deleted Category', // Ensure name is not NULL
         deleted_at: new Date().toISOString()
       }));
 
@@ -454,7 +466,7 @@ export class SupabaseSyncService {
     // Phase 2: Get Supabase snapshot (non-deleted UUIDs)
     const { data: existingItems, error: selectError } = await this.supabase
       .from('item')
-      .select('uuid, id');
+      .select('uuid, id, deleted_at, name, price, category_id');
 
     if (selectError) throw selectError;
 
@@ -474,6 +486,8 @@ export class SupabaseSyncService {
         m.isVisibleOnWebsite
       FROM menu_items m
       WHERE m.isActive = 1
+        AND m.name IS NOT NULL
+        AND m.price IS NOT NULL
     `).all() as Array<{
       uuid: string;
       name: string;
@@ -483,11 +497,20 @@ export class SupabaseSyncService {
     }>;
 
     // Format local hex IDs to UUID format for PostgreSQL
-    const formattedLocalItems = localItems.map(item => ({
-      ...item,
-      uuid: formatHexAsUuid(item.uuid),
-      category_uuid: formatHexAsUuid(item.category_uuid)
-    }));
+    const formattedLocalItems = localItems
+      .map(item => ({
+        ...item,
+        uuid: formatHexAsUuid(item.uuid),
+        category_uuid: formatHexAsUuid(item.category_uuid)
+      }))
+      .filter(item => {
+        // Double-check: filter out any items with NULL or empty names/prices
+        if (!item.name || item.name.trim() === '' || !item.price) {
+          logInfo(`⚠️ Skipping menu item with invalid name or price: UUID=${item.uuid}`);
+          return false;
+        }
+        return true;
+      });
 
     const localUUIDs = new Set(formattedLocalItems.map(i => i.uuid));
 
@@ -512,10 +535,14 @@ export class SupabaseSyncService {
       })
       .filter(item => item !== null);
 
-    const toMarkDeleted = Array.from(supabaseUUIDs)
-      .filter(uuid => !localUUIDs.has(uuid))
-      .map(uuid => ({
-        uuid: uuid,
+    // Get existing Supabase items to soft delete (with required fields to avoid NULL constraint)
+    const toMarkDeleted = (existingItems || [])
+      .filter((i: any) => !i.deleted_at && !localUUIDs.has(i.uuid))
+      .map((i: any) => ({
+        uuid: i.uuid,
+        name: i.name || 'Deleted Item', // Ensure name is not NULL
+        price: i.price || '0', // Ensure price is not NULL
+        category_id: i.category_id, // Preserve category_id
         deleted_at: new Date().toISOString()
       }));
 
@@ -573,6 +600,8 @@ export class SupabaseSyncService {
       SELECT id as uuid, name, description, price
       FROM addons
       WHERE isActive = 1
+        AND (name IS NOT NULL OR description IS NOT NULL)
+        AND price IS NOT NULL
       ORDER BY sortOrder ASC
     `).all() as Array<{
       uuid: string;
@@ -582,10 +611,23 @@ export class SupabaseSyncService {
     }>;
 
     // Format local hex IDs to UUID format for PostgreSQL
-    const formattedAddOns = addOns.map(addon => ({
-      ...addon,
-      uuid: formatHexAsUuid(addon.uuid)
-    }));
+    const formattedAddOns = addOns
+      .map(addon => ({
+        ...addon,
+        uuid: formatHexAsUuid(addon.uuid)
+      }))
+      .filter(addon => {
+        // Double-check: filter out any addons with invalid data
+        const hasValidName = addon.name && addon.name.trim() !== '';
+        const hasValidDescription = addon.description && addon.description.trim() !== '';
+        const hasValidPrice = addon.price !== null && addon.price !== undefined;
+
+        if (!hasValidPrice || (!hasValidName && !hasValidDescription)) {
+          logInfo(`⚠️ Skipping addon with invalid data: UUID=${addon.uuid}`);
+          return false;
+        }
+        return true;
+      });
 
     // Get addon category assignments with category UUIDs
     const addonIds = addOns.map(a => a.uuid);  // Use original hex IDs for SQL query
@@ -651,7 +693,7 @@ export class SupabaseSyncService {
     // Phase 4: Get Supabase snapshot
     const { data: existingAddOns, error: selectError } = await this.supabase
       .from('add_on')
-      .select('addon_uuid, category_id, id');
+      .select('addon_uuid, category_id, id, deleted_at, description, price');
 
     if (selectError) throw selectError;
 
@@ -665,6 +707,8 @@ export class SupabaseSyncService {
         toMarkDeleted.push({
           addon_uuid: existing.addon_uuid,
           category_id: existing.category_id,
+          description: existing.description || 'Deleted Addon', // Ensure description is not NULL
+          price: existing.price || '0', // Ensure price is not NULL
           deleted_at: new Date().toISOString()
         });
       }
@@ -724,6 +768,12 @@ export class SupabaseSyncService {
         return;
       }
 
+      // Validate item has required fields before syncing
+      if (!item.name || item.name.trim() === '' || !item.price) {
+        logInfo(`⚠️ Skipping menu item sync - invalid name or price: id=${item.id}`);
+        return;
+      }
+
       // Item is active - upsert to Supabase
       const { error } = await this.supabase.from('item').upsert({
         id: item.id,
@@ -763,6 +813,12 @@ export class SupabaseSyncService {
           await this.supabase.from('category').delete().eq('name', category.name);
           logInfo(`Removed category ${category.name} from Supabase`);
         }
+        return;
+      }
+
+      // Validate category has a non-NULL name before syncing
+      if (!category.name || category.name.trim() === '') {
+        logInfo(`⚠️ Skipping category sync - invalid name: id=${category.id}`);
         return;
       }
 

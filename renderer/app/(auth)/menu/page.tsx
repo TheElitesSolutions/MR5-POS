@@ -302,18 +302,6 @@ export default function MenuManagementPage() {
                 </Button>
               </div>
 
-              <Button
-                onClick={handleSyncToWebsite}
-                disabled={isSyncing}
-                variant='outline'
-                className='flex touch-manipulation items-center space-x-2'
-                size='sm'
-              >
-                <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                <span className='hidden sm:inline'>{isSyncing ? 'Syncing...' : 'Sync to Website'}</span>
-                <span className='sm:hidden'>{isSyncing ? 'Syncing...' : 'Sync'}</span>
-              </Button>
-
               <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
                 <DialogTrigger asChild>
                   <Button

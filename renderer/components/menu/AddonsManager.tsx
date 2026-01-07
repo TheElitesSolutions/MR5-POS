@@ -866,28 +866,6 @@ export function AddonsManager() {
       {/* Tab Content */}
       {renderTabContent()}
 
-      {/* Quick Actions */}
-      <Card className='border-blue-200 bg-blue-50'>
-        <CardContent className='pt-4'>
-          <div className='flex items-center justify-between'>
-            <div>
-              <h4 className='font-medium text-blue-900'>Need Help?</h4>
-              <p className='text-sm text-blue-700'>
-                Add-ons are managed separately from menu items. For full add-on
-                management features, visit the dedicated admin panel.
-              </p>
-            </div>
-            <Button
-              variant='outline'
-              className='border-blue-300 text-blue-700 hover:bg-blue-100'
-              onClick={handleOpenAdminPanel}
-            >
-              Open Admin Panel
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Assignment Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
         <DialogContent>

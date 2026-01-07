@@ -1142,7 +1142,7 @@ const TakeoutOrderPanel = ({
   return (
     <div className='flex h-full flex-col'>
       {/* Header */}
-      <div className='border-b border-gray-200 p-6 dark:border-gray-700'>
+      <div className='border-b border-gray-200 p-4 lg:p-5 xl:p-6 dark:border-gray-700'>
         <div className='mb-2 flex items-center justify-between'>
           <h2 className='text-xl font-semibold text-gray-900 dark:text-white'>
             Order #{currentOrder.orderNumber || 'N/A'}
@@ -1194,7 +1194,7 @@ const TakeoutOrderPanel = ({
       </div>
 
       {/* Order Items */}
-      <div className='flex-1 overflow-y-auto p-6'>
+      <div className='flex-1 overflow-y-auto p-3 lg:p-4 xl:p-6'>
         {currentOrder.items && currentOrder.items.length > 0 ? (
           <div className='space-y-3'>
             {currentOrder.items.map(item => (
@@ -1354,7 +1354,7 @@ const TakeoutOrderPanel = ({
       </div>
 
       {/* Footer */}
-      <div className='border-t border-gray-200 p-6 dark:border-gray-700'>
+      <div className='border-t border-gray-200 p-4 lg:p-5 xl:p-6 dark:border-gray-700'>
         {/* Delivery Fee Section - Only for delivery orders */}
         {orderType === 'DELIVERY' && (
           <div className='mb-4 space-y-2'>
@@ -1397,7 +1397,7 @@ const TakeoutOrderPanel = ({
         )}
 
         {/* Total with detailed breakdown */}
-        <div className='mb-4 flex flex-col gap-1 border-b border-t border-gray-200 py-3 dark:border-gray-700'>
+        <div className='mb-3 lg:mb-4 flex flex-col gap-1 border-b border-t border-gray-200 py-3 dark:border-gray-700'>
           {/* Items subtotal */}
           <div className='flex items-center justify-between text-sm'>
             <span className='text-gray-600 dark:text-gray-400'>
@@ -1435,7 +1435,7 @@ const TakeoutOrderPanel = ({
         </div>
 
         {/* Action Buttons - Progressive Disclosure Layout for Space Efficiency */}
-        <div className='space-y-3'>
+        <div className='space-y-2 lg:space-y-3'>
           {/* PRIMARY ACTION - Context-Aware (Full Width) */}
           {viewMode === 'tables' && currentOrder.status === 'PENDING' && hasChanges && (
             <Button

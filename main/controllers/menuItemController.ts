@@ -7,6 +7,7 @@ import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import { MENU_ITEM_CHANNELS } from '../../shared/ipc-channels';
 import {
   CreateMenuItemRequest,
+  DeleteMenuItemRequest,
   MenuItem,
   MenuStats,
   UpdateMenuItemRequest,
@@ -425,9 +426,18 @@ export class MenuItemController extends BaseController {
    */
   private async deleteMenuItem(
     _event: IpcMainInvokeEvent,
-    id: string
+    request: string | DeleteMenuItemRequest
   ): Promise<IPCResponse<boolean>> {
     try {
+      // CRITICAL FIX: Handle both string (legacy) and object (current) parameter types
+      // The API sends DeleteMenuItemRequest object, but type signature expected string
+      // This mismatch was causing id to be "[object Object]", resulting in empty WHERE clause
+      const id = typeof request === 'string' ? request : request.id;
+
+      if (!id) {
+        throw new Error('Menu item ID is required for deletion');
+      }
+
       const result = await this.menuItemService.delete(id);
 
       // Trigger real-time sync to Supabase (non-blocking)

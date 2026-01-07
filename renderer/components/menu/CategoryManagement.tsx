@@ -26,6 +26,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import {
   Plus,
   Edit,
   Trash2,
@@ -231,7 +237,8 @@ const CategoryManagement = ({
   // Using the shared utility for consistent category colors across the application
 
   return (
-    <div className='space-y-6'>
+    <TooltipProvider>
+      <div className='space-y-6'>
       {/* Header */}
       <div className='flex items-center justify-between'>
         <div className='flex items-center space-x-2'>
@@ -337,18 +344,27 @@ const CategoryManagement = ({
                     >
                       <Edit className='h-3 w-3' />
                     </Button>
-                    <Button
-                      variant='ghost'
-                      size='sm'
-                      onClick={e => {
-                        e.stopPropagation();
-                        openDeleteDialog(category.name);
-                      }}
-                      className='h-8 w-8 p-0 text-red-600 hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-900/20'
-                      disabled={category.totalItems > 0}
-                    >
-                      <Trash2 className='h-3 w-3' />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant='ghost'
+                          size='sm'
+                          onClick={e => {
+                            e.stopPropagation();
+                            openDeleteDialog(category.name);
+                          }}
+                          className='h-8 w-8 p-0 text-red-600 hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-900/20'
+                          disabled={category.totalItems > 0}
+                        >
+                          <Trash2 className='h-3 w-3' />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        {category.totalItems > 0
+                          ? `Cannot delete: ${category.totalItems} item${category.totalItems === 1 ? '' : 's'} in this category. Move or delete items first.`
+                          : 'Delete category'}
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                 </div>
               </CardHeader>
@@ -493,7 +509,8 @@ const CategoryManagement = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 };
 
