@@ -2,7 +2,7 @@
   "private": true,
   "name": "my-nextron-app",
   "description": "The Elites POS - Point of Sale System",
-  "version": "2.4.2",
+  "version": "2.4.3",
   "author": "TheElites Solutions",
   "main": "app/background.js",
   "repository": {

@@ -6,6 +6,8 @@
 import { ipcMain, IpcMainInvokeEvent } from 'electron';
 import { MENU_ITEM_CHANNELS } from '../../shared/ipc-channels';
 import {
+  BulkUpdateMenuItemPropertiesRequest,
+  BulkUpdateMenuItemPropertiesResponse,
   CreateMenuItemRequest,
   DeleteMenuItemRequest,
   MenuItem,
@@ -122,6 +124,10 @@ export class MenuItemController extends BaseController {
       MENU_ITEM_CHANNELS.GET_CATEGORY_STATS,
       this.getCategoryStats.bind(this)
     );
+    this.registerHandler(MENU_ITEM_CHANNELS.BULK_UPDATE_PROPERTIES, this.bulkUpdateMenuItemProperties.bind(this));
+
+    // ✅ Final verification
+    console.log('[MenuItemController] registerHandlers() completed - bulk-update-properties should be registered');
   }
 
   public override unregisterHandlers(): void {
@@ -750,6 +756,46 @@ export class MenuItemController extends BaseController {
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined,
       });
+      return this.createErrorResponse(
+        error instanceof Error ? error : String(error)
+      );
+    }
+  }
+
+  /**
+   * Bulk update menu item properties (isCustomizable, isPrintableInKitchen)
+   */
+  private async bulkUpdateMenuItemProperties(
+    _event: IpcMainInvokeEvent,
+    request: BulkUpdateMenuItemPropertiesRequest
+  ): Promise<IPCResponse<BulkUpdateMenuItemPropertiesResponse>> {
+    // ✅ Log handler invocation
+    console.log('[MenuItemController] → bulkUpdateMenuItemProperties invoked:', {
+      itemCount: request.itemIds?.length || 0,
+      categoryId: request.categoryId,
+      updates: request.updates,
+      userId: request.userId,
+    });
+
+    try {
+      const result = await this.menuItemService.bulkUpdateMenuItemProperties(request);
+
+      console.log('[MenuItemController] ← bulkUpdateMenuItemProperties result:', {
+        success: result.success,
+        updatedCount: result.data?.updatedCount,
+        failedCount: result.data?.failedCount,
+      });
+
+      if (!result.success) {
+        console.error('[MenuItemController] ✗ Bulk update failed:', result.error);
+        return this.createErrorResponse(
+          result.error || 'Bulk update failed'
+        );
+      }
+
+      return this.createSuccessResponse(result.data!);
+    } catch (error) {
+      console.error('[MenuItemController] ✗ Bulk update error:', error);
       return this.createErrorResponse(
         error instanceof Error ? error : String(error)
       );

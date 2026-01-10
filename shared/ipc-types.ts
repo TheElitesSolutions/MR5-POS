@@ -247,6 +247,30 @@ export interface MenuItemFilters {
   offset?: number;
 }
 
+/**
+ * Bulk update menu item properties request
+ */
+export interface BulkUpdateMenuItemPropertiesRequest {
+  itemIds: string[];
+  categoryId?: string; // Optional category filter
+  updates: {
+    isCustomizable?: boolean;
+    isPrintableInKitchen?: boolean;
+  };
+  userId: string; // For audit trail
+}
+
+/**
+ * Bulk update menu item properties response
+ */
+export interface BulkUpdateMenuItemPropertiesResponse {
+  updatedCount: number;
+  failedCount: number;
+  updatedItems: string[];
+  failedItems: Array<{ id: string; error: string }>;
+  invalidatedCategories: string[];
+}
+
 export interface MenuStats {
   totalItems: number;
   activeItems: number;

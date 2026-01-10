@@ -62,6 +62,7 @@ const TableGrid = memo(() => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [newTable, setNewTable] = useState({ name: '' });
   const [isCreating, setIsCreating] = useState(false);
+  const inputRef = React.useRef<HTMLInputElement>(null);
 
   const handleTableClick = useCallback(
     async (table: Table) => {
@@ -146,6 +147,17 @@ const TableGrid = memo(() => {
       0
     );
   };
+
+  // Focus input when dialog opens
+  React.useEffect(() => {
+    if (showCreateDialog && inputRef.current) {
+      // Use setTimeout to ensure Dialog has finished mounting
+      const timeoutId = setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [showCreateDialog]);
 
   const handleSubmitNewTable = useCallback(
     async (e: React.FormEvent) => {
@@ -235,6 +247,7 @@ const TableGrid = memo(() => {
                   Table Name
                 </Label>
                 <Input
+                  ref={inputRef}
                   id='name'
                   type='text'
                   placeholder='Enter name or number (e.g., Table 1, VIP, Corner)'
@@ -244,7 +257,6 @@ const TableGrid = memo(() => {
                   }
                   className='col-span-3'
                   required
-                  autoFocus
                 />
               </div>
               <p className='col-span-4 text-xs text-gray-500 dark:text-gray-400'>

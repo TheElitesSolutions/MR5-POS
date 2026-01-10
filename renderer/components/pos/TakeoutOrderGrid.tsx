@@ -280,6 +280,18 @@ const TakeoutOrderGrid = memo(() => {
     address: '',
   });
   const [isCreating, setIsCreating] = useState(false);
+  const customerNameInputRef = React.useRef<HTMLInputElement>(null);
+
+  // Focus customer name input when create form opens
+  useEffect(() => {
+    if (showCreateForm && customerNameInputRef.current) {
+      // Use setTimeout to ensure form has finished rendering
+      const timeoutId = setTimeout(() => {
+        customerNameInputRef.current?.focus();
+      }, 50);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [showCreateForm]);
 
   // Performance optimization - memoized filtered orders with improved filtering
   const filteredOrders = useMemo(() => {
@@ -722,6 +734,7 @@ const TakeoutOrderGrid = memo(() => {
                       aria-hidden='true'
                     />
                     <Input
+                      ref={customerNameInputRef}
                       id='customer-name'
                       placeholder='Enter name (optional)'
                       value={customerDetails.name}

@@ -5,6 +5,22 @@ import { usePOSStore } from '@/stores/posStore';
 import { useToast } from '@/hooks/use-toast';
 
 /**
+ * 🚨 TEMPORARY DISABLE: Auto-save feature flag
+ *
+ * ISSUE: 60-second auto-save causes race condition with manual "Done Adding Items"
+ * button, resulting in duplicate order items.
+ *
+ * IMPACT: Disabling auto-save prevents duplications. Manual saves (Done Adding Items
+ * button) continue to work normally.
+ *
+ * STATUS: Disabled on 2026-01-10 pending architectural fix
+ * TODO: Re-enable after implementing mutex/lock mechanism for save operations
+ *
+ * Related commits: 24be3f5, dce6b6f
+ */
+const ENABLE_AUTO_SAVE = false; // Set to true to re-enable auto-save
+
+/**
  * DataLossPreventionProvider - Prevents order data loss on app close and tab switches
  *
  * This component:
@@ -12,6 +28,10 @@ import { useToast } from '@/hooks/use-toast';
  * 2. Shows warnings for unsaved changes
  * 3. Provides recovery mechanisms from localStorage backups
  * 4. Handles system sleep/resume scenarios
+ *
+ * ⚠️ NOTE: Periodic auto-save (60s) is TEMPORARILY DISABLED via ENABLE_AUTO_SAVE flag
+ *    to prevent race condition duplications. Manual saves via "Done Adding Items"
+ *    button continue to work normally.
  */
 export default function DataLossPreventionProvider({
   children,
@@ -153,8 +173,15 @@ export default function DataLossPreventionProvider({
     toast,
   ]);
 
+  // 🚨 TEMPORARY DISABLED: Periodic auto-save (see ENABLE_AUTO_SAVE flag above)
   // Periodic auto-save for extra safety (every 60 seconds, coordinated with fetch)
   useEffect(() => {
+    // 🚨 FEATURE FLAG: Auto-save temporarily disabled to prevent race condition duplications
+    if (!ENABLE_AUTO_SAVE) {
+      console.log('⏭️ AUTO-SAVE DISABLED: Feature flag ENABLE_AUTO_SAVE is false');
+      return; // Early return - no interval created
+    }
+
     const intervalId = setInterval(() => {
       if (hasUnsavedChanges && currentOrder?.id) {
         // Check if a fetch is in progress before saving to avoid conflicts

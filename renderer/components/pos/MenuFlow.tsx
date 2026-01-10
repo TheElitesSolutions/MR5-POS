@@ -400,8 +400,9 @@ const MenuFlow = ({
                 key={
                   typeof category === 'string' ? category : (category as any).id
                 }
+                onClick={() => handleCategorySelect(categoryName)}
                 className={cn(
-                  'cursor-pointer touch-manipulation shadow-sm transition-all hover:shadow-md overflow-hidden',
+                  'shadow-sm transition-all hover:shadow-md overflow-hidden cursor-pointer',
                   !categoryColor && 'bg-white dark:bg-gray-800'
                 )}
                 style={
@@ -412,7 +413,6 @@ const MenuFlow = ({
                       }
                     : undefined
                 }
-                onClick={() => handleCategorySelect(categoryName)}
               >
                 <CardContent
                   className='p-6'

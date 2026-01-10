@@ -15,6 +15,7 @@ export interface UIMenuItem {
   imageUrl?: string;
   isAvailable: boolean;
   isCustomizable: boolean;
+  isPrintableInKitchen?: boolean; // Controls whether item appears on kitchen tickets
   isVisibleOnWebsite: boolean;
   preparationTime?: number;
   ingredients?: Ingredient[];
@@ -43,6 +44,7 @@ export function convertToUIMenuItem(item: MenuItem): UIMenuItem {
           : new Date().toISOString(),
     isAvailable: item.isAvailable ?? true,
     isCustomizable: item.isCustomizable ?? false,
+    isPrintableInKitchen: item.isPrintableInKitchen ?? true, // Default to true for kitchen printing
     isVisibleOnWebsite: item.isVisibleOnWebsite ?? true,
   };
 }

@@ -138,6 +138,7 @@ export interface MenuItem {
   isAvailable: boolean;
   isActive: boolean;
   isCustomizable: boolean;
+  isPrintableInKitchen?: boolean; // Controls whether item appears on kitchen tickets
   ingredients: Ingredient[]; // Array of ingredient objects with stock details
 }
 

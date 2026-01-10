@@ -5,7 +5,6 @@ import SalesChart from '@/components/dashboard/SalesChart';
 import TopMenuItems from '@/components/dashboard/TopMenuItems';
 import POSLayout from '@/components/pos/POSLayout';
 import RealTimeMetrics from '@/components/dashboard/RealTimeMetrics';
-import QuickActions from '@/components/dashboard/QuickActions';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/stores/authStore';
 import { useDashboardStore } from '@/stores/dashboardStore';
@@ -177,9 +176,6 @@ function DashboardContent() {
                 <TopMenuItems />
               </div>
             </div>
-
-          {/* Quick Actions */}
-          <QuickActions />
         </div>
 
         {/* Loading Overlay */}

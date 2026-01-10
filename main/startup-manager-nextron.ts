@@ -114,11 +114,33 @@ export class StartupManagerNextron {
 
       for (const { name, instance } of dataControllers) {
         try {
+          enhancedLogger.info(`[StartupManager] → Initializing ${name}...`, LogCategory.SYSTEM, 'StartupManager');
+
           instance.initialize();
+
+          // ✅ Additional logging for MenuItemController
+          if (name === 'MenuItemController') {
+            enhancedLogger.info(
+              '[StartupManager] → MenuItemController.registerHandlers() completed',
+              LogCategory.SYSTEM,
+              'StartupManager',
+              { handlersRegistered: 'including bulk-update-properties' }
+            );
+          }
+
           this.controllers.set(name, instance);
-          enhancedLogger.info(`[StartupManager] ✓ ${name} initialized`, LogCategory.SYSTEM, 'StartupManager');
+          enhancedLogger.info(`[StartupManager] ✓ ${name} initialized successfully`, LogCategory.SYSTEM, 'StartupManager');
         } catch (error) {
-          enhancedLogger.error(`[StartupManager] ✗ ${name} failed`, LogCategory.SYSTEM, 'StartupManager', { error });
+          enhancedLogger.error(
+            `[StartupManager] ✗ ${name} initialization failed`,
+            LogCategory.SYSTEM,
+            'StartupManager',
+            {
+              error,
+              errorMessage: error instanceof Error ? error.message : String(error),
+              stack: error instanceof Error ? error.stack : undefined,
+            }
+          );
           // Non-critical, continue
         }
       }

@@ -6,14 +6,17 @@
 // Types are defined locally in this file
 import { Decimal } from 'decimal.js';
 import {
+  BulkUpdateMenuItemPropertiesRequest,
+  BulkUpdateMenuItemPropertiesResponse,
   CreateMenuItemRequest,
   MenuItem as IpcMenuItem,
   UpdateMenuItemRequest,
 } from '../../shared/ipc-types';
-import { AppError } from '../error-handler';
+import { AppError, ErrorSeverity, ErrorCategory } from '../error-handler';
 import { IPCResponse, MenuItem } from '../types';
 import { decimalToNumber, validateCurrencyAmount } from '../utils/decimal';
 import { getCurrentLocalDateTime } from '../utils/dateTime';
+import { BulkUpdateMenuItemPropertiesSchema } from '../../shared/validation/menu-item-schemas';
 import { BaseService } from './baseService';
 
 // Define Ingredient type locally to match what's used in the code
@@ -1020,6 +1023,98 @@ export class MenuItemService extends BaseService {
           name: cat.name,
           count: cat.menuItemCount,
         })),
+      };
+    })();
+  }
+
+  /**
+   * Bulk update menu item properties (isCustomizable, isPrintableInKitchen)
+   * Transaction-safe - all items succeed together or all rollback
+   */
+  async bulkUpdateMenuItemProperties(
+    request: BulkUpdateMenuItemPropertiesRequest
+  ): Promise<IPCResponse<BulkUpdateMenuItemPropertiesResponse>> {
+    return this.wrapMethod(async () => {
+      // 1. Validate input
+      const validated = BulkUpdateMenuItemPropertiesSchema.parse(request);
+
+      // 2. Build WHERE clause
+      const whereClause: any = {
+        id: { in: validated.itemIds },
+        isActive: 1,
+      };
+      if (validated.categoryId) {
+        whereClause.categoryId = validated.categoryId;
+      }
+
+      // 3. Verify items exist
+      const existingItems = await this.prisma.menuItem.findMany({
+        where: whereClause,
+        select: { id: true, categoryId: true },
+      });
+
+      if (existingItems.length === 0) {
+        throw new AppError(
+          'No items found matching criteria',
+          true,
+          ErrorSeverity.LOW,
+          ErrorCategory.BUSINESS,
+          null,
+          { itemIds: validated.itemIds, categoryId: validated.categoryId }
+        );
+      }
+
+      // 4. Prepare update data (SQLite requires INTEGER for booleans)
+      const updateData: any = { updatedAt: getCurrentLocalDateTime() };
+      if (validated.updates.isCustomizable !== undefined) {
+        updateData.isCustomizable = validated.updates.isCustomizable ? 1 : 0;
+      }
+      if (validated.updates.isPrintableInKitchen !== undefined) {
+        updateData.isPrintableInKitchen = validated.updates.isPrintableInKitchen ? 1 : 0;
+      }
+
+      // 5. Execute transaction
+      const result = await this.executeTransaction(async (tx) => {
+        return await tx.menuItem.updateMany({
+          where: whereClause,
+          data: updateData,
+        });
+      });
+
+      // 6. Collect affected categories
+      const affectedCategories = [...new Set(existingItems.map(i => i.categoryId))];
+
+      // 7. Invalidate cache
+      // TODO: Implement cache invalidation when caching is added
+      // validated.itemIds.forEach(id => this.invalidateCache(`item:${id}`));
+      // affectedCategories.forEach(catId => this.invalidateCache(`category:${catId}`));
+      // this.invalidateCache('category-stats');
+
+      // 8. Background sync (non-blocking)
+      // TODO: Implement background sync when syncService is added
+      // if (this.syncService) {
+      //   existingItems.forEach(item => {
+      //     this.syncService.syncMenuItem(item.id).catch(err => {
+      //       console.warn(`Background sync failed for item ${item.id}:`, err);
+      //     });
+      //   });
+      // }
+
+      // 9. Log operation
+      console.log('🔄 BULK UPDATE: Menu Item Properties', {
+        userId: validated.userId,
+        itemCount: validated.itemIds.length,
+        updated: result.count,
+        categories: affectedCategories.length,
+        timestamp: getCurrentLocalDateTime(),
+      });
+
+      return {
+        updatedCount: result.count,
+        failedCount: validated.itemIds.length - result.count,
+        updatedItems: existingItems.map(i => i.id),
+        failedItems: [],
+        invalidatedCategories: affectedCategories,
       };
     })();
   }

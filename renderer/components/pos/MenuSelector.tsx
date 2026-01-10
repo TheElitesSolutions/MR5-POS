@@ -21,7 +21,7 @@ import { useSharedStockData } from '@/context/StockDataContext';
 import { useAvailableMenuItems } from '@/hooks/useMenuData';
 import { Customization, MenuItem } from '@/types';
 import { AlertTriangle, Minus, Plus, Search } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { getMenuService } from '@/services/ServiceContainer';
 
 interface MenuSelectorProps {
@@ -76,9 +76,19 @@ const MenuSelector = ({ onClose }: MenuSelectorProps) => {
   >([]);
   const [showStockWarning, setShowStockWarning] = useState(false);
   const [isLoadingIngredients, setIsLoadingIngredients] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Combined loading state
   const isLoading = posLoading || menuLoading || stockLoading;
+
+  // Focus search input when dialog opens
+  useEffect(() => {
+    // Use setTimeout to ensure Dialog has finished mounting
+    const timeoutId = setTimeout(() => {
+      searchInputRef.current?.focus();
+    }, 50);
+    return () => clearTimeout(timeoutId);
+  }, []);
 
   // Refresh menu data when MenuSelector opens to show latest colors
   useEffect(() => {
@@ -381,6 +391,7 @@ const MenuSelector = ({ onClose }: MenuSelectorProps) => {
               <div className='relative'>
                 <Search className='absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-gray-400' />
                 <Input
+                  ref={searchInputRef}
                   placeholder='Search menu items...'
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}

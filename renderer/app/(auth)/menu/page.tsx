@@ -8,6 +8,8 @@ import POSLayout from '@/components/pos/POSLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Pagination } from '@/components/ui/pagination';
+import { BulkItemManagementModal } from '@/components/pos/BulkItemManagementModal';
+import { useMenuBulkUpdate } from '@/hooks/useMenuBulkUpdate';
 import {
   Dialog,
   DialogContent,
@@ -81,6 +83,10 @@ export default function MenuManagementPage() {
   );
   const [isSyncing, setIsSyncing] = useState(false);
   const hasInitialized = useRef(false);
+
+  // Bulk item management state
+  const [bulkManageCategory, setBulkManageCategory] = useState<{id: string, name: string} | null>(null);
+  const { bulkUpdate } = useMenuBulkUpdate();
 
   // Use menuItems directly from store (already in correct format)
   const rendererMenuItems: UIMenuItem[] = menuItems || [];
@@ -302,6 +308,20 @@ export default function MenuManagementPage() {
                 </Button>
               </div>
 
+              <Button
+                onClick={handleSyncToWebsite}
+                disabled={isSyncing}
+                variant='outline'
+                className='flex touch-manipulation items-center space-x-2'
+                size='sm'
+              >
+                <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span className='hidden sm:inline'>
+                  {isSyncing ? 'Syncing...' : 'Sync to Website'}
+                </span>
+                <span className='sm:hidden'>{isSyncing ? 'Syncing' : 'Sync'}</span>
+              </Button>
+
               <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
                 <DialogTrigger asChild>
                   <Button
@@ -503,20 +523,40 @@ export default function MenuManagementPage() {
                     </Badge>
                   </div>
 
-                  {selectedCategory && (
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      onClick={() => {
-                        setSelectedCategory('');
-                        setPaginationCategory(''); // Clear category filter
-                        setViewMode('categories');
-                      }}
-                      className='touch-manipulation'
-                    >
-                      ← Back to Categories
-                    </Button>
-                  )}
+                  <div className='flex gap-2'>
+                    {selectedCategory && (
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => {
+                          const category = categories.find(c => c.name === selectedCategory);
+                          if (category) {
+                            setBulkManageCategory({
+                              id: category.id,
+                              name: selectedCategory
+                            });
+                          }
+                        }}
+                        className='touch-manipulation'
+                      >
+                        Select Items
+                      </Button>
+                    )}
+                    {selectedCategory && (
+                      <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => {
+                          setSelectedCategory('');
+                          setPaginationCategory(''); // Clear category filter
+                          setViewMode('categories');
+                        }}
+                        className='touch-manipulation'
+                      >
+                        ← Back to Categories
+                      </Button>
+                    )}
+                  </div>
                 </div>
 
                 {filteredMenuItems.length === 0 ? (
@@ -578,6 +618,33 @@ export default function MenuManagementPage() {
             {/* Loading state is already handled above */}
         </div>
       </div>
+
+      {/* Bulk Item Management Modal */}
+      {bulkManageCategory && (
+        <BulkItemManagementModal
+          isOpen={true}
+          onClose={() => {
+            setBulkManageCategory(null);
+            // Clear cache and refresh menu data after bulk operations
+            cache.removeByPrefix('menuItems');
+            _internalFetchMenuItems();
+          }}
+          categoryId={bulkManageCategory.id}
+          categoryName={bulkManageCategory.name}
+          items={menuItems.filter(item => {
+            const itemCategory = categories.find(c => c.id === item.categoryId);
+            return itemCategory?.name === bulkManageCategory.name;
+          })}
+          onBulkUpdate={bulkUpdate}
+          onUpdateSuccess={() => {
+            // Clear menu cache and refresh items after bulk update
+            console.log('[MenuPage] Bulk update success - clearing cache and refreshing menu items');
+            // CRITICAL: Clear cache first to prevent stale data from being returned
+            cache.removeByPrefix('menuItems');
+            _internalFetchMenuItems();
+          }}
+        />
+      )}
     </POSLayout>
   );
 }

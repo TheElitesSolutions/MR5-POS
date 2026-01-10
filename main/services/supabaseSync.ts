@@ -393,13 +393,61 @@ export class SupabaseSyncService {
 
     const localUUIDs = new Set(formattedLocalCategories.map(c => c.uuid));
 
-    // Phase 3: Classify records
-    const toUpsert = formattedLocalCategories.map(cat => ({
-      uuid: cat.uuid,
-      name: cat.name,
-      // Note: sortOrder and color fields excluded as they don't exist in Supabase category table
-      deleted_at: null  // Ensure not marked deleted
-    }));
+    // Phase 3: Classify records with hybrid matching and adoption
+    const toUpsert: any[] = [];
+    const adoptions: Array<{ oldUuid: string; newUuid: string; name: string }> = [];
+
+    for (const localCat of formattedLocalCategories) {
+      // Check UUID match (standard behavior)
+      const existingByUuid = (existingCategories || []).find(
+        (c: any) => c.uuid === localCat.uuid && !c.deleted_at
+      );
+
+      if (existingByUuid) {
+        // UUID match → normal upsert
+        toUpsert.push({
+          uuid: localCat.uuid,
+          name: localCat.name,
+          deleted_at: null
+        });
+      } else {
+        // No UUID match → try name matching (case-insensitive)
+        const existingByName = (existingCategories || []).find(
+          (c: any) => c.name && c.name.toLowerCase() === localCat.name.toLowerCase() && !c.deleted_at
+        );
+
+        if (existingByName) {
+          // Name match → ADOPT (update Supabase UUID to match local)
+          logInfo(`🔄 ADOPTING category "${localCat.name}": ${existingByName.uuid} → ${localCat.uuid}`);
+          adoptions.push({
+            oldUuid: existingByName.uuid,
+            newUuid: localCat.uuid,
+            name: localCat.name
+          });
+
+          // Include Supabase PK to force UPDATE not INSERT
+          toUpsert.push({
+            id: existingByName.id,  // ← CRITICAL: Supabase primary key
+            uuid: localCat.uuid,     // ← New UUID from local
+            name: localCat.name,
+            deleted_at: null
+          });
+        } else {
+          // No match → new record
+          toUpsert.push({
+            uuid: localCat.uuid,
+            name: localCat.name,
+            deleted_at: null
+          });
+        }
+      }
+    }
+
+    // Audit log
+    if (adoptions.length > 0) {
+      logInfo(`📋 Category Adoptions: ${adoptions.length} records linked`);
+      adoptions.forEach(a => logInfo(`   "${a.name}": ${a.oldUuid} → ${a.newUuid}`));
+    }
 
     // Get existing Supabase records to soft delete (with their names to avoid NULL constraint)
     const toMarkDeleted = (existingCategories || [])
@@ -514,26 +562,81 @@ export class SupabaseSyncService {
 
     const localUUIDs = new Set(formattedLocalItems.map(i => i.uuid));
 
-    // Phase 4: Classify and transform with FK resolution
-    const toUpsert = formattedLocalItems
-      .map(item => {
-        const category_id = categoryMap.get(item.category_uuid);
-        if (!category_id) {
-          logInfo(`⚠️ Skipping item "${item.name}" - category UUID ${item.category_uuid} not found in Supabase`);
-          return null;
-        }
-        return {
-          uuid: item.uuid,
-          name: item.name,
-          price: item.price,
-          // Note: description field excluded as it doesn't exist in Supabase item table
-          // Note: is_special field excluded as it doesn't exist in Supabase item table
+    // Phase 4: Classify and adopt with name+category fallback, add is_special field
+    const toUpsert: any[] = [];
+    const adoptions: Array<{ oldUuid: string; newUuid: string; name: string }> = [];
+
+    for (const localItem of formattedLocalItems) {
+      const category_id = categoryMap.get(localItem.category_uuid);
+      if (!category_id) {
+        logInfo(`⚠️ Skipping item "${localItem.name}" - category UUID ${localItem.category_uuid} not found in Supabase`);
+        continue;
+      }
+
+      // Check UUID match (standard behavior)
+      const existingByUuid = (existingItems || []).find(
+        (i: any) => i.uuid === localItem.uuid && !i.deleted_at
+      );
+
+      if (existingByUuid) {
+        // UUID match → normal upsert
+        toUpsert.push({
+          uuid: localItem.uuid,
+          name: localItem.name,
+          price: localItem.price,
+          is_special: false,  // ✅ FIX: Add required field
           category_id: category_id,
-          isVisibleOnWebsite: item.isVisibleOnWebsite === 1,
+          isVisibleOnWebsite: localItem.isVisibleOnWebsite === 1,
           deleted_at: null
-        };
-      })
-      .filter(item => item !== null);
+        });
+      } else {
+        // No UUID match → try name+category matching
+        const existingByName = (existingItems || []).find(
+          (i: any) =>
+            i.name && i.name.toLowerCase() === localItem.name.toLowerCase() &&
+            i.category_id === category_id &&
+            !i.deleted_at
+        );
+
+        if (existingByName) {
+          // Name+category match → ADOPT
+          logInfo(`🔄 ADOPTING item "${localItem.name}": ${existingByName.uuid} → ${localItem.uuid}`);
+          adoptions.push({
+            oldUuid: existingByName.uuid,
+            newUuid: localItem.uuid,
+            name: localItem.name
+          });
+
+          toUpsert.push({
+            id: existingByName.id,  // ← CRITICAL: Supabase PK
+            uuid: localItem.uuid,    // ← New UUID from local
+            name: localItem.name,
+            price: localItem.price,
+            is_special: existingByName.is_special ?? false,  // Preserve existing value
+            category_id: category_id,
+            isVisibleOnWebsite: localItem.isVisibleOnWebsite === 1,
+            deleted_at: null
+          });
+        } else {
+          // No match → new record
+          toUpsert.push({
+            uuid: localItem.uuid,
+            name: localItem.name,
+            price: localItem.price,
+            is_special: false,  // ✅ FIX: Required field with default value
+            category_id: category_id,
+            isVisibleOnWebsite: localItem.isVisibleOnWebsite === 1,
+            deleted_at: null
+          });
+        }
+      }
+    }
+
+    // Audit log
+    if (adoptions.length > 0) {
+      logInfo(`📋 Item Adoptions: ${adoptions.length} records linked`);
+      adoptions.forEach(a => logInfo(`   "${a.name}": ${a.oldUuid} → ${a.newUuid}`));
+    }
 
     // Get existing Supabase items to soft delete (with required fields to avoid NULL constraint)
     const toMarkDeleted = (existingItems || [])
@@ -543,6 +646,7 @@ export class SupabaseSyncService {
         name: i.name || 'Deleted Item', // Ensure name is not NULL
         price: i.price || '0', // Ensure price is not NULL
         category_id: i.category_id, // Preserve category_id
+        is_special: false,  // Required field for soft delete
         deleted_at: new Date().toISOString()
       }));
 
@@ -669,33 +773,89 @@ export class SupabaseSyncService {
       }
     }
 
-    // Phase 3: Create Supabase records (one per addon-category pair)
-    // Each has addon UUID + category_id for composite uniqueness
-    const toUpsert: any[] = [];
-    const activeCompositeKeys = new Set<string>();
-
-    for (const addon of formattedAddOns) {
-      const categoryIds = addonCategoryMap.get(addon.uuid) || [null];
-      for (const categoryId of categoryIds) {
-        const compositeKey = `${addon.uuid}|${categoryId || 'null'}`;
-        activeCompositeKeys.add(compositeKey);
-
-        toUpsert.push({
-          addon_uuid: addon.uuid,  // Store addon UUID for matching (now in UUID format)
-          description: addon.name || addon.description || '',
-          price: addon.price?.toString() || '0',
-          category_id: categoryId,
-          deleted_at: null
-        });
-      }
-    }
-
-    // Phase 4: Get Supabase snapshot
+    // Phase 3: Get Supabase snapshot (needed for adoption logic)
     const { data: existingAddOns, error: selectError } = await this.supabase
       .from('add_on')
       .select('addon_uuid, category_id, id, deleted_at, description, price');
 
     if (selectError) throw selectError;
+
+    // Phase 4: Create Supabase records with adoption logic (one per addon-category pair)
+    // Each has addon UUID + category_id for composite uniqueness
+    const toUpsert: any[] = [];
+    const activeCompositeKeys = new Set<string>();
+    const adoptions: Array<{ oldUuid: string; newUuid: string; desc: string }> = [];
+
+    for (const addon of formattedAddOns) {
+      const categoryIds = addonCategoryMap.get(addon.uuid) || [null];
+
+      for (const categoryId of categoryIds) {
+        const compositeKey = `${addon.uuid}|${categoryId || 'null'}`;
+        activeCompositeKeys.add(compositeKey);
+
+        const description = addon.name || addon.description || '';
+
+        // Check UUID+category match (standard behavior)
+        const existingByUuid = (existingAddOns || []).find(
+          (a: any) =>
+            a.addon_uuid === addon.uuid &&
+            a.category_id === categoryId &&
+            !a.deleted_at
+        );
+
+        if (existingByUuid) {
+          // UUID match → normal upsert
+          toUpsert.push({
+            addon_uuid: addon.uuid,
+            description: description,
+            price: addon.price?.toString() || '0',
+            category_id: categoryId,
+            deleted_at: null
+          });
+        } else {
+          // No UUID match → try description+category matching
+          const existingByDesc = (existingAddOns || []).find(
+            (a: any) =>
+              a.description && a.description.toLowerCase() === description.toLowerCase() &&
+              a.category_id === categoryId &&
+              !a.deleted_at
+          );
+
+          if (existingByDesc) {
+            // Description match → ADOPT
+            logInfo(`🔄 ADOPTING addon "${description}" (cat: ${categoryId}): ${existingByDesc.addon_uuid} → ${addon.uuid}`);
+            adoptions.push({
+              oldUuid: existingByDesc.addon_uuid,
+              newUuid: addon.uuid,
+              desc: description
+            });
+
+            toUpsert.push({
+              id: existingByDesc.id,  // ← CRITICAL: Supabase PK
+              addon_uuid: addon.uuid,  // ← New UUID
+              description: description,
+              price: addon.price?.toString() || '0',
+              category_id: categoryId,
+              deleted_at: null
+            });
+          } else {
+            // No match → new record
+            toUpsert.push({
+              addon_uuid: addon.uuid,
+              description: description,
+              price: addon.price?.toString() || '0',
+              category_id: categoryId,
+              deleted_at: null
+            });
+          }
+        }
+      }
+    }
+
+    // Audit log
+    if (adoptions.length > 0) {
+      logInfo(`📋 Addon Adoptions: ${adoptions.length} records linked`);
+    }
 
     // Find records to soft delete (exist in Supabase but not in local active)
     const toMarkDeleted: any[] = [];

@@ -458,6 +458,30 @@ export class MenuService {
       `🗑️ MenuService: Invalidated ${invalidatedCount} menu cache entries`
     );
   }
+
+  /**
+   * Invalidate multiple specific cache keys
+   * Useful for bulk operations where specific items/categories need cache refresh
+   */
+  public invalidateMultiple(keys: string[]): void {
+    keys.forEach(key => this.requestManager.invalidate(key));
+    console.log(
+      `🗑️ MenuService: Invalidated ${keys.length} specific cache entries`,
+      keys
+    );
+  }
+
+  /**
+   * Invalidate category stats cache specifically
+   * Called after bulk operations that affect category item counts or properties
+   */
+  public invalidateCategoryStats(): void {
+    // Invalidate the categories cache which includes stats
+    this.requestManager.invalidate('menu:categories');
+    // Also invalidate any category-specific caches
+    this.requestManager.invalidate(/^menu:category:/);
+    console.log('🗑️ MenuService: Invalidated category stats cache');
+  }
 }
 
 // Singleton instance for easy access

@@ -70,14 +70,39 @@ export abstract class BaseController implements Controller {
     channel: string,
     handler: IPCHandlerFunction<RequestType, ResponseType>
   ): void {
+    // ✅ Diagnostic: Log registration attempt
+    console.log(`[BaseController/${this.constructor.name}] Attempting to register handler:`, {
+      channel,
+      alreadyRegistered: this.handlers.has(channel),
+      handlerType: typeof handler,
+    });
+
     if (!this.handlers.has(channel)) {
-      ipcMain.handle(channel, handler);
-      this.handlers.set(channel, handler);
-      logInfo(
-        `Registered handler for channel: ${channel}`,
-        this.constructor.name
-      );
+      try {
+        ipcMain.handle(channel, handler);
+        this.handlers.set(channel, handler);
+
+        // ✅ Diagnostic: Verify registration
+        console.log(`[BaseController/${this.constructor.name}] ✓ Handler registered successfully:`, {
+          channel,
+          handlersCount: this.handlers.size,
+        });
+
+        logInfo(
+          `Registered handler for channel: ${channel}`,
+          this.constructor.name
+        );
+      } catch (error) {
+        // ✅ Diagnostic: Catch registration errors
+        console.error(`[BaseController/${this.constructor.name}] ✗ Failed to register handler:`, {
+          channel,
+          error,
+          errorMessage: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
     } else {
+      console.warn(`[BaseController/${this.constructor.name}] ⚠️ Handler already registered:`, channel);
       logError(
         `Handler already registered for channel: ${channel}`,
         this.constructor.name
@@ -149,10 +174,25 @@ export abstract class BaseController implements Controller {
    */
   public initialize(): void {
     try {
+      console.log(`[BaseController/${this.constructor.name}] → Starting initialization...`);
       logInfo(`Initializing ${this.constructor.name}...`);
+
       this.registerHandlers();
+
+      // ✅ Diagnostic: Log registered handlers after initialization
+      console.log(`[BaseController/${this.constructor.name}] ✓ Initialization complete:`, {
+        handlersRegistered: this.handlers.size,
+        channels: Array.from(this.handlers.keys()),
+      });
+
       logInfo(`${this.constructor.name} initialized successfully`);
     } catch (error) {
+      console.error(`[BaseController/${this.constructor.name}] ✗ Initialization failed:`, {
+        error,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+
       logError(
         error instanceof Error
           ? error

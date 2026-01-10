@@ -76,6 +76,8 @@ export const MENU_ITEM_CHANNELS = {
   DELETE_CATEGORY: createChannel('menu-items', 'delete-category'),
   GET_CATEGORIES: createChannel('menu-items', 'get-categories'),
   GET_CATEGORY_STATS: createChannel('menu-items', 'get-category-stats'),
+  // Bulk operations
+  BULK_UPDATE_PROPERTIES: createChannel('menu-items', 'bulk-update-properties'),
 };
 
 /**
