@@ -1,3 +1,28 @@
+/**
+ * supabaseSync.ts — bidirectional sync between local SQLite (POS) and Supabase.
+ *
+ * NAMING POLICY: POS TypeScript interfaces use camelCase; Supabase columns are
+ * snake_case, except a few legacy mixed-case identifiers like "isVisibleOnWebsite"
+ * which are preserved for backward compatibility. This file is the ONLY place
+ * that translates between the two — keep all mapping logic localized here.
+ *
+ * WEBSITE MANAGER FIELDS — DO NOT ADD TO THIS FILE:
+ *   item:     "isVisibleOnWebsite", display_order, is_featured, image_url,
+ *             image_lqip, description, updated_at
+ *   category: display_order, is_visible, image_url, updated_at
+ *   tables:   website_settings, website_audit
+ * These fields are Supabase-authoritative. They are read and written directly by
+ * `services/websiteManagerService.ts` over the same HTTP client. They MUST NOT be
+ * added to the upsert payloads below or to the local SQLite mirror — doing so
+ * would race with Website Manager edits and silently clobber them.
+ *
+ * NOTE on isVisibleOnWebsite: this column was previously pushed by the sync
+ * (race-fix in iter 2 removed it). The Supabase column default is `true`, so
+ * newly created POS items still appear on the public Menu by default. Admins
+ * use the Website Manager to hide them — and the "Reset Website" Danger Zone
+ * action to wipe everything in one click.
+ */
+
 import { PrismaClient } from '../db/prisma-wrapper';
 import { getDatabase } from '../db/index';
 import { logInfo, logError } from '../error-handler';
@@ -5,9 +30,12 @@ import Decimal from 'decimal.js';
 import { getCurrentLocalDateTime } from '../utils/dateTime';
 import https from 'https';
 
-// Hardcoded Supabase credentials
-const SUPABASE_URL = 'https://buivobulqaryifxesvqo.supabase.co';
-const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1aXZvYnVscWFyeWlmeGVzdnFvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDcyNDUxNSwiZXhwIjoyMDY2MzAwNTE1fQ.-G0GXB57aRlD9VldrkTeBb_l5lDlkXl385-qYpgdpoE';
+// Hardcoded Supabase credentials.
+// NOTE: re-exported below so services in this folder can reuse the same
+// project + service-role key without duplicating the literal. Replacing this
+// with secure storage is tracked as a separate ticket (see plan §"Deferred").
+export const SUPABASE_URL = 'https://buivobulqaryifxesvqo.supabase.co';
+export const SUPABASE_SERVICE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ1aXZvYnVscWFyeWlmeGVzdnFvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1MDcyNDUxNSwiZXhwIjoyMDY2MzAwNTE1fQ.-G0GXB57aRlD9VldrkTeBb_l5lDlkXl385-qYpgdpoE';
 
 /**
  * Convert SQLite hex ID to PostgreSQL UUID format
@@ -63,7 +91,7 @@ function formatHexAsUuid(hexId: string): string {
  * Simple HTTP client for Supabase REST API
  * This bypasses the need for the @supabase/supabase-js SDK which has loading issues in Electron
  */
-class SupabaseHTTPClient {
+export class SupabaseHTTPClient {
   private baseUrl: string;
   private apiKey: string;
 
@@ -190,11 +218,12 @@ class SupabaseHTTPClient {
           }
           const queryString = params.toString() ? `?${params.toString()}` : '';
 
-          // ✅ FIX: Use correct Prefer header for proper upsert behavior
-          // 'return=representation' ensures PostgREST returns the upserted data
-          // This allows INSERT ... ON CONFLICT DO UPDATE to properly update all fields
+          // PostgREST upsert: 'resolution=merge-duplicates' tells the server to
+          // run INSERT ... ON CONFLICT DO UPDATE; without it, conflicts on the
+          // on_conflict target may be silently ignored (no UPDATE applied).
+          // 'return=representation' returns the upserted rows in the body.
           const data = await this.request('POST', `/rest/v1/${table}${queryString}`, records, {
-            'Prefer': 'return=representation'
+            'Prefer': 'resolution=merge-duplicates,return=representation'
           });
           return { data, error: null };
         } catch (err) {
@@ -589,13 +618,14 @@ export class SupabaseSyncService {
 
       if (existingByUuid) {
         // UUID match → normal upsert
+        // NOTE: isVisibleOnWebsite intentionally omitted — it's Supabase-authoritative,
+        // owned by services/websiteManagerService.ts. See header policy comment.
         toUpsert.push({
           uuid: localItem.uuid,
           name: localItem.name,
           price: localItem.price,
           is_special: false,  // ✅ FIX: Add required field
           category_id: category_id,
-          isVisibleOnWebsite: localItem.isVisibleOnWebsite === 1,
           deleted_at: null
         });
       } else {
@@ -616,6 +646,7 @@ export class SupabaseSyncService {
             name: localItem.name
           });
 
+          // NOTE: isVisibleOnWebsite intentionally omitted — Supabase-authoritative.
           toUpsert.push({
             id: existingByName.id,  // ← CRITICAL: Supabase PK
             uuid: localItem.uuid,    // ← New UUID from local
@@ -623,18 +654,18 @@ export class SupabaseSyncService {
             price: localItem.price,
             is_special: existingByName.is_special ?? false,  // Preserve existing value
             category_id: category_id,
-            isVisibleOnWebsite: localItem.isVisibleOnWebsite === 1,
             deleted_at: null
           });
         } else {
           // No match → new record
+          // NOTE: isVisibleOnWebsite intentionally omitted — Supabase column
+          // default is `true`, so new items appear on the public Menu by default.
           toUpsert.push({
             uuid: localItem.uuid,
             name: localItem.name,
             price: localItem.price,
             is_special: false,  // ✅ FIX: Required field with default value
             category_id: category_id,
-            isVisibleOnWebsite: localItem.isVisibleOnWebsite === 1,
             deleted_at: null
           });
         }
@@ -691,7 +722,7 @@ export class SupabaseSyncService {
    *       = multiple Supabase records (one per addon-category pair)
    * Uses composite key matching: addon_uuid + category_id
    */
-  private async syncAddOns(): Promise<number> {
+  public async syncAddOns(): Promise<number> {
     if (!this.supabase) throw new Error('Supabase not initialized');
     const db = getDatabase();
 
@@ -912,104 +943,252 @@ export class SupabaseSyncService {
   }
 
   /**
-   * Sync single menu item (for real-time updates)
+   * Sync single menu item (for real-time updates).
+   * Mirrors the bulk path in syncMenuItems: uuid-based identity, FK resolution,
+   * onConflict on uuid, and soft-delete via deleted_at.
+   *
+   * IMPORTANT: this.supabase is the in-house SupabaseHTTPClient (not the
+   * @supabase/supabase-js SDK). Its query builder only supports a single
+   * `.eq(...)` after `.select(...)`, and does NOT support `.is()`, `.limit()`,
+   * or `.ilike()`. To filter, fetch with `.select()` (no chained operators)
+   * and filter the result in JavaScript — same approach the bulk path uses.
+   *
+   * Excluded fields per WEBSITE_CONTRACT.md (Supabase-authoritative, owned by
+   * websiteManagerService): isVisibleOnWebsite, display_order, is_featured,
+   * image_url, image_lqip, description.
    */
   public async syncMenuItem(itemId: string): Promise<void> {
-    if (!this.isConfigured()) {
+    if (!this.isConfigured() || !this.supabase) {
       logInfo('Supabase not configured, skipping item sync');
       return;
     }
 
-    if (!this.supabase) return;
-
     try {
       const item = await this.prisma.menuItem.findUnique({
         where: { id: itemId },
-        include: {
-          category: true,
-        },
+        include: { category: true },
       });
 
-      if (!item || !item.isActive || !item.category.isActive) {
-        // Item deleted, inactive, or category inactive - remove from Supabase
-        await this.supabase.from('item').delete().eq('id', itemId);
-        logInfo(`Removed item ${itemId} from Supabase`);
+      const itemUuid = formatHexAsUuid(itemId);
+
+      // Inactive / deleted / category-deactivated → soft-delete in Supabase by uuid.
+      // The Supabase `item.category_id` is NOT NULL — we must preserve the
+      // existing value (the SQLite row may already be hard-deleted by the
+      // controller, so we cannot derive category_id from local state).
+      if (!item || !item.isActive || !item.category?.isActive) {
+        const { data: allItems, error: lookupErr } = await this.supabase
+          .from('item')
+          .select('uuid, name, price, category_id, deleted_at');
+        if (lookupErr) throw lookupErr;
+        const existing = (allItems || []).find((r: any) => r.uuid === itemUuid);
+        if (!existing) {
+          // Nothing to soft-delete — the row was never synced to Supabase.
+          logInfo(`Item ${itemUuid} not in Supabase, nothing to soft-delete`);
+          return;
+        }
+        if (existing.deleted_at) {
+          // Already soft-deleted; idempotent skip.
+          return;
+        }
+        const { error } = await this.supabase
+          .from('item')
+          .upsert(
+            {
+              uuid: itemUuid,
+              name: item?.name ?? existing.name ?? 'Deleted Item',
+              price: item?.price?.toString() ?? existing.price ?? '0',
+              is_special: false,
+              category_id: existing.category_id, // preserve NOT NULL FK
+              deleted_at: new Date().toISOString(),
+            },
+            { onConflict: 'uuid' },
+          );
+        if (error) throw error;
+        logInfo(`Soft-deleted item ${itemUuid} in Supabase`);
         return;
       }
 
-      // Validate item has required fields before syncing
       if (!item.name || item.name.trim() === '' || !item.price) {
-        logInfo(`⚠️ Skipping menu item sync - invalid name or price: id=${item.id}`);
+        logInfo(`⚠️ Skipping item sync — invalid name/price: ${itemUuid}`);
         return;
       }
 
-      // Item is active - upsert to Supabase
-      const { error } = await this.supabase.from('item').upsert({
-        id: item.id,
-        name: item.name,
-        price: item.price.toString(),
-        is_special: false,
-        category_id: item.categoryId,
-      });
+      // Resolve category integer FK from category uuid.
+      // Fetch all categories then filter in-memory (custom client has no .is/.limit).
+      const categoryUuid = formatHexAsUuid(item.categoryId);
+      const { data: allCategories, error: catErr } = await this.supabase
+        .from('category')
+        .select('id, uuid, deleted_at');
+      if (catErr) throw catErr;
 
+      const findCategoryId = (rows: any[] | null): number | undefined =>
+        (rows || []).find(
+          (c: any) => c.uuid === categoryUuid && !c.deleted_at,
+        )?.id;
+
+      let supabaseCategoryId = findCategoryId(allCategories);
+      if (!supabaseCategoryId) {
+        // Category isn't in Supabase yet — push it once, then re-resolve.
+        // _skipItemRecursion=true prevents syncCategory from re-entering syncMenuItem.
+        await this.syncCategory(item.categoryId, /* _skipItemRecursion */ true);
+        const { data: retryCategories } = await this.supabase
+          .from('category')
+          .select('id, uuid, deleted_at');
+        supabaseCategoryId = findCategoryId(retryCategories);
+        if (!supabaseCategoryId) {
+          logInfo(`⚠️ Category not in Supabase, item sync skipped: ${item.name}`);
+          return;
+        }
+      }
+
+      const { error } = await this.supabase
+        .from('item')
+        .upsert(
+          {
+            uuid: itemUuid,
+            name: item.name,
+            price: item.price.toString(),
+            is_special: false,
+            category_id: supabaseCategoryId,
+            deleted_at: null,
+          },
+          { onConflict: 'uuid' },
+        );
       if (error) throw error;
-      logInfo(`Synced menu item: ${item.name}`);
+      logInfo(`Synced menu item: ${item.name} (${itemUuid})`);
     } catch (error) {
       logError(error as Error, 'syncMenuItem');
     }
   }
 
   /**
-   * Sync single category (for real-time updates)
+   * Sync single category (for real-time updates).
+   * Mirrors the bulk path in syncCategories: uuid-based identity with name
+   * adoption fallback, soft-delete via deleted_at, and onConflict on uuid.
+   *
+   * @param _skipItemRecursion when true, suppresses re-syncing of this
+   *   category's items. Used by syncMenuItem's self-heal path to prevent
+   *   indirect recursion back into syncMenuItem.
    */
-  public async syncCategory(categoryId: string): Promise<void> {
-    if (!this.isConfigured()) {
+  public async syncCategory(categoryId: string, _skipItemRecursion = false): Promise<void> {
+    if (!this.isConfigured() || !this.supabase) {
       logInfo('Supabase not configured, skipping category sync');
       return;
     }
-
-    if (!this.supabase) return;
 
     try {
       const category = await this.prisma.category.findUnique({
         where: { id: categoryId },
       });
 
+      const categoryUuid = formatHexAsUuid(categoryId);
+
+      // SQLite row gone (hard delete by deleteCategory) OR soft-deactivated.
+      // Either way, soft-delete the corresponding Supabase row by uuid so the
+      // public Menu / Website tab stops listing it.
       if (!category || !category.isActive) {
-        // Category deleted or inactive - remove from Supabase
-        if (category && category.name) {
-          // Delete category by name (Supabase should handle cascading deletes or orphaned items)
-          await this.supabase.from('category').delete().eq('name', category.name);
-          logInfo(`Removed category ${category.name} from Supabase`);
+        const { data: allCategories, error: lookupErr } = await this.supabase
+          .from('category')
+          .select('uuid, name, deleted_at');
+        if (lookupErr) throw lookupErr;
+        const existing = (allCategories || []).find((c: any) => c.uuid === categoryUuid);
+        if (!existing) {
+          // Never reached Supabase — nothing to do.
+          return;
         }
+        if (existing.deleted_at) {
+          // Already soft-deleted; idempotent skip.
+          return;
+        }
+        const { error } = await this.supabase
+          .from('category')
+          .upsert(
+            {
+              uuid: categoryUuid,
+              name: category?.name ?? existing.name ?? 'Deleted Category',
+              deleted_at: new Date().toISOString(),
+            },
+            { onConflict: 'uuid' },
+          );
+        if (error) throw error;
+        logInfo(`Soft-deleted category ${categoryUuid} in Supabase`);
         return;
       }
 
-      // Validate category has a non-NULL name before syncing
       if (!category.name || category.name.trim() === '') {
-        logInfo(`⚠️ Skipping category sync - invalid name: id=${category.id}`);
+        logInfo(`⚠️ Skipping category sync — invalid name: ${categoryUuid}`);
         return;
       }
 
-      // Category is active - upsert to Supabase
-      // Using 'columns' parameter to bypass PostgREST schema validation
-      const { error } = await this.supabase.from('category').upsert({
-        name: category.name,
-      }, { onConflict: 'name', columns: 'name' });
+      // Name-adoption fallback: if a category with the same name (any uuid) already
+      // exists in Supabase, adopt it by sending its `id` (Supabase PK). Mirrors
+      // the bulk path at lines 437-481.
+      // Custom client has no .ilike — fetch all and filter in JS.
+      const { data: existing, error: selErr } = await this.supabase
+        .from('category')
+        .select('id, uuid, name, deleted_at');
+      if (selErr) throw selErr;
 
+      const byUuid = (existing || []).find(
+        (c: any) => c.uuid === categoryUuid && !c.deleted_at,
+      );
+      const byName = (existing || []).find(
+        (c: any) =>
+          !c.deleted_at &&
+          c.uuid !== categoryUuid &&
+          c.name &&
+          c.name.toLowerCase() === category.name!.toLowerCase(),
+      );
+
+      const payload: any = {
+        uuid: categoryUuid,
+        name: category.name,
+        deleted_at: null,
+      };
+      if (!byUuid && byName) {
+        payload.id = byName.id;
+        logInfo(`🔄 ADOPTING category "${category.name}": ${byName.uuid} → ${categoryUuid}`);
+      }
+
+      const { error } = await this.supabase
+        .from('category')
+        .upsert(payload, { onConflict: 'uuid' });
       if (error) throw error;
       logInfo(`Synced category: ${category.name}`);
 
-      // Re-sync all items in this category
-      const items = await this.prisma.menuItem.findMany({
-        where: { categoryId: category.id },
-      });
-
-      for (const item of items) {
-        await this.syncMenuItem(item.id);
+      // Re-sync items so any that previously failed (e.g. due to category-missing)
+      // now land. Skipped when called from syncMenuItem's self-heal path.
+      if (!_skipItemRecursion) {
+        const items = await this.prisma.menuItem.findMany({
+          where: { categoryId: category.id },
+        });
+        for (const item of items) {
+          await this.syncMenuItem(item.id);
+        }
       }
     } catch (error) {
       logError(error as Error, 'syncCategory');
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Module-level singleton accessor.
+//
+// Why this exists: MenuItemController and AddonController are constructed
+// BEFORE startup-manager creates the SupabaseSyncService. They cannot resolve
+// the service from the ServiceRegistry at construction time (it isn't there
+// yet). They look it up lazily via getSupabaseSyncService() at each sync call
+// instead. startup-manager-nextron.ts calls setSupabaseSyncService() right
+// after `new SupabaseSyncService(prisma)`.
+// ---------------------------------------------------------------------------
+let _syncServiceInstance: SupabaseSyncService | null = null;
+
+export function setSupabaseSyncService(svc: SupabaseSyncService): void {
+  _syncServiceInstance = svc;
+  logInfo('[supabaseSync] Module singleton set — controllers can now sync per-action');
+}
+
+export function getSupabaseSyncService(): SupabaseSyncService | null {
+  return _syncServiceInstance;
 }

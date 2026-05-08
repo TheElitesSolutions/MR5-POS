@@ -22,7 +22,7 @@ import { validateWithSchema } from '../utils/validation-helpers';
 import { logInfo } from '../error-handler';
 import { prisma } from '../db/prisma-wrapper';
 import { MenuItemService } from '../services/menuItemService';
-import { SupabaseSyncService } from '../services/supabaseSync';
+import { SupabaseSyncService, getSupabaseSyncService } from '../services/supabaseSync';
 import { ServiceRegistry } from '../services/serviceRegistry';
 import { IPCResponse } from '../types/index';
 import { BaseController } from './baseController';
@@ -31,23 +31,18 @@ import { getCurrentLocalDateTime } from '../utils/dateTime';
 
 export class MenuItemController extends BaseController {
   private menuItemService: MenuItemService;
-  private syncService: SupabaseSyncService | null = null;
+  // Resolved lazily at every access via the module singleton in supabaseSync.ts.
+  // The previous eager registry lookup always returned undefined because
+  // SupabaseSyncService is created AFTER this controller (see startup-manager).
+  private get syncService(): SupabaseSyncService | null {
+    return getSupabaseSyncService();
+  }
 
   constructor() {
     super();
     // Get the service from the registry
     const serviceRegistry = ServiceRegistry.getInstance(prisma as any);
     this.menuItemService = serviceRegistry.getServiceByClass(MenuItemService);
-
-    // Try to get sync service if available
-    try {
-      const registry = serviceRegistry as any;
-      if (registry.services?.has('SupabaseSyncService')) {
-        this.syncService = registry.services.get('SupabaseSyncService');
-      }
-    } catch (error) {
-      logInfo('Supabase sync service not available, real-time sync disabled');
-    }
 
     logInfo('MenuItemController: Service dependency initialized');
     // this.initialize(); // Removed: StartupManager calls initialize() explicitly

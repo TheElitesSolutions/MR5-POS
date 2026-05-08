@@ -18,6 +18,7 @@ asarUnpack:
   - node_modules/better-sqlite3/**/*
   - node_modules/electron-pos-printer/**/*
   - node_modules/bcryptjs/**/*
+  - node_modules/sharp/**/*
   - "**/.env"
 win:
   target:

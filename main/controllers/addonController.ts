@@ -10,6 +10,7 @@ import { BaseController } from './baseController';
 import { IPCResponse } from '../types';
 import { AddonService } from '../services/AddonService';
 import { AddonCacheService } from '../services/AddonCacheService';
+import { SupabaseSyncService, getSupabaseSyncService } from '../services/supabaseSync';
 import { OrderModel } from '../models/Order';
 import {
   AddonError,
@@ -73,6 +74,12 @@ export class AddonController extends BaseController {
   private addonService: AddonService;
   private cacheService: AddonCacheService;
   private orderModel: OrderModel;
+  // Resolved lazily at every access via the module singleton in supabaseSync.ts.
+  // SupabaseSyncService is created AFTER this controller (see startup-manager),
+  // so an eager registry lookup at construction time would always be null.
+  private get syncService(): SupabaseSyncService | null {
+    return getSupabaseSyncService();
+  }
 
   constructor() {
     super();
@@ -91,6 +98,19 @@ export class AddonController extends BaseController {
 
     // Initialize handlers
     // this.initialize(); // Removed: StartupManager calls initialize() explicitly
+  }
+
+  /**
+   * Fire-and-forget bulk Supabase push so the Website Manager sees changes
+   * without waiting for the 60-min scheduler tick. The bulk syncAddOns path
+   * is idempotent (uuid-based upsert + composite key matching).
+   */
+  private triggerAddonSync(context: string): void {
+    this.syncService?.syncAddOns().catch((err: any) => {
+      logInfo(
+        `Background add-on sync failed (${context}): ${err?.message || err}`
+      );
+    });
   }
 
   /**
@@ -234,6 +254,8 @@ export class AddonController extends BaseController {
       // Invalidate related caches
       await this.cacheService.invalidateAddonGroupCache();
 
+      this.triggerAddonSync('createAddonGroup');
+
       return this.createSuccessResponse(
         result.data,
         'Add-on group created successfully'
@@ -338,6 +360,8 @@ export class AddonController extends BaseController {
       // Invalidate related caches
       await this.cacheService.invalidateAddonGroupCache(id);
 
+      this.triggerAddonSync('updateAddonGroup');
+
       return this.createSuccessResponse(
         result.data,
         'Add-on group updated successfully'
@@ -370,6 +394,8 @@ export class AddonController extends BaseController {
 
       // Invalidate related caches
       await this.cacheService.invalidateAddonGroupCache(id);
+
+      this.triggerAddonSync('deleteAddonGroup');
 
       return this.createSuccessResponse(
         result.data,
@@ -407,6 +433,8 @@ export class AddonController extends BaseController {
       await this.cacheService.invalidateAddonGroupCache(
         validatedData.addonGroupId
       );
+
+      this.triggerAddonSync('createAddon');
 
       return this.createSuccessResponse(
         result.data,
@@ -534,6 +562,8 @@ export class AddonController extends BaseController {
       // Invalidate related caches
       await this.cacheService.invalidateAddonGroupCache();
 
+      this.triggerAddonSync('updateAddon');
+
       return this.createSuccessResponse(
         result.data,
         'Add-on updated successfully'
@@ -566,6 +596,8 @@ export class AddonController extends BaseController {
 
       // Invalidate related caches
       await this.cacheService.invalidateAddonGroupCache();
+
+      this.triggerAddonSync('deleteAddon');
 
       return this.createSuccessResponse(
         result.data,
@@ -911,6 +943,8 @@ export class AddonController extends BaseController {
       // Invalidate related caches
       await this.cacheService.invalidateAddonGroupCache();
 
+      this.triggerAddonSync('assignGroupToCategory');
+
       return this.createSuccessResponse(
         result.data,
         'Add-on group assigned to category successfully'
@@ -949,6 +983,8 @@ export class AddonController extends BaseController {
 
       // Invalidate related caches
       await this.cacheService.invalidateAddonGroupCache();
+
+      this.triggerAddonSync('unassignGroupFromCategory');
 
       return this.createSuccessResponse(
         result.data,

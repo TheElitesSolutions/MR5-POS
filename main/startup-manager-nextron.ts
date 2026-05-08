@@ -25,12 +25,13 @@ import { StockController } from './controllers/stockController';
 import { SystemController } from './controllers/systemController';
 import { TableController } from './controllers/tableController';
 import { UpdaterController } from './controllers/updaterController';
+import { WebsiteController } from './controllers/websiteController';
 
 // Service imports
 import { OptimizedPrintingService } from './services/optimizedPrintingService';
 import { printerSpoolerService } from './services/printerSpoolerService';
 import { nativePrinterDetection } from './services/nativePrinterDetection';
-import { SupabaseSyncService } from './services/supabaseSync';
+import { SupabaseSyncService, setSupabaseSyncService } from './services/supabaseSync';
 import { SyncScheduler } from './services/syncScheduler';
 import { SyncController } from './controllers/syncController';
 import { DatabaseManagementController } from './controllers/databaseManagementController';
@@ -169,6 +170,7 @@ export class StartupManagerNextron {
       const optionalControllers = [
         { name: 'BackupController', instance: new BackupController() },
         { name: 'UpdaterController', instance: new UpdaterController() },
+        { name: 'WebsiteController', instance: new WebsiteController() },
       ];
 
       for (const { name, instance } of optionalControllers) {
@@ -215,6 +217,10 @@ export class StartupManagerNextron {
       enhancedLogger.info('[StartupManager] Initializing Supabase Sync Services...', LogCategory.SYSTEM, 'StartupManager');
       try {
         const supabaseSyncService = new SupabaseSyncService(prisma);
+        // Make this instance discoverable by MenuItemController / AddonController,
+        // which were constructed earlier and cannot pick it up from the
+        // ServiceRegistry (the registry only accepts BaseService subclasses).
+        setSupabaseSyncService(supabaseSyncService);
         const syncScheduler = new SyncScheduler(supabaseSyncService);
         const syncController = new SyncController(supabaseSyncService, syncScheduler);
 

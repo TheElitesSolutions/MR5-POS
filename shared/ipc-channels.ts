@@ -304,6 +304,26 @@ export const REPORT_CHANNELS = {
 };
 
 /**
+ * Website Manager channels — control the public mr5-Menu site from POS.
+ * All handlers go directly to Supabase; the local DB is not involved.
+ */
+export const WEBSITE_CHANNELS = {
+  LIST_ITEMS:           createChannel('website', 'list-items'),
+  LIST_CATEGORIES:      createChannel('website', 'list-categories'),
+  LIST_ADDONS:          createChannel('website', 'list-addons'),
+  GET_SETTINGS:         createChannel('website', 'get-settings'),
+  UPDATE_SETTINGS:      createChannel('website', 'update-settings'),
+  REORDER_ITEMS:        createChannel('website', 'reorder-items'),
+  SET_FEATURED:         createChannel('website', 'set-featured'),
+  SET_VISIBILITY:       createChannel('website', 'set-visibility'),
+  SET_CATEGORY_VISIBILITY: createChannel('website', 'set-category-visibility'),
+  BULK_SET_VISIBILITY:  createChannel('website', 'bulk-set-visibility'),
+  UPDATE_ITEM_CONTENT:  createChannel('website', 'update-item-content'),
+  UPLOAD_ITEM_IMAGE:    createChannel('website', 'upload-item-image'),
+  RESET_WEBSITE:        createChannel('website', 'reset'),
+};
+
+/**
  * Updater channels for auto-update functionality
  */
 export const UPDATER_CHANNELS = {
@@ -340,6 +360,7 @@ export const IPC_CHANNELS = {
   DATABASE_MANAGEMENT: DATABASE_MANAGEMENT_CHANNELS,
   REPORT: REPORT_CHANNELS,
   UPDATER: UPDATER_CHANNELS,
+  WEBSITE: WEBSITE_CHANNELS,
 };
 
 /**

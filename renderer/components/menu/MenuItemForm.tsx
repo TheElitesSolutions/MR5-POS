@@ -1211,29 +1211,17 @@ const MenuItemForm = ({ itemId, onClose, defaultCategory }: MenuItemFormProps) =
               )}
             />
 
-            {/* Website Visibility Toggle */}
-            <FormField
-              control={form.control}
-              name='isVisibleOnWebsite'
-              render={({ field }) => (
-                <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
-                  <div className='space-y-0.5'>
-                    <FormLabel className='text-base'>
-                      Show on Website
-                    </FormLabel>
-                    <FormDescription>
-                      Display this item on the public menu website. Disable to keep this item local-only.
-                    </FormDescription>
-                  </div>
-                  <FormControl>
-                    <Switch
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                </FormItem>
-              )}
-            />
+            {/*
+              Website visibility is now managed in Website → Items.
+              The form keeps `isVisibleOnWebsite` in its schema (defaults true)
+              for backwards-compat but no longer renders a toggle here, since
+              the sync layer no longer pushes that field — the Website Manager
+              writes it directly to Supabase.
+            */}
+            <div className='rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground'>
+              Visibility on the public website is managed under{' '}
+              <span className='font-medium text-foreground'>Website → Items</span>.
+            </div>
           </CardContent>
         </Card>
         </div>

@@ -21,6 +21,9 @@ dist
 temp-*
 NUL
 
+# oh-my-claudecode tooling state (per-session, not for VCS)
+.omc/
+
 # TypeScript build info
 *.tsbuildinfo
 

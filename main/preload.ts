@@ -90,15 +90,53 @@ const appAPI = {
   toggleDevTools: () => ipcRenderer.invoke('app:toggle-devtools'),
 }
 
+// Website Manager API — typed wrappers around the WEBSITE_CHANNELS in
+// shared/ipc-channels.ts. Strings are duplicated here because preload runs
+// in a sandboxed context and cannot easily import from src.
+const websiteAPI = {
+  listItems: () =>
+    ipcRenderer.invoke('mr5pos:website:list-items'),
+  listCategories: () =>
+    ipcRenderer.invoke('mr5pos:website:list-categories'),
+  listAddOns: () =>
+    ipcRenderer.invoke('mr5pos:website:list-addons'),
+  setCategoryVisibility: (payload: { categoryUuid: string; visible: boolean; actor: string }) =>
+    ipcRenderer.invoke('mr5pos:website:set-category-visibility', payload),
+  // Triggers SupabaseSyncService → ensures any newly-created POS items /
+  // categories / add-ons are pushed to Supabase so the Website Manager sees them.
+  syncFromPos: () =>
+    ipcRenderer.invoke('mr5pos:sync:manual'),
+  getSettings: () =>
+    ipcRenderer.invoke('mr5pos:website:get-settings'),
+  updateSettings: (payload: { patch: Record<string, unknown>; actor: string }) =>
+    ipcRenderer.invoke('mr5pos:website:update-settings', payload),
+  reorderItems: (payload: { categoryUuid: string; orderedUuids: string[]; actor: string }) =>
+    ipcRenderer.invoke('mr5pos:website:reorder-items', payload),
+  setFeatured: (payload: { itemUuid: string; value: boolean; actor: string; expectedUpdatedAt?: string }) =>
+    ipcRenderer.invoke('mr5pos:website:set-featured', payload),
+  setVisibility: (payload: { itemUuid: string; visible: boolean; actor: string; expectedUpdatedAt?: string }) =>
+    ipcRenderer.invoke('mr5pos:website:set-visibility', payload),
+  bulkSetVisibility: (payload: { itemUuids: string[]; visible: boolean; actor: string }) =>
+    ipcRenderer.invoke('mr5pos:website:bulk-set-visibility', payload),
+  updateItemContent: (payload: { itemUuid: string; patch: { description?: string | null }; actor: string }) =>
+    ipcRenderer.invoke('mr5pos:website:update-item-content', payload),
+  uploadItemImage: (payload: { itemUuid: string; bytes: ArrayBuffer; mime: string; actor: string }) =>
+    ipcRenderer.invoke('mr5pos:website:upload-item-image', payload),
+  resetWebsite: (payload: { actor: string }) =>
+    ipcRenderer.invoke('mr5pos:website:reset', payload),
+}
+
 // Expose at the correct path that matches TypeScript definitions
 contextBridge.exposeInMainWorld('electronAPI', {
   ipc: handler,
   updater: updaterAPI,
   diagnostic: diagnosticAPI,
   app: appAPI,
+  website: websiteAPI,
 })
 
 export type IpcHandler = typeof handler
 export type UpdaterAPI = typeof updaterAPI
 export type DiagnosticAPI = typeof diagnosticAPI
 export type AppAPI = typeof appAPI
+export type WebsiteAPI = typeof websiteAPI

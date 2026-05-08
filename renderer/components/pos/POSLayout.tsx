@@ -15,6 +15,7 @@ import {
   BarChart3,
   DollarSign,
   FileBarChart,
+  Globe,
   LogOut,
   Menu,
   Package,
@@ -93,6 +94,12 @@ const POSLayout = ({ children }: POSLayoutProps) => {
       show: permissions.isAdmin || permissions.isManager,
     },
     {
+      href: '/website',
+      label: 'Website',
+      icon: Globe,
+      show: permissions.isAdmin || permissions.isManager,
+    },
+    {
       href: '/stock',
       label: 'Stock',
       icon: Package,
@@ -106,7 +113,8 @@ const POSLayout = ({ children }: POSLayoutProps) => {
     },
   ];
 
-  const isActivePage = (href: string) => pathname === href;
+  const isActivePage = (href: string) =>
+    pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
 
   const getRoleColor = (role: string) => {
     switch (role) {
