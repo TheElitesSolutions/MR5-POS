@@ -108,7 +108,15 @@ class SupabaseHTTPClient {
 
           if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
             try {
-              resolve(data ? JSON.parse(data) : null);
+              const parsedData = data ? JSON.parse(data) : null;
+
+              // ✅ FIX: Log upsert details for debugging
+              if (method === 'POST' && path.includes('/rest/v1/')) {
+                const recordCount = Array.isArray(parsedData) ? parsedData.length : (parsedData ? 1 : 0);
+                console.log(`[Sync HTTP] 📊 Upserted ${recordCount} record(s)`);
+              }
+
+              resolve(parsedData);
             } catch (e) {
               const errorMsg = `Failed to parse JSON: ${e}`;
               logError(new Error(errorMsg), 'request');
@@ -180,12 +188,13 @@ class SupabaseHTTPClient {
           if (options?.onConflict) {
             params.append('on_conflict', options.onConflict);  // ✅ String param
           }
-          // Note: 'resolution' parameter does NOT exist - removed to fix PGRST100 error
           const queryString = params.toString() ? `?${params.toString()}` : '';
 
-          // Add Prefer header for upsert to work correctly (merge on conflict)
+          // ✅ FIX: Use correct Prefer header for proper upsert behavior
+          // 'return=representation' ensures PostgREST returns the upserted data
+          // This allows INSERT ... ON CONFLICT DO UPDATE to properly update all fields
           const data = await this.request('POST', `/rest/v1/${table}${queryString}`, records, {
-            'Prefer': 'resolution=merge-duplicates'
+            'Prefer': 'return=representation'
           });
           return { data, error: null };
         } catch (err) {
