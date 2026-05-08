@@ -108,11 +108,13 @@ export const usePOSStore = create((set, get) => ({
         });
         set({ isSaving: true });
         try {
-            // Save new items
-            for (const item of newItems) {
-                console.log('📝 SAVE: Adding new item', item);
-                await get().addOrderItem(item.menuItemId, item.quantity);
-            }
+            // NOTE: Do NOT re-insert tracking.newItems — those rows are already in the DB.
+            // `tracking.newItems` is a kitchen-print delta tracker (see useSimpleOrderTracking),
+            // not a pending-write queue. addOrderItem() writes synchronously to the DB; the
+            // tracking is populated AFTER the write succeeds, with the DB-issued row id.
+            // Re-calling addOrderItem here inserts a second copy of every item, which was the
+            // root cause of the "items double after going idle / before Done Adding Items" bug.
+            void newItems; // referenced for clarity; intentionally not iterated
             // Save quantity changes
             for (const [itemId, change] of Object.entries(netChanges)) {
                 const netQuantity = change.currentQty;
