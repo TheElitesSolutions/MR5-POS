@@ -525,20 +525,17 @@ export class SupabaseSyncService {
       adoptions.forEach(a => logInfo(`   "${a.name}": ${a.oldUuid} → ${a.newUuid}`));
     }
 
-    // Get existing Supabase records to soft delete (with their names to avoid NULL constraint).
-    // Adopted rows count as "claimed by local" — exclude their old uuids from the delete set.
+    // Existing Supabase rows that no longer correspond to a local active row
+    // (and weren't just adopted under a new uuid) → HARD DELETE.
+    // We deliberately do NOT exclude already-`deleted_at` rows: any legacy
+    // soft-deleted leftovers from the previous version are also pruned here.
     const adoptedOldUuids = new Set(toAdopt.map(a => a.oldUuid));
-    const toMarkDeleted = (existingCategories || [])
+    const uuidsToDelete = (existingCategories || [])
       .filter((c: any) =>
-        !c.deleted_at &&
         !localUUIDs.has(c.uuid) &&
         !adoptedOldUuids.has(c.uuid)
       )
-      .map((c: any) => ({
-        uuid: c.uuid,
-        name: c.name || 'Deleted Category', // Ensure name is not NULL
-        deleted_at: new Date().toISOString()
-      }));
+      .map((c: any) => c.uuid);
 
     // Phase 4: Execute batch operations
     let syncedCount = 0;
@@ -566,17 +563,17 @@ export class SupabaseSyncService {
       logInfo(`✅ Upserted ${toUpsert.length} categories`);
     }
 
-    if (toMarkDeleted.length > 0) {
+    if (uuidsToDelete.length > 0) {
       const { error } = await this.supabase
         .from('category')
-        .upsert(toMarkDeleted, { onConflict: 'uuid' });
-
+        .delete()
+        .in('uuid', uuidsToDelete);
       if (error) throw error;
-      logInfo(`🗑️ Soft deleted ${toMarkDeleted.length} categories`);
+      logInfo(`🗑️ Hard-deleted ${uuidsToDelete.length} categories from Supabase`);
     }
 
     // Phase 5: Log validation
-    logInfo(`Synced ${syncedCount} active categories (${toMarkDeleted.length} soft deleted)`);
+    logInfo(`Synced ${syncedCount} active categories (${uuidsToDelete.length} hard deleted)`);
     return syncedCount;
   }
 
@@ -751,23 +748,16 @@ export class SupabaseSyncService {
       adoptions.forEach(a => logInfo(`   "${a.name}": ${a.oldUuid} → ${a.newUuid}`));
     }
 
-    // Get existing Supabase items to soft delete (with required fields to avoid NULL constraint).
-    // Exclude items whose old uuid was just adopted — they're not actually deleted, just rekeyed.
+    // Existing Supabase items not in local active set (and not just adopted under
+    // a new uuid) → HARD DELETE. We deliberately do NOT exclude already-`deleted_at`
+    // rows: any soft-deleted leftovers from the previous version are also pruned.
     const adoptedOldItemUuids = new Set(toAdopt.map(a => a.oldUuid));
-    const toMarkDeleted = (existingItems || [])
+    const itemUuidsToDelete = (existingItems || [])
       .filter((i: any) =>
-        !i.deleted_at &&
         !localUUIDs.has(i.uuid) &&
         !adoptedOldItemUuids.has(i.uuid)
       )
-      .map((i: any) => ({
-        uuid: i.uuid,
-        name: i.name || 'Deleted Item', // Ensure name is not NULL
-        price: i.price || '0', // Ensure price is not NULL
-        category_id: i.category_id, // Preserve category_id
-        is_special: false,  // Required field for soft delete
-        deleted_at: new Date().toISOString()
-      }));
+      .map((i: any) => i.uuid);
 
     // Phase 5: Execute batch operations
     let syncedCount = 0;
@@ -794,16 +784,16 @@ export class SupabaseSyncService {
       logInfo(`✅ Upserted ${toUpsert.length} menu items`);
     }
 
-    if (toMarkDeleted.length > 0) {
+    if (itemUuidsToDelete.length > 0) {
       const { error } = await this.supabase
         .from('item')
-        .upsert(toMarkDeleted, { onConflict: 'uuid' });
-
+        .delete()
+        .in('uuid', itemUuidsToDelete);
       if (error) throw error;
-      logInfo(`🗑️ Soft deleted ${toMarkDeleted.length} menu items`);
+      logInfo(`🗑️ Hard-deleted ${itemUuidsToDelete.length} menu items from Supabase`);
     }
 
-    logInfo(`Synced ${syncedCount} active menu items (${toMarkDeleted.length} soft deleted)`);
+    logInfo(`Synced ${syncedCount} active menu items (${itemUuidsToDelete.length} hard deleted)`);
     return syncedCount;
   }
 
@@ -1005,23 +995,16 @@ export class SupabaseSyncService {
       logInfo(`📋 Addon Adoptions: ${adoptions.length} records linked`);
     }
 
-    // Find records to soft delete (exist in Supabase but not in local active).
+    // Find records to HARD DELETE (exist in Supabase but not in local active).
     // Exclude rows we just adopted under a new addon_uuid — they're not gone.
-    const toMarkDeleted: any[] = [];
+    // We deliberately do NOT skip already-`deleted_at` rows: legacy soft-deleted
+    // leftovers from the previous version are also pruned in this pass.
+    const rowsToDelete: Array<{ id: number }> = [];
     for (const existing of existingAddOns || []) {
-      if (existing.deleted_at) continue;  // Already soft-deleted
-
       const compositeKey = `${existing.addon_uuid}|${existing.category_id || 'null'}`;
       if (activeCompositeKeys.has(compositeKey)) continue;
       if (adoptedOldKeys.has(compositeKey)) continue;
-
-      toMarkDeleted.push({
-        addon_uuid: existing.addon_uuid,
-        category_id: existing.category_id,
-        description: existing.description || 'Deleted Addon', // Ensure description is not NULL
-        price: existing.price || '0', // Ensure price is not NULL
-        deleted_at: new Date().toISOString()
-      });
+      rowsToDelete.push({ id: existing.id });
     }
 
     // Phase 5: Execute batch operations
@@ -1051,16 +1034,17 @@ export class SupabaseSyncService {
       logInfo(`✅ Upserted ${toUpsert.length} add-on assignments`);
     }
 
-    if (toMarkDeleted.length > 0) {
+    if (rowsToDelete.length > 0) {
+      const ids = rowsToDelete.map(r => r.id);
       const { error } = await this.supabase
         .from('add_on')
-        .upsert(toMarkDeleted, { onConflict: 'addon_uuid,category_id' });
-
+        .delete()
+        .in('id', ids);
       if (error) throw error;
-      logInfo(`🗑️ Soft deleted ${toMarkDeleted.length} add-on assignments`);
+      logInfo(`🗑️ Hard-deleted ${rowsToDelete.length} add-on assignments from Supabase`);
     }
 
-    logInfo(`Synced ${syncedCount} active add-on assignments (${toMarkDeleted.length} soft deleted)`);
+    logInfo(`Synced ${syncedCount} active add-on assignments (${rowsToDelete.length} hard deleted)`);
     return syncedCount;
   }
 
@@ -1093,40 +1077,17 @@ export class SupabaseSyncService {
 
       const itemUuid = formatHexAsUuid(itemId);
 
-      // Inactive / deleted / category-deactivated → soft-delete in Supabase by uuid.
-      // The Supabase `item.category_id` is NOT NULL — we must preserve the
-      // existing value (the SQLite row may already be hard-deleted by the
-      // controller, so we cannot derive category_id from local state).
+      // Inactive / deleted / category-deactivated → HARD DELETE in Supabase by uuid.
+      // We physically remove the row so the public Menu and the Website tab
+      // can't surface it under any code path. There are no FKs on Supabase
+      // pointing into `item` (orders live in SQLite only), so DELETE is safe.
       if (!item || !item.isActive || !item.category?.isActive) {
-        const { data: allItems, error: lookupErr } = await this.supabase
-          .from('item')
-          .select('uuid, name, price, category_id, deleted_at');
-        if (lookupErr) throw lookupErr;
-        const existing = (allItems || []).find((r: any) => r.uuid === itemUuid);
-        if (!existing) {
-          // Nothing to soft-delete — the row was never synced to Supabase.
-          logInfo(`Item ${itemUuid} not in Supabase, nothing to soft-delete`);
-          return;
-        }
-        if (existing.deleted_at) {
-          // Already soft-deleted; idempotent skip.
-          return;
-        }
         const { error } = await this.supabase
           .from('item')
-          .upsert(
-            {
-              uuid: itemUuid,
-              name: item?.name ?? existing.name ?? 'Deleted Item',
-              price: item?.price?.toString() ?? existing.price ?? '0',
-              is_special: false,
-              category_id: existing.category_id, // preserve NOT NULL FK
-              deleted_at: new Date().toISOString(),
-            },
-            { onConflict: 'uuid' },
-          );
+          .delete()
+          .eq('uuid', itemUuid);
         if (error) throw error;
-        logInfo(`Soft-deleted item ${itemUuid} in Supabase`);
+        logInfo(`Hard-deleted item ${itemUuid} from Supabase`);
         return;
       }
 
@@ -1247,34 +1208,17 @@ export class SupabaseSyncService {
       const categoryUuid = formatHexAsUuid(categoryId);
 
       // SQLite row gone (hard delete by deleteCategory) OR soft-deactivated.
-      // Either way, soft-delete the corresponding Supabase row by uuid so the
-      // public Menu / Website tab stops listing it.
+      // HARD DELETE the corresponding Supabase row by uuid. Items pointing at
+      // this category should already have been hard-deleted by deleteCategory
+      // (active block + inactive purge), so the FK from `item.category_id`
+      // won't hold us back.
       if (!category || !category.isActive) {
-        const { data: allCategories, error: lookupErr } = await this.supabase
-          .from('category')
-          .select('uuid, name, deleted_at');
-        if (lookupErr) throw lookupErr;
-        const existing = (allCategories || []).find((c: any) => c.uuid === categoryUuid);
-        if (!existing) {
-          // Never reached Supabase — nothing to do.
-          return;
-        }
-        if (existing.deleted_at) {
-          // Already soft-deleted; idempotent skip.
-          return;
-        }
         const { error } = await this.supabase
           .from('category')
-          .upsert(
-            {
-              uuid: categoryUuid,
-              name: category?.name ?? existing.name ?? 'Deleted Category',
-              deleted_at: new Date().toISOString(),
-            },
-            { onConflict: 'uuid' },
-          );
+          .delete()
+          .eq('uuid', categoryUuid);
         if (error) throw error;
-        logInfo(`Soft-deleted category ${categoryUuid} in Supabase`);
+        logInfo(`Hard-deleted category ${categoryUuid} from Supabase`);
         return;
       }
 

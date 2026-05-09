@@ -143,6 +143,14 @@ What the Menu still hardcodes (intentional, low-value-to-make-dynamic):
 - Hero background image (`/images/Menu.png` — deferred to a later iteration)
 - "Powered by The Elites Solutions" attribution (intentional white-label)
 
+## Delete semantics (v3.0.3+)
+
+POS-side deletes propagate as **hard deletes** in Supabase. When an item, category, or add-on is removed from POS — whether by per-action sync or by the bulk reconciliation finding a Supabase row that no longer has a local counterpart — the row is physically `DELETE`d, not soft-marked via `deleted_at`. The Website tab and the public Menu site both stop seeing it on their next read.
+
+The `deleted_at` column on `item` and `category` is retained for backward compatibility with anything still reading it, but new code does not populate it. The bulk reconciliation also passes through any pre-existing soft-deleted rows on the next run, so v3.0.3+ self-cleans previously-orphaned soft-deletes from earlier versions.
+
+This was a deliberate trade-off in favour of "what the POS shows is what Supabase has". Audit history is captured by the existing `website_audit` log for Website Manager edits; per-action POS deletes don't currently write an audit row.
+
 ## Known limitations (v3.0.1+)
 
 ### Single-client deployment assumed
