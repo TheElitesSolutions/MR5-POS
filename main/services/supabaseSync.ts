@@ -248,6 +248,28 @@ export class SupabaseHTTPClient {
           }
         },
       }),
+      // PATCH a single existing row by a unique column (typically `id`).
+      // Used by adoption: when a local row needs to take over an existing
+      // Supabase row (matched by name+category), we update that row's `uuid`
+      // and other fields by its primary key. Avoids the PK-violation pitfall
+      // of upserting with explicit `id` and on_conflict on a different column.
+      patch: async (
+        filterColumn: string,
+        filterValue: any,
+        payload: Record<string, any>,
+      ) => {
+        try {
+          const data = await this.request(
+            'PATCH',
+            `/rest/v1/${table}?${filterColumn}=eq.${filterValue}`,
+            payload,
+            { Prefer: 'return=representation' },
+          );
+          return { data, error: null };
+        } catch (err) {
+          return { data: null, error: err };
+        }
+      },
     };
   }
 }
@@ -431,8 +453,23 @@ export class SupabaseSyncService {
 
     const localUUIDs = new Set(formattedLocalCategories.map(c => c.uuid));
 
-    // Phase 3: Classify records with hybrid matching and adoption
+    // Phase 3: Classify records with hybrid matching and adoption.
+    //
+    // Three buckets:
+    //   toUpsert   - rows that don't yet exist in Supabase (or already match by uuid).
+    //                Goes through INSERT … ON CONFLICT (uuid) DO UPDATE.
+    //   toAdopt    - name+category match exists in Supabase but with a DIFFERENT uuid.
+    //                We PATCH the existing Supabase row by its primary key to take on
+    //                the local row's uuid + data. (Cannot batch-upsert with explicit
+    //                `id` and on_conflict='uuid' — PostgreSQL would raise a PK
+    //                violation that ON CONFLICT (uuid) doesn't catch, and the entire
+    //                batch upsert fails silently.)
     const toUpsert: any[] = [];
+    const toAdopt: Array<{
+      existingId: number;
+      payload: { uuid: string; name: string; deleted_at: null };
+      oldUuid: string;
+    }> = [];
     const adoptions: Array<{ oldUuid: string; newUuid: string; name: string }> = [];
 
     for (const localCat of formattedLocalCategories) {
@@ -455,20 +492,21 @@ export class SupabaseSyncService {
         );
 
         if (existingByName) {
-          // Name match → ADOPT (update Supabase UUID to match local)
+          // Name match → ADOPT via PATCH (update Supabase row's uuid + data by PK).
           logInfo(`🔄 ADOPTING category "${localCat.name}": ${existingByName.uuid} → ${localCat.uuid}`);
           adoptions.push({
             oldUuid: existingByName.uuid,
             newUuid: localCat.uuid,
             name: localCat.name
           });
-
-          // Include Supabase PK to force UPDATE not INSERT
-          toUpsert.push({
-            id: existingByName.id,  // ← CRITICAL: Supabase primary key
-            uuid: localCat.uuid,     // ← New UUID from local
-            name: localCat.name,
-            deleted_at: null
+          toAdopt.push({
+            existingId: existingByName.id,
+            payload: {
+              uuid: localCat.uuid,
+              name: localCat.name,
+              deleted_at: null,
+            },
+            oldUuid: existingByName.uuid,
           });
         } else {
           // No match → new record
@@ -487,9 +525,15 @@ export class SupabaseSyncService {
       adoptions.forEach(a => logInfo(`   "${a.name}": ${a.oldUuid} → ${a.newUuid}`));
     }
 
-    // Get existing Supabase records to soft delete (with their names to avoid NULL constraint)
+    // Get existing Supabase records to soft delete (with their names to avoid NULL constraint).
+    // Adopted rows count as "claimed by local" — exclude their old uuids from the delete set.
+    const adoptedOldUuids = new Set(toAdopt.map(a => a.oldUuid));
     const toMarkDeleted = (existingCategories || [])
-      .filter((c: any) => !c.deleted_at && !localUUIDs.has(c.uuid))
+      .filter((c: any) =>
+        !c.deleted_at &&
+        !localUUIDs.has(c.uuid) &&
+        !adoptedOldUuids.has(c.uuid)
+      )
       .map((c: any) => ({
         uuid: c.uuid,
         name: c.name || 'Deleted Category', // Ensure name is not NULL
@@ -499,13 +543,26 @@ export class SupabaseSyncService {
     // Phase 4: Execute batch operations
     let syncedCount = 0;
 
+    // 4a. PATCH adopted rows individually (safe — each one updates by PK).
+    for (const a of toAdopt) {
+      const { error } = await this.supabase
+        .from('category')
+        .patch('id', a.existingId, a.payload);
+      if (error) {
+        logError(error as Error, 'syncCategories.adopt');
+        // Continue with the rest — one bad PATCH should not abort the whole sync.
+        continue;
+      }
+      syncedCount++;
+    }
+
     if (toUpsert.length > 0) {
       const { data, error } = await this.supabase
         .from('category')
         .upsert(toUpsert, { onConflict: 'uuid' });
 
       if (error) throw error;
-      syncedCount = toUpsert.length;
+      syncedCount += toUpsert.length;
       logInfo(`✅ Upserted ${toUpsert.length} categories`);
     }
 
@@ -600,8 +657,23 @@ export class SupabaseSyncService {
 
     const localUUIDs = new Set(formattedLocalItems.map(i => i.uuid));
 
-    // Phase 4: Classify and adopt with name+category fallback, add is_special field
+    // Phase 4: Classify and adopt with name+category fallback, add is_special field.
+    // Adopted rows are PATCH'd individually (see syncCategories for rationale —
+    // upsert with explicit `id` + on_conflict='uuid' raises a PK violation that
+    // ON CONFLICT (uuid) does not catch, silently aborting the whole batch).
     const toUpsert: any[] = [];
+    const toAdopt: Array<{
+      existingId: number;
+      payload: {
+        uuid: string;
+        name: string;
+        price: string;
+        is_special: boolean;
+        category_id: number;
+        deleted_at: null;
+      };
+      oldUuid: string;
+    }> = [];
     const adoptions: Array<{ oldUuid: string; newUuid: string; name: string }> = [];
 
     for (const localItem of formattedLocalItems) {
@@ -638,23 +710,24 @@ export class SupabaseSyncService {
         );
 
         if (existingByName) {
-          // Name+category match → ADOPT
+          // Name+category match → ADOPT via PATCH-by-id.
           logInfo(`🔄 ADOPTING item "${localItem.name}": ${existingByName.uuid} → ${localItem.uuid}`);
           adoptions.push({
             oldUuid: existingByName.uuid,
             newUuid: localItem.uuid,
             name: localItem.name
           });
-
-          // NOTE: isVisibleOnWebsite intentionally omitted — Supabase-authoritative.
-          toUpsert.push({
-            id: existingByName.id,  // ← CRITICAL: Supabase PK
-            uuid: localItem.uuid,    // ← New UUID from local
-            name: localItem.name,
-            price: localItem.price,
-            is_special: existingByName.is_special ?? false,  // Preserve existing value
-            category_id: category_id,
-            deleted_at: null
+          toAdopt.push({
+            existingId: existingByName.id,
+            payload: {
+              uuid: localItem.uuid,
+              name: localItem.name,
+              price: localItem.price,
+              is_special: existingByName.is_special ?? false, // Preserve
+              category_id: category_id as number,
+              deleted_at: null,
+            },
+            oldUuid: existingByName.uuid,
           });
         } else {
           // No match → new record
@@ -678,9 +751,15 @@ export class SupabaseSyncService {
       adoptions.forEach(a => logInfo(`   "${a.name}": ${a.oldUuid} → ${a.newUuid}`));
     }
 
-    // Get existing Supabase items to soft delete (with required fields to avoid NULL constraint)
+    // Get existing Supabase items to soft delete (with required fields to avoid NULL constraint).
+    // Exclude items whose old uuid was just adopted — they're not actually deleted, just rekeyed.
+    const adoptedOldItemUuids = new Set(toAdopt.map(a => a.oldUuid));
     const toMarkDeleted = (existingItems || [])
-      .filter((i: any) => !i.deleted_at && !localUUIDs.has(i.uuid))
+      .filter((i: any) =>
+        !i.deleted_at &&
+        !localUUIDs.has(i.uuid) &&
+        !adoptedOldItemUuids.has(i.uuid)
+      )
       .map((i: any) => ({
         uuid: i.uuid,
         name: i.name || 'Deleted Item', // Ensure name is not NULL
@@ -693,13 +772,25 @@ export class SupabaseSyncService {
     // Phase 5: Execute batch operations
     let syncedCount = 0;
 
+    // 5a. PATCH adopted rows individually (each updates by Supabase PK).
+    for (const a of toAdopt) {
+      const { error } = await this.supabase
+        .from('item')
+        .patch('id', a.existingId, a.payload);
+      if (error) {
+        logError(error as Error, 'syncMenuItems.adopt');
+        continue; // Don't let one bad PATCH abort the rest of the sync.
+      }
+      syncedCount++;
+    }
+
     if (toUpsert.length > 0) {
       const { data, error } = await this.supabase
         .from('item')
         .upsert(toUpsert, { onConflict: 'uuid' });
 
       if (error) throw error;
-      syncedCount = toUpsert.length;
+      syncedCount += toUpsert.length;
       logInfo(`✅ Upserted ${toUpsert.length} menu items`);
     }
 
@@ -820,10 +911,23 @@ export class SupabaseSyncService {
 
     if (selectError) throw selectError;
 
-    // Phase 4: Create Supabase records with adoption logic (one per addon-category pair)
-    // Each has addon UUID + category_id for composite uniqueness
+    // Phase 4: Create Supabase records with adoption logic (one per addon-category pair).
+    // Adopted rows are PATCH'd individually (see syncCategories for rationale).
     const toUpsert: any[] = [];
+    const toAdopt: Array<{
+      existingId: number;
+      payload: {
+        addon_uuid: string;
+        description: string;
+        price: string;
+        category_id: number | null;
+        deleted_at: null;
+      };
+      oldUuid: string;
+      categoryId: number | null;
+    }> = [];
     const activeCompositeKeys = new Set<string>();
+    const adoptedOldKeys = new Set<string>();
     const adoptions: Array<{ oldUuid: string; newUuid: string; desc: string }> = [];
 
     for (const addon of formattedAddOns) {
@@ -862,21 +966,25 @@ export class SupabaseSyncService {
           );
 
           if (existingByDesc) {
-            // Description match → ADOPT
+            // Description+category match → ADOPT via PATCH-by-id.
             logInfo(`🔄 ADOPTING addon "${description}" (cat: ${categoryId}): ${existingByDesc.addon_uuid} → ${addon.uuid}`);
             adoptions.push({
               oldUuid: existingByDesc.addon_uuid,
               newUuid: addon.uuid,
               desc: description
             });
-
-            toUpsert.push({
-              id: existingByDesc.id,  // ← CRITICAL: Supabase PK
-              addon_uuid: addon.uuid,  // ← New UUID
-              description: description,
-              price: addon.price?.toString() || '0',
-              category_id: categoryId,
-              deleted_at: null
+            adoptedOldKeys.add(`${existingByDesc.addon_uuid}|${categoryId || 'null'}`);
+            toAdopt.push({
+              existingId: existingByDesc.id,
+              payload: {
+                addon_uuid: addon.uuid,
+                description: description,
+                price: addon.price?.toString() || '0',
+                category_id: categoryId,
+                deleted_at: null,
+              },
+              oldUuid: existingByDesc.addon_uuid,
+              categoryId,
             });
           } else {
             // No match → new record
@@ -897,25 +1005,39 @@ export class SupabaseSyncService {
       logInfo(`📋 Addon Adoptions: ${adoptions.length} records linked`);
     }
 
-    // Find records to soft delete (exist in Supabase but not in local active)
+    // Find records to soft delete (exist in Supabase but not in local active).
+    // Exclude rows we just adopted under a new addon_uuid — they're not gone.
     const toMarkDeleted: any[] = [];
     for (const existing of existingAddOns || []) {
       if (existing.deleted_at) continue;  // Already soft-deleted
 
       const compositeKey = `${existing.addon_uuid}|${existing.category_id || 'null'}`;
-      if (!activeCompositeKeys.has(compositeKey)) {
-        toMarkDeleted.push({
-          addon_uuid: existing.addon_uuid,
-          category_id: existing.category_id,
-          description: existing.description || 'Deleted Addon', // Ensure description is not NULL
-          price: existing.price || '0', // Ensure price is not NULL
-          deleted_at: new Date().toISOString()
-        });
-      }
+      if (activeCompositeKeys.has(compositeKey)) continue;
+      if (adoptedOldKeys.has(compositeKey)) continue;
+
+      toMarkDeleted.push({
+        addon_uuid: existing.addon_uuid,
+        category_id: existing.category_id,
+        description: existing.description || 'Deleted Addon', // Ensure description is not NULL
+        price: existing.price || '0', // Ensure price is not NULL
+        deleted_at: new Date().toISOString()
+      });
     }
 
     // Phase 5: Execute batch operations
     let syncedCount = 0;
+
+    // 5a. PATCH adopted rows individually (each updates by Supabase PK).
+    for (const a of toAdopt) {
+      const { error } = await this.supabase
+        .from('add_on')
+        .patch('id', a.existingId, a.payload);
+      if (error) {
+        logError(error as Error, 'syncAddOns.adopt');
+        continue; // Don't let one bad PATCH abort the rest of the sync.
+      }
+      syncedCount++;
+    }
 
     if (toUpsert.length > 0) {
       // Note: onConflict would need composite key support
@@ -925,7 +1047,7 @@ export class SupabaseSyncService {
         .upsert(toUpsert, { onConflict: 'addon_uuid,category_id' });
 
       if (error) throw error;
-      syncedCount = toUpsert.length;
+      syncedCount += toUpsert.length;
       logInfo(`✅ Upserted ${toUpsert.length} add-on assignments`);
     }
 
@@ -1041,21 +1163,62 @@ export class SupabaseSyncService {
         }
       }
 
-      const { error } = await this.supabase
+      // Look up existing Supabase items so we can either update by uuid or
+      // ADOPT a row whose name+category matches but uuid differs (a different
+      // machine first synced it). Custom client has no .ilike — fetch and
+      // filter in JS.
+      const { data: existingItems, error: itemsErr } = await this.supabase
         .from('item')
-        .upsert(
-          {
+        .select('id, uuid, name, category_id, deleted_at');
+      if (itemsErr) throw itemsErr;
+
+      const byUuid = (existingItems || []).find(
+        (r: any) => r.uuid === itemUuid && !r.deleted_at,
+      );
+      const byName = !byUuid
+        ? (existingItems || []).find(
+            (r: any) =>
+              !r.deleted_at &&
+              r.uuid !== itemUuid &&
+              r.category_id === supabaseCategoryId &&
+              r.name &&
+              r.name.toLowerCase() === item.name.toLowerCase(),
+          )
+        : undefined;
+
+      if (!byUuid && byName) {
+        // ADOPT — PATCH the existing row by Supabase PK so it takes on this
+        // client's local-derived uuid and authoritative name/price.
+        const { error: patchErr } = await this.supabase
+          .from('item')
+          .patch('id', byName.id, {
             uuid: itemUuid,
             name: item.name,
             price: item.price.toString(),
             is_special: false,
             category_id: supabaseCategoryId,
             deleted_at: null,
-          },
-          { onConflict: 'uuid' },
-        );
-      if (error) throw error;
-      logInfo(`Synced menu item: ${item.name} (${itemUuid})`);
+          });
+        if (patchErr) throw patchErr;
+        logInfo(`🔄 ADOPTED item "${item.name}": ${byName.uuid} → ${itemUuid}`);
+      } else {
+        // Plain upsert: uuid match (UPDATE) or genuinely new row (INSERT).
+        const { error } = await this.supabase
+          .from('item')
+          .upsert(
+            {
+              uuid: itemUuid,
+              name: item.name,
+              price: item.price.toString(),
+              is_special: false,
+              category_id: supabaseCategoryId,
+              deleted_at: null,
+            },
+            { onConflict: 'uuid' },
+          );
+        if (error) throw error;
+        logInfo(`Synced menu item: ${item.name} (${itemUuid})`);
+      }
     } catch (error) {
       logError(error as Error, 'syncMenuItem');
     }
@@ -1121,9 +1284,11 @@ export class SupabaseSyncService {
       }
 
       // Name-adoption fallback: if a category with the same name (any uuid) already
-      // exists in Supabase, adopt it by sending its `id` (Supabase PK). Mirrors
-      // the bulk path at lines 437-481.
-      // Custom client has no .ilike — fetch all and filter in JS.
+      // exists in Supabase, take it over by PATCHing the existing row's uuid
+      // and data via its primary key. We do NOT upsert with explicit `id` and
+      // on_conflict='uuid' — that path raises a PK violation that ON CONFLICT
+      // (uuid) does not catch. (The custom client also has no .ilike, so
+      // fetch all categories and filter in JS.)
       const { data: existing, error: selErr } = await this.supabase
         .from('category')
         .select('id, uuid, name, deleted_at');
@@ -1140,21 +1305,28 @@ export class SupabaseSyncService {
           c.name.toLowerCase() === category.name!.toLowerCase(),
       );
 
-      const payload: any = {
-        uuid: categoryUuid,
-        name: category.name,
-        deleted_at: null,
-      };
       if (!byUuid && byName) {
-        payload.id = byName.id;
-        logInfo(`🔄 ADOPTING category "${category.name}": ${byName.uuid} → ${categoryUuid}`);
+        // Adoption path — PATCH by Supabase PK.
+        const { error: patchErr } = await this.supabase
+          .from('category')
+          .patch('id', byName.id, {
+            uuid: categoryUuid,
+            name: category.name,
+            deleted_at: null,
+          });
+        if (patchErr) throw patchErr;
+        logInfo(`🔄 ADOPTED category "${category.name}": ${byName.uuid} → ${categoryUuid}`);
+      } else {
+        // Plain upsert (uuid match or genuinely new row).
+        const { error } = await this.supabase
+          .from('category')
+          .upsert(
+            { uuid: categoryUuid, name: category.name, deleted_at: null },
+            { onConflict: 'uuid' },
+          );
+        if (error) throw error;
+        logInfo(`Synced category: ${category.name}`);
       }
-
-      const { error } = await this.supabase
-        .from('category')
-        .upsert(payload, { onConflict: 'uuid' });
-      if (error) throw error;
-      logInfo(`Synced category: ${category.name}`);
 
       // Re-sync items so any that previously failed (e.g. due to category-missing)
       // now land. Skipped when called from syncMenuItem's self-heal path.

@@ -142,3 +142,15 @@ What the Menu still hardcodes (intentional, low-value-to-make-dynamic):
 - Loading + error UI strings
 - Hero background image (`/images/Menu.png` — deferred to a later iteration)
 - "Powered by The Elites Solutions" attribution (intentional white-label)
+
+## Known limitations (v3.0.1+)
+
+### Single-client deployment assumed
+
+`formatHexAsUuid()` in `main/services/supabaseSync.ts` deterministically derives a Supabase UUID from each row's local SQLite Cuid. Because every machine has different Cuids, every machine produces different UUIDs for "the same" logical row.
+
+The sync layer compensates with a **name-adoption** fallback: when a name+category match exists in Supabase under a different uuid, the local sync **PATCHes** that Supabase row to take on the local-derived uuid (see `syncCategories`, `syncMenuItems`, `syncAddOns`, and the singular `syncCategory` / `syncMenuItem` paths). After adoption, both sides match by uuid and steady-state is uuid-based.
+
+This works cleanly for **one** active POS install per Supabase project. With two or more concurrent installs, the same row's uuid will ping-pong between machines on each sync cycle (functionally correct — names/prices propagate — but `updated_at` thrashes and eventual consistency is noisier than necessary).
+
+If a second client deployment is ever needed, the proper fix is to add a `supabaseUuid` column to local SQLite, populate it on first adoption, and use it as the sync identity instead of re-deriving from a per-machine Cuid every cycle. Tracked as deferred work; out of scope for v3.0.1.
