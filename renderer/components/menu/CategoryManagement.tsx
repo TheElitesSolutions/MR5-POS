@@ -354,14 +354,14 @@ const CategoryManagement = ({
                             openDeleteDialog(category.name);
                           }}
                           className='h-8 w-8 p-0 text-red-600 hover:bg-red-100 hover:text-red-700 dark:hover:bg-red-900/20'
-                          disabled={category.totalItems > 0}
+                          disabled={category.availableItems > 0}
                         >
                           <Trash2 className='h-3 w-3' />
                         </Button>
                       </TooltipTrigger>
                       <TooltipContent>
-                        {category.totalItems > 0
-                          ? `Cannot delete: ${category.totalItems} item${category.totalItems === 1 ? '' : 's'} in this category. Move or delete items first.`
+                        {category.availableItems > 0
+                          ? `Cannot delete: ${category.availableItems} active item${category.availableItems === 1 ? '' : 's'} in this category. Move or delete items first.`
                           : 'Delete category'}
                       </TooltipContent>
                     </Tooltip>
@@ -483,11 +483,12 @@ const CategoryManagement = ({
                 );
                 return (
                   category &&
-                  category.totalItems > 0 && (
+                  category.availableItems > 0 && (
                     <span className='mt-2 block font-medium text-red-600'>
                       <AlertTriangle className='mr-1 inline h-4 w-4' />
-                      This category contains {category.totalItems} items. You
-                      cannot delete a category that contains menu items.
+                      This category contains {category.availableItems} active
+                      item{category.availableItems === 1 ? '' : 's'}. You cannot
+                      delete a category that still has active menu items.
                     </span>
                   )
                 );
@@ -500,7 +501,7 @@ const CategoryManagement = ({
               onClick={handleDeleteCategory}
               disabled={
                 (categoryStats.find(c => c.name === selectedCategory)
-                  ?.totalItems ?? 0) > 0 || isLoading
+                  ?.availableItems ?? 0) > 0 || isLoading
               }
               className='bg-red-600 hover:bg-red-700'
             >

@@ -576,16 +576,25 @@ export class MenuItemController extends BaseController {
     id: string
   ): Promise<IPCResponse<boolean>> {
     try {
-      // Check if category has menu items
-      const itemCount = await prisma.menuItem.count({
-        where: { categoryId: id },
+      // Block deletion only if the category still has ACTIVE items the user
+      // can see/order. Soft-deleted leftovers (isActive=false) shouldn't keep
+      // a "cleaned-up" category from being removed — they're cleaned below
+      // before the FK-bearing parent row is dropped.
+      const activeItemCount = await prisma.menuItem.count({
+        where: { categoryId: id, isActive: true },
       });
 
-      if (itemCount > 0) {
+      if (activeItemCount > 0) {
         return this.createErrorResponse(
-          new Error('Cannot delete category with menu items')
+          new Error('Cannot delete category with active menu items')
         );
       }
+
+      // Hard-delete any soft-deleted item rows still pointing at this category
+      // so the FK doesn't block the category delete below.
+      await prisma.menuItem.deleteMany({
+        where: { categoryId: id, isActive: false },
+      });
 
       await prisma.category.delete({
         where: { id },
