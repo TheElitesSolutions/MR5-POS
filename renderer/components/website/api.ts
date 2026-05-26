@@ -27,9 +27,17 @@ interface ElectronWebsiteAPI {
   updateItemContent: (p: { itemUuid: string; patch: { description?: string | null }; actor: string }) => Promise<IPCResponse<WebsiteItem>>;
   uploadItemImage: (p: { itemUuid: string; bytes: ArrayBuffer; mime: string; actor: string }) => Promise<IPCResponse<{ image_url: string; image_lqip: string }>>;
   resetWebsite: (p: { actor: string }) => Promise<IPCResponse<{ items_reset: number; categories_reset: number }>>;
-  // Triggers the existing SupabaseSyncService — pushes any newly-created POS
-  // local items / categories / add-ons to Supabase so they show up in the WM.
-  syncFromPos: () => Promise<unknown>;
+  // Destructive: wipe Supabase + re-insert from POS. Requires `confirmed: true`
+  // — calling without it returns `{ success: true, data: { requiresConfirmation: true } }`.
+  syncFromPos: (opts?: { confirmed?: boolean }) => Promise<IPCResponse<SyncResult>>;
+}
+
+interface SyncResult {
+  requiresConfirmation?: boolean;
+  wiped?: { categories_wiped: number; items_wiped: number; addons_wiped: number };
+  categoriesSynced: number;
+  itemsSynced: number;
+  addOnsSynced: number;
 }
 
 function getApi(): ElectronWebsiteAPI {
@@ -85,10 +93,22 @@ export const websiteApi = {
     getApi().resetWebsite({ actor }).then(unwrap),
   setCategoryVisibility: (categoryUuid: string, visible: boolean, actor: string) =>
     getApi().setCategoryVisibility({ categoryUuid, visible, actor }).then(unwrap),
-  // Triggers SupabaseSyncService.syncAll(). Lets the caller decide how to
-  // surface errors — the WM uses a destructive toast so a silently broken
-  // sync doesn't go unnoticed (the user expecting POS edits to show up).
-  syncFromPos: () => getApi().syncFromPos(),
+  // Destructive wipe-and-replace. Callers MUST pass `{ confirmed: true }`
+  // after gathering explicit user consent — without it, the IPC layer returns
+  // `requiresConfirmation: true` and the wrapper throws so the UI can react.
+  syncFromPos: async (opts?: { confirmed?: boolean }): Promise<SyncResult> => {
+    const r = await getApi().syncFromPos(opts);
+    if (!r.success) {
+      throw new Error(r.error || r.message || 'Sync failed');
+    }
+    if (!r.data) {
+      throw new Error('Sync returned no data');
+    }
+    if (r.data.requiresConfirmation) {
+      throw new Error('Sync requires confirmation but was called without one');
+    }
+    return r.data;
+  },
 };
 
 export const websiteQueryKeys = {

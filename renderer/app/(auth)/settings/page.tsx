@@ -5,10 +5,11 @@ import PrinterSettings from '@/components/settings/PrinterSettings';
 import UserProfileSettings from '@/components/settings/UserProfileSettings';
 import DatabaseSettings from '@/components/settings/DatabaseSettings';
 import UpdateSettings from '@/components/settings/UpdateSettings';
+import { MenuSyncSettings } from '@/components/MenuSyncSettings';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Role } from '@/types';
-import { Database, Download, Printer, Settings as SettingsIcon, User } from 'lucide-react';
+import { Database, Download, Globe, Printer, Settings as SettingsIcon, User } from 'lucide-react';
 import { useState } from 'react';
 
 function SettingsContent() {
@@ -36,7 +37,7 @@ function SettingsContent() {
           onValueChange={setActiveTab}
           className='space-y-6'
         >
-          <TabsList className='grid w-full grid-cols-4'>
+          <TabsList className='grid w-full grid-cols-5'>
             <TabsTrigger
               value='profile'
               className='flex items-center space-x-2'
@@ -57,6 +58,13 @@ function SettingsContent() {
             >
               <Database className='h-4 w-4' />
               <span>Database</span>
+            </TabsTrigger>
+            <TabsTrigger
+              value='website-sync'
+              className='flex items-center space-x-2'
+            >
+              <Globe className='h-4 w-4' />
+              <span>Website Sync</span>
             </TabsTrigger>
             <TabsTrigger
               value='updates'
@@ -107,6 +115,10 @@ function SettingsContent() {
                 <DatabaseSettings />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value='website-sync'>
+            <MenuSyncSettings />
           </TabsContent>
 
           <TabsContent value='updates'>

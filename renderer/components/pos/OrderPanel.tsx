@@ -387,37 +387,6 @@ const OrderPanel = ({ pendingCustomization, onCustomizationProcessed }: OrderPan
       
       await completeOrder();
 
-      // Automatically print invoice after order completion
-      try {
-        const printerAPI = await import('@/lib/printer-api');
-        const user = useAuthStore.getState().user;
-
-        if (user?.id) {
-          // Get default printer or use a specific one
-          const printers = await printerAPI.PrinterAPI.getPrinters();
-          const defaultPrinter = printers.find(p => p.isDefault) || printers[0];
-
-          if (defaultPrinter) {
-            const result = await printerAPI.PrinterAPI.printInvoice(
-              currentOrder.id,
-              defaultPrinter.name,
-              1,
-              user.id
-            );
-
-            if (result.success) {
-              orderLogger.debug('Invoice auto-printed for completed order');
-            } else {
-              orderLogger.warn('Failed to auto-print invoice:', result.error);
-              // Don't show error toast for printing failure - it's not critical
-            }
-          }
-        }
-      } catch (printError) {
-        orderLogger.warn('Invoice printing error:', printError);
-        // Printing failure shouldn't affect order completion
-      }
-
       toast({
         title: 'Order Completed',
         description: `Order ${orderNumber} has been completed successfully${tableName ? ` and ${tableName} is now available` : ''}`,

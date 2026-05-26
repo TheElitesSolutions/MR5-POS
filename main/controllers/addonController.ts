@@ -101,16 +101,18 @@ export class AddonController extends BaseController {
   }
 
   /**
-   * Fire-and-forget bulk Supabase push so the Website Manager sees changes
-   * without waiting for the 60-min scheduler tick. The bulk syncAddOns path
-   * is idempotent (uuid-based upsert + composite key matching).
+   * Per-action sync — DISABLED under the wipe-and-replace sync model.
+   *
+   * Previously this triggered a full Supabase sync after every addon edit so
+   * the Website Manager would see the change without waiting. The sync path
+   * is now destructive (deletes everything, then re-inserts from POS), so
+   * running it implicitly here would wipe every Website Manager edit on every
+   * addon CRUD operation. Admins must press the explicit Sync button.
    */
   private triggerAddonSync(context: string): void {
-    this.syncService?.syncAddOns().catch((err: any) => {
-      logInfo(
-        `Background add-on sync failed (${context}): ${err?.message || err}`
-      );
-    });
+    logInfo(
+      `triggerAddonSync(${context}): skipped — press Sync to publish to website`,
+    );
   }
 
   /**

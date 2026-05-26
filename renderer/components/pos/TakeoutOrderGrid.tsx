@@ -528,43 +528,6 @@ const TakeoutOrderGrid = memo(() => {
       if (response.success) {
         // If order was completed, remove from store immediately
         if (newStatus === 'COMPLETED') {
-          // Automatically print invoice for completed orders
-          try {
-            const orderToPrint = allOrders.find(order => order.id === orderId);
-            if (orderToPrint) {
-              const printerAPI = await import('@/lib/printer-api');
-              const user = useAuthStore.getState().user;
-
-              if (user?.id) {
-                // Get default printer or use a specific one
-                const printers = await printerAPI.PrinterAPI.getPrinters();
-                const defaultPrinter =
-                  printers.find(p => p.isDefault) || printers[0];
-
-                if (defaultPrinter) {
-                  const result = await printerAPI.PrinterAPI.printInvoice(
-                    orderToPrint.id,
-                    defaultPrinter.name,
-                    1,
-                    user.id
-                  );
-
-                  if (result.success) {
-                    orderLogger.debug('Invoice printed automatically');
-                  } else {
-                    orderLogger.warn(
-                      'Failed to auto-print invoice:',
-                      result.error
-                    );
-                  }
-                }
-              }
-            }
-          } catch (printError) {
-            orderLogger.warn('Invoice printing error:', printError);
-            // Printing failure shouldn't affect order completion
-          }
-
           removeOrderFromStore(orderId);
           toast({
             title: 'Order Completed',

@@ -282,7 +282,7 @@ function CategoryGroup({
       </header>
       <CollapsibleContent>
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={items.map((i) => i.uuid)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={items.filter((i) => i?.uuid).map((i) => i.uuid)} strategy={verticalListSortingStrategy}>
           <div className='space-y-2'>
             {items.length === 0 ? (
               <div className='rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground'>
@@ -358,51 +358,38 @@ export function WebsiteItemsTable() {
     queryFn: () => websiteApi.listAddOns(),
   });
 
-  // Trigger a POS-DB → Supabase sync EVERY time the WM mounts (and again on
-  // window focus) so any item / category / add-on the admin just edited in
-  // /menu — added, renamed, deleted, repriced — shows up here without them
-  // having to click anything. After sync, all WM queries are invalidated.
-  const [autoSyncing, setAutoSyncing] = useState(true);
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      setAutoSyncing(true);
-      try {
-        await websiteApi.syncFromPos();
-        if (!cancelled) {
-          await queryClient.invalidateQueries({ queryKey: websiteQueryKeys.all });
-        }
-      } catch (e: any) {
-        if (!cancelled) {
-          toast({
-            title: 'POS sync failed',
-            description: e?.message ?? 'Could not push POS changes to Supabase. Try the Sync button.',
-            variant: 'destructive',
-          });
-        }
-      } finally {
-        if (!cancelled) setAutoSyncing(false);
-      }
-    };
-    run();
-    const onFocus = () => run();
-    window.addEventListener('focus', onFocus);
-    return () => {
-      cancelled = true;
-      window.removeEventListener('focus', onFocus);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Auto-syncing on mount/focus was removed: sync is now a destructive
+  // wipe-and-replace that deletes every Website Manager customization. It must
+  // never run implicitly. Admins press the explicit Sync button below, which
+  // requires confirmation. `autoSyncing` is kept (always false) only so the
+  // spinner / disabled-state expressions in the JSX don't need to change.
+  const [autoSyncing] = useState(false);
 
   const [manualSyncing, setManualSyncing] = useState(false);
   async function manualSync() {
+    const ok = window.confirm(
+      'Replace the website menu with your POS data?\n\n' +
+        'This will delete every category, item, and add-on currently on the ' +
+        'website and re-insert them from the POS. Website customizations ' +
+        '(descriptions, uploaded images, featured / visibility settings) will ' +
+        'be lost. This cannot be undone.',
+    );
+    if (!ok) return;
+
     setManualSyncing(true);
     try {
-      await websiteApi.syncFromPos();
+      const result = await websiteApi.syncFromPos({ confirmed: true });
       await queryClient.invalidateQueries({ queryKey: websiteQueryKeys.all });
-      toast({ title: 'Synced from POS' });
+      const wipedSummary = result.wiped
+        ? `Wiped ${result.wiped.categories_wiped} categories, ${result.wiped.items_wiped} items, ${result.wiped.addons_wiped} add-ons. `
+        : '';
+      toast({
+        title: 'Website menu replaced from POS',
+        description: `${wipedSummary}Inserted ${result.categoriesSynced} categories, ${result.itemsSynced} items, ${result.addOnsSynced} add-ons.`,
+        duration: 8000,
+      });
     } catch (e: any) {
-      toast({ title: 'Sync failed', description: e?.message, variant: 'destructive' });
+      toast({ title: 'Sync failed', description: e?.message, variant: 'destructive', duration: 15000 });
     } finally {
       setManualSyncing(false);
     }
@@ -414,22 +401,37 @@ export function WebsiteItemsTable() {
 
   const grouped = useMemo(() => {
     if (!itemsQ.data || !categoriesQ.data) return [];
+    // Defensive: skip any Supabase row with a missing uuid / id. These can
+    // exist as orphan leftovers from the pre-fix sync state, and they crash
+    // @dnd-kit's SortableContext (which does `'id' in item` internally) with
+    // a confusing "Cannot use 'in' operator to search for 'id' in null" error.
+    // After a clean wipe-and-replace sync this filter is a no-op.
+    const validItems = itemsQ.data.filter(
+      (i): i is WebsiteItem => !!i && typeof i.uuid === 'string' && typeof i.category_id === 'number',
+    );
+    const validCategories = categoriesQ.data.filter(
+      (c): c is WebsiteCategory => !!c && typeof c.uuid === 'string' && typeof c.id === 'number',
+    );
+    const validAddOns = (addOnsQ.data || []).filter(
+      (a): a is WebsiteAddOn => !!a && typeof a.category_id === 'number',
+    );
+
     const itemsByCategoryId = new Map<number, WebsiteItem[]>();
-    for (const raw of itemsQ.data) {
+    for (const raw of validItems) {
       const item = overrides[raw.uuid] ?? raw;
       const list = itemsByCategoryId.get(item.category_id) || [];
       list.push(item);
       itemsByCategoryId.set(item.category_id, list);
     }
     const addOnsByCategoryId = new Map<number, WebsiteAddOn[]>();
-    for (const a of addOnsQ.data || []) {
+    for (const a of validAddOns) {
       const list = addOnsByCategoryId.get(a.category_id) || [];
       list.push(a);
       addOnsByCategoryId.set(a.category_id, list);
     }
     // Manager UI shows ALL categories regardless of website visibility, so the
     // user can manage hidden ones too. The Menu side enforces visibility via RLS.
-    return categoriesQ.data
+    return validCategories
       .map((cat) => {
         let items = (itemsByCategoryId.get(cat.id) || []).slice();
         const customOrder = orderOverrides[cat.id];

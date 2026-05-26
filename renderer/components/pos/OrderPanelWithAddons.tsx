@@ -358,32 +358,6 @@ const OrderPanelWithAddons = ({
       setIsProcessing(true);
       await completeOrder();
 
-      // Auto-print enhanced invoice with add-ons
-      try {
-        const printerAPI = await import('@/lib/printer-api');
-        const user = useAuthStore.getState().user;
-
-        if (user?.id) {
-          const printers = await printerAPI.PrinterAPI.getPrinters();
-          const defaultPrinter = printers.find(p => p.isDefault) || printers[0];
-
-          if (defaultPrinter) {
-            const result = await printerAPI.PrinterAPI.printInvoice(
-              currentOrder.id,
-              defaultPrinter.name,
-              1,
-              user.id
-            );
-
-            if (result.success) {
-              orderLogger.debug('Enhanced invoice printed automatically');
-            }
-          }
-        }
-      } catch (printError) {
-        orderLogger.warn('Enhanced invoice printing error:', printError);
-      }
-
       toast({
         title: 'Order Completed',
         description: `Order ${orderNumber} completed successfully${tableName ? ` and ${tableName} is now available` : ''}`,

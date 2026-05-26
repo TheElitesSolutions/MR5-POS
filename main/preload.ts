@@ -102,10 +102,11 @@ const websiteAPI = {
     ipcRenderer.invoke('mr5pos:website:list-addons'),
   setCategoryVisibility: (payload: { categoryUuid: string; visible: boolean; actor: string }) =>
     ipcRenderer.invoke('mr5pos:website:set-category-visibility', payload),
-  // Triggers SupabaseSyncService → ensures any newly-created POS items /
-  // categories / add-ons are pushed to Supabase so the Website Manager sees them.
-  syncFromPos: () =>
-    ipcRenderer.invoke('mr5pos:sync:manual'),
+  // Destructive wipe-and-replace: deletes everything on Supabase, re-inserts
+  // from POS. Requires `{ confirmed: true }` — invoking without it returns
+  // `{ data: { requiresConfirmation: true } }` and does NOT touch Supabase.
+  syncFromPos: (opts?: { confirmed?: boolean }) =>
+    ipcRenderer.invoke('mr5pos:sync:manual', opts),
   getSettings: () =>
     ipcRenderer.invoke('mr5pos:website:get-settings'),
   updateSettings: (payload: { patch: Record<string, unknown>; actor: string }) =>

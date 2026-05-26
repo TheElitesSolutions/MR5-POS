@@ -35,14 +35,13 @@ export class SyncScheduler {
     this.intervalMinutes = intervalMinutes;
     this.isRunning = true;
 
-    // Initial sync on start (after 30 seconds to allow app to fully initialize)
-    setTimeout(() => {
-      if (this.isRunning) {
-        this.performSync('initial');
-      }
-    }, 30 * 1000);
+    // No 30-second startup sync. Sync is now a destructive wipe-and-replace —
+    // running it implicitly on app start would silently destroy Website Manager
+    // edits. Users must enable auto-sync explicitly and accept the destructive
+    // tradeoff at the same time.
 
-    // Schedule periodic syncs
+    // Schedule periodic syncs. The user enabled auto-sync after reading the
+    // info box — that toggle is itself the confirmation for these ticks.
     this.intervalId = setInterval(
       () => {
         if (this.isRunning) {
@@ -68,12 +67,14 @@ export class SyncScheduler {
   }
 
   /**
-   * Perform a sync operation
+   * Perform a sync operation. Always passes `confirmed: true` — the user
+   * enabled auto-sync through the settings toggle, which is their standing
+   * consent for the destructive wipe-and-replace each interval.
    */
-  private async performSync(type: 'initial' | 'scheduled'): Promise<void> {
+  private async performSync(type: 'scheduled'): Promise<void> {
     try {
       logInfo(`🔄 Starting ${type} sync...`);
-      const result = await this.syncService.syncAll();
+      const result = await this.syncService.syncAll({ confirmed: true });
 
       if (result.success) {
         logInfo(

@@ -496,38 +496,8 @@ const TakeoutOrderPanel = ({
       // Update both the current order and the order in the global order list
       usePOSStore.getState().updateOrderInStore(updatedOrder);
 
-      // For COMPLETED status, handle automatic invoice printing and order removal
+      // For COMPLETED status, remove the order from the store and refresh the grid
       if (newStatus === 'COMPLETED') {
-        try {
-          const printerAPI = await import('@/lib/printer-api');
-          const user = useAuthStore.getState().user;
-
-          if (user?.id) {
-            // Get default printer or use a specific one
-            const printers = await printerAPI.PrinterAPI.getPrinters();
-            const defaultPrinter =
-              printers.find(p => p.isDefault) || printers[0];
-
-            if (defaultPrinter) {
-              const result = await printerAPI.PrinterAPI.printInvoice(
-                currentOrder.id,
-                defaultPrinter.name,
-                1,
-                user.id
-              );
-
-              if (result.success) {
-                orderLogger.debug('Invoice auto-printed for completed order');
-              } else {
-                orderLogger.warn('Failed to auto-print invoice:', result.error);
-              }
-            }
-          }
-        } catch (printError) {
-          orderLogger.warn('Invoice printing error:', printError);
-          // Printing failure shouldn't affect order completion
-        }
-
         // Remove the completed order from the store and clear the panel
         const orderId = currentOrder.id;
         usePOSStore.getState().removeOrderFromStore(orderId);

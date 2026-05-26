@@ -55,35 +55,61 @@ export class SyncController extends BaseController {
   }
 
   /**
-   * IPC Handler: Perform manual sync
+   * IPC Handler: Perform manual sync (destructive wipe-and-replace).
+   *
+   * Two-step protocol: the renderer first invokes without `confirmed`, gets
+   * back `{ requiresConfirmation: true }`, shows a destructive-action modal,
+   * then re-invokes with `{ confirmed: true }`. The actual wipe + insert only
+   * happens on the second call. Without this, a stray click in the UI could
+   * destroy the website menu silently.
    */
-  private async manualSync(_event: IpcMainInvokeEvent): Promise<
+  private async manualSync(
+    _event: IpcMainInvokeEvent,
+    opts?: { confirmed?: boolean },
+  ): Promise<
     IPCResponse<{
+      requiresConfirmation?: boolean;
+      wiped?: { categories_wiped: number; items_wiped: number; addons_wiped: number };
       categoriesSynced: number;
       itemsSynced: number;
       addOnsSynced: number;
     }>
   > {
     try {
-      logInfo('Manual sync triggered from UI');
+      logInfo(
+        `Manual sync triggered from UI (confirmed=${opts?.confirmed === true})`,
+      );
 
-      const result = await this.syncService.syncAll();
+      const result = await this.syncService.syncAll({ confirmed: opts?.confirmed });
+
+      if (result.requiresConfirmation) {
+        return this.createSuccessResponse(
+          {
+            requiresConfirmation: true,
+            categoriesSynced: 0,
+            itemsSynced: 0,
+            addOnsSynced: 0,
+          },
+          'Confirmation required',
+        );
+      }
 
       if (result.success) {
         return this.createSuccessResponse(
           {
+            wiped: result.wiped,
             categoriesSynced: result.categoriesSynced,
             itemsSynced: result.itemsSynced,
             addOnsSynced: result.addOnsSynced,
           },
-          'Menu synced successfully to website'
+          'Website menu replaced with POS data',
         );
       } else {
         return this.createErrorResponse(result.error || 'Sync failed');
       }
     } catch (error) {
       return this.createErrorResponse(
-        error instanceof Error ? error.message : 'Failed to sync menu'
+        error instanceof Error ? error.message : 'Failed to sync menu',
       );
     }
   }

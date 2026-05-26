@@ -22,6 +22,7 @@ export function MenuSyncSettings() {
     type: 'success' | 'error' | 'info';
     text: string;
   } | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   // Load sync status on mount
   useEffect(() => {
@@ -54,21 +55,33 @@ export function MenuSyncSettings() {
     }
   };
 
-  const handleManualSync = async () => {
-    if (!window.electronAPI?.ipc || isSyncing) {
-      return;
-    }
+  // Sync is now a destructive wipe-and-replace. Open the confirm modal first;
+  // the actual IPC call only fires from `confirmAndSync` once the user accepts.
+  const handleManualSync = () => {
+    if (!window.electronAPI?.ipc || isSyncing) return;
+    setShowConfirm(true);
+  };
+
+  const confirmAndSync = async () => {
+    setShowConfirm(false);
+    if (!window.electronAPI?.ipc || isSyncing) return;
 
     setIsSyncing(true);
-    setMessage({ type: 'info', text: 'Syncing menu to website...' });
+    setMessage({ type: 'info', text: 'Replacing website menu with POS data…' });
 
     try {
-      const response = await window.electronAPI.ipc.invoke('mr5pos:sync:manual');
+      const response = await window.electronAPI.ipc.invoke(
+        'mr5pos:sync:manual',
+        { confirmed: true },
+      );
       if (response.success) {
-        const { categoriesSynced, itemsSynced, addOnsSynced } = response.data;
+        const { categoriesSynced, itemsSynced, addOnsSynced, wiped } = response.data;
+        const wipedSummary = wiped
+          ? ` (wiped ${wiped.categories_wiped} categories, ${wiped.items_wiped} items, ${wiped.addons_wiped} add-ons)`
+          : '';
         setMessage({
           type: 'success',
-          text: `✅ Sync successful! ${categoriesSynced} categories, ${itemsSynced} items, ${addOnsSynced} add-ons synced.`,
+          text: `✅ Website replaced${wipedSummary}. Inserted ${categoriesSynced} categories, ${itemsSynced} items, ${addOnsSynced} add-ons.`,
         });
         setLastSyncStatus('success');
         setLastSyncTime(new Date());
@@ -90,8 +103,8 @@ export function MenuSyncSettings() {
       setLastSyncError(error.message || 'Unknown error');
     } finally {
       setIsSyncing(false);
-      // Clear message after 5 seconds
-      setTimeout(() => setMessage(null), 5000);
+      // Clear message after 8 seconds (longer because the message is denser now).
+      setTimeout(() => setMessage(null), 8000);
     }
   };
 
@@ -336,20 +349,75 @@ export function MenuSyncSettings() {
       </div>
 
       {/* Info Box */}
-      <div className='rounded-lg border border-blue-200 bg-blue-50 p-4'>
-        <h4 className='text-sm font-semibold text-blue-900'>How it works</h4>
-        <ul className='mt-2 space-y-1 text-xs text-blue-800'>
-          <li>• Only active menu items are synced to the public website</li>
+      <div className='rounded-lg border border-amber-200 bg-amber-50 p-4'>
+        <h4 className='text-sm font-semibold text-amber-900'>How Sync works</h4>
+        <ul className='mt-2 space-y-1 text-xs text-amber-800'>
           <li>
-            • Changes are synced automatically when you add, edit, or delete
-            items
+            • Pressing <strong>Sync Now</strong> replaces the public website
+            menu with your POS menu — your POS is the source of truth.
           </li>
           <li>
-            • Automatic sync runs in the background at your chosen interval
+            • All current website items, categories, and add-ons are deleted
+            first, then re-inserted from the POS.
           </li>
-          <li>• Your internal POS data is always the source of truth</li>
+          <li>
+            • Website Manager customizations (descriptions, uploaded images,
+            featured / visibility settings) are <strong>lost</strong> on each
+            sync. Re-apply them after syncing.
+          </li>
+          <li>
+            • Automatic sync, if enabled, runs the same destructive
+            wipe-and-replace at the chosen interval — leave it off unless you
+            understand the tradeoff.
+          </li>
         </ul>
       </div>
+
+      {/* Destructive Sync Confirmation Modal */}
+      {showConfirm && (
+        <div
+          className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4'
+          onClick={() => setShowConfirm(false)}
+        >
+          <div
+            className='w-full max-w-md rounded-lg bg-white p-6 shadow-xl'
+            onClick={e => e.stopPropagation()}
+          >
+            <div className='flex items-start gap-3'>
+              <AlertCircle className='mt-1 h-6 w-6 flex-shrink-0 text-red-600' />
+              <div className='flex-1'>
+                <h3 className='text-lg font-semibold text-gray-900'>
+                  Replace the website menu?
+                </h3>
+                <p className='mt-2 text-sm text-gray-700'>
+                  This will <strong>delete</strong> every category, item, and
+                  add-on currently on the public website, then re-insert them
+                  from your POS.
+                </p>
+                <p className='mt-2 text-sm text-gray-700'>
+                  Website customizations (descriptions, uploaded images,
+                  featured flags, visibility, display order) will be{' '}
+                  <strong>lost</strong>. This cannot be undone.
+                </p>
+              </div>
+            </div>
+            <div className='mt-6 flex justify-end gap-2'>
+              <button
+                onClick={() => setShowConfirm(false)}
+                className='rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50'
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmAndSync}
+                className='rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700'
+              >
+                Replace website menu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
